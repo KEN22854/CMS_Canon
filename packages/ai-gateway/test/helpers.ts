@@ -75,10 +75,10 @@ export const fail =
 
 export function makeGateway(
   providers: LlmProvider[],
-  overrides: { policy?: Partial<TenantAiPolicy>; budgetMicroUsd?: number; opts?: Partial<AiGatewayOptions> } = {},
+  overrides: { policy?: Partial<TenantAiPolicy>; budgetMicroUsd?: number; tokenCap?: number; maxConcurrent?: number; opts?: Partial<AiGatewayOptions> } = {},
 ) {
   const recorder = new MemoryRecorder();
-  const quota = new MemoryQuota(overrides.budgetMicroUsd);
+  const quota = new MemoryQuota(overrides.budgetMicroUsd, { tokenCap: overrides.tokenCap, maxConcurrent: overrides.maxConcurrent });
   const cache = new MemoryExactCache();
   const gateway = new AiGateway(
     {

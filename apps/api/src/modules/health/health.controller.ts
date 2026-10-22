@@ -1,5 +1,6 @@
 import { Controller, Get, Header, HttpStatus, Inject, Res, VERSION_NEUTRAL } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
+import { Public } from '../../common/auth/decorators';
 import type { Response } from 'express';
 import type { Redis } from 'ioredis';
 import { MetricsService } from '../../infrastructure/metrics/metrics.service';
@@ -11,6 +12,7 @@ const CHECK_TIMEOUT_MS = 2_000;
 type CheckResult = { status: 'up' } | { status: 'down'; error: string };
 
 @ApiExcludeController()
+@Public()
 @Controller({ version: VERSION_NEUTRAL })
 export class HealthController {
   constructor(

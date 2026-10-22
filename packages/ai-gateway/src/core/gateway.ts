@@ -30,6 +30,8 @@ import type {
   ProviderRequest,
   ProviderStreamChunk,
   QuotaPort,
+  QuotaDenial,
+  QuotaSlot,
   SemanticCachePort,
   TenantAiPolicy,
   TenantPolicyProvider,
@@ -86,6 +88,7 @@ interface Prepared {
   inspection: InputInspection;
   promptText: string;
   cacheMode: 'none' | 'exact' | 'semantic';
+  slot?: QuotaSlot;
 }
 
 export interface CallOptions {
@@ -118,6 +121,14 @@ export class AiGateway {
 
   async complete(req: CompletionRequest, ctx: AiCallContext, call: CallOptions = {}): Promise<CompletionResult> {
     const p = await this.prepare(req, ctx);
+    try {
+      return await this.runComplete(p, req, ctx, call);
+    } finally {
+      await this.release(p);
+    }
+  }
+
+  private async runComplete(p: Prepared, req: CompletionRequest, ctx: AiCallContext, call: CallOptions): Promise<CompletionResult> {
 
     const cached = await this.cacheLookup(p, req, ctx);
     if (cached) return this.finishFromCache(p, req, ctx, cached.value, cached.kind);
@@ -145,6 +156,15 @@ export class AiGateway {
 
   async *stream(req: CompletionRequest, ctx: AiCallContext, call: CallOptions = {}): AsyncGenerator<StreamEvent> {
     const p = await this.prepare(req, ctx);
+    // finally also runs when the consumer stops early (client disconnect → generator.return()).
+    try {
+      yield* this.runStream(p, req, ctx, call);
+    } finally {
+      await this.release(p);
+    }
+  }
+
+  private async *runStream(p: Prepared, req: CompletionRequest, ctx: AiCallContext, call: CallOptions): AsyncGenerator<StreamEvent> {
 
     const cached = await this.cacheLookup(p, req, ctx);
     if (cached) {
@@ -213,7 +233,7 @@ export class AiGateway {
       throw new AiGatewayError(AI_ERROR_CODES.NO_CANDIDATE_MODEL, `Embedding model ${key} is not available`);
     }
     const estimate = costMicroUsd(model, { inputTokens: estimateTokens(undefined, req.input.map((t) => ({ role: 'user', content: t }))), outputTokens: 0 });
-    await this.assertQuota(ctx, estimate);
+    await this.assertQuota(ctx, estimate, estimateTokens(undefined, req.input.map((t) => ({ role: 'user', content: t }))));
 
     const startedAt = new Date();
     const embedFn = provider.embed.bind(provider);
@@ -278,7 +298,9 @@ export class AiGateway {
     const chain = buildCandidateChain(req, policy, this.deps.catalog, new Set(this.providers.keys()));
     const first = chain[0]!;
     const maxTokens = Math.min(req.maxTokens ?? this.opts.defaultMaxTokens, first.maxOutputTokens);
-    await this.assertQuota(ctx, costMicroUsd(first, { inputTokens: estimateTokens(req.system, req.messages), outputTokens: maxTokens }));
+    const inputEstimate = estimateTokens(req.system, req.messages);
+    await this.assertQuota(ctx, costMicroUsd(first, { inputTokens: inputEstimate, outputTokens: maxTokens }), inputEstimate + maxTokens);
+    const slot = await this.acquire(ctx);
 
     const redact = policy.guardrails.piiRedaction;
     return {
@@ -291,17 +313,29 @@ export class AiGateway {
       inspection,
       promptText,
       cacheMode: req.cache ?? 'exact',
+      slot,
     };
   }
 
-  private async assertQuota(ctx: AiCallContext, estimatedMicroUsd: number): Promise<void> {
-    const decision = await this.deps.quota.check(ctx, estimatedMicroUsd);
-    if (decision.allowed) return;
-    throw new AiGatewayError(
-      decision.reason === 'rate' ? AI_ERROR_CODES.RATE_LIMITED : AI_ERROR_CODES.QUOTA_EXCEEDED,
-      decision.message,
-      { retryAfterSec: decision.retryAfterSec },
-    );
+  private async assertQuota(ctx: AiCallContext, estimatedMicroUsd: number, estimatedTokens: number): Promise<void> {
+    const decision = await this.deps.quota.check(ctx, estimatedMicroUsd, estimatedTokens);
+    if (!decision.allowed) throw denialError(decision);
+  }
+
+  private async acquire(ctx: AiCallContext): Promise<QuotaSlot | undefined> {
+    if (!this.deps.quota.acquire) return undefined;
+    const slot = await this.deps.quota.acquire(ctx);
+    if ('allowed' in slot) throw denialError(slot);
+    return slot;
+  }
+
+  private async release(p: Prepared): Promise<void> {
+    try {
+      await p.slot?.release();
+    } catch (err) {
+      // A leaked slot self-heals via its TTL; never mask the call's own result with this.
+      this.deps.logger.warn({ err: describe(err) }, 'ai.quota_slot_release_failed');
+    }
   }
 
   private exactKey(p: Prepared, req: CompletionRequest): string {
@@ -580,6 +614,11 @@ function serializePrompt(system: string | undefined, messages: readonly ChatMess
     parts.push(`[${m.role}]\n${body}`);
   }
   return parts.join('\n\n');
+}
+
+function denialError(d: QuotaDenial): AiGatewayError {
+  const rateLike = d.reason === 'rate' || d.reason === 'concurrency';
+  return new AiGatewayError(rateLike ? AI_ERROR_CODES.RATE_LIMITED : AI_ERROR_CODES.QUOTA_EXCEEDED, d.message, { reason: d.reason, retryAfterSec: d.retryAfterSec });
 }
 
 function describe(err: unknown): string {

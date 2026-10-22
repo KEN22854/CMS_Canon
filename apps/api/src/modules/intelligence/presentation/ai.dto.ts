@@ -41,3 +41,13 @@ export const embedBody = z.object({
   input: z.array(z.string().min(1).max(30_000)).min(1).max(100),
 });
 export type EmbedBody = z.infer<typeof embedBody>;
+
+/** Defaults to the current calendar month (UTC); max 366 days to bound the aggregation. */
+export const usageQuery = z
+  .object({
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+  })
+  .refine((q) => !q.from || !q.to || q.from < q.to, { message: 'from must be before to' })
+  .refine((q) => !q.from || !q.to || q.to.getTime() - q.from.getTime() <= 366 * 86_400_000, { message: 'range is limited to 366 days' });
+export type UsageQuery = z.infer<typeof usageQuery>;

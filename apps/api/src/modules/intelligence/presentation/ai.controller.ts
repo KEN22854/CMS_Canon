@@ -1,31 +1,34 @@
 import { AiGateway, microUsdToUsd, type AiCallContext, type CompletionResult, type StreamEvent } from '@canon/ai-gateway';
-import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
-import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, Res } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { ZodBody } from '../../../common/http/zod-body.pipe';
-import { DevTenantGuard } from '../../../common/tenancy/dev-tenant.guard';
-import { Principal, type RequestPrincipal } from '../../../common/tenancy/tenant-context';
+import { RequirePermission } from '../../../common/auth/decorators';
+import { TenantScope, type TenantPrincipal } from '../../../common/auth/principal';
+import { forbidden } from '../../../common/http/api-error';
+import { AiUsageService } from '../application/ai-usage.service';
 import { DbModelCatalog } from '../infrastructure/db-model-catalog';
 import { TenantAiSettingsService } from '../infrastructure/tenant-ai-settings';
-import { completeBody, embedBody, type CompleteBody, type EmbedBody } from './ai.dto';
+import { completeBody, embedBody, usageQuery, type CompleteBody, type EmbedBody, type UsageQuery } from './ai.dto';
 
 @ApiTags('ai')
-@ApiHeader({ name: 'x-tenant-slug', description: 'Development only — replaced by JWT/API key in Phase 1', required: true })
-@UseGuards(DevTenantGuard)
-@Controller({ path: 'ai', version: '1' })
+@ApiBearerAuth()
+@Controller({ version: '1' })
 export class AiController {
   constructor(
     private readonly gateway: AiGateway,
     private readonly catalog: DbModelCatalog,
     private readonly settings: TenantAiSettingsService,
+    private readonly usage: AiUsageService,
   ) {}
 
-  @Post('complete')
+  @Post('ai/complete')
   @HttpCode(200)
+  @RequirePermission('invoke', 'Ai')
   @ApiOperation({ summary: 'Single completion through the AI gateway (routing, fallback, cache, guardrails)' })
   async complete(
     @Body(new ZodBody(completeBody)) body: CompleteBody,
-    @Principal() principal: RequestPrincipal,
+    @TenantScope() principal: TenantPrincipal,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -35,11 +38,12 @@ export class AiController {
     return present(result);
   }
 
-  @Post('complete-stream')
+  @Post('ai/complete-stream')
+  @RequirePermission('invoke', 'Ai')
   @ApiOperation({ summary: 'Streaming completion over Server-Sent Events (events: start, delta, done, error)' })
   async completeStream(
     @Body(new ZodBody(completeBody)) body: CompleteBody,
-    @Principal() principal: RequestPrincipal,
+    @TenantScope() principal: TenantPrincipal,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
@@ -75,17 +79,19 @@ export class AiController {
     }
   }
 
-  @Post('embed')
+  @Post('ai/embed')
   @HttpCode(200)
+  @RequirePermission('invoke', 'Ai')
   @ApiOperation({ summary: 'Batch embeddings with the tenant embedding model' })
-  async embed(@Body(new ZodBody(embedBody)) body: EmbedBody, @Principal() principal: RequestPrincipal, @Req() req: Request) {
+  async embed(@Body(new ZodBody(embedBody)) body: EmbedBody, @TenantScope() principal: TenantPrincipal, @Req() req: Request) {
     const res = await this.gateway.embed(body, this.ctx(principal, req, 'EMBEDDING'));
     return { model: res.model, dimensions: res.vectors[0]?.length ?? 0, vectors: res.vectors, usage: res.usage, costUsd: microUsdToUsd(res.costMicroUsd) };
   }
 
-  @Get('models')
+  @Get('ai/models')
+  @RequirePermission('invoke', 'Ai')
   @ApiOperation({ summary: 'Models this tenant can use right now (configured provider + allow-list)' })
-  async models(@Principal() principal: RequestPrincipal) {
+  async models(@TenantScope() principal: TenantPrincipal) {
     const policy = await this.settings.get(principal.tenantId);
     const available = new Set(this.gateway.availableProviders());
     const allowed = new Set(policy.allowedModels);
@@ -94,7 +100,7 @@ export class AiController {
       fallbackModels: policy.fallbackModels,
       models: this.catalog
         .list()
-        .filter((m) => available.has(m.provider) && (allowed.size === 0 || allowed.has(m.key)))
+        .filter((m) => available.has(m.provider) && (allowed.size === 0 || allowed.has(m.key)) && (!policy.allowedTiers || policy.allowedTiers.includes(m.tier)))
         .map((m) => ({
           key: m.key,
           tier: m.tier,
@@ -105,7 +111,21 @@ export class AiController {
     };
   }
 
-  private ctx(principal: RequestPrincipal, req: Request, feature: AiCallContext['feature'], relatedEntity?: AiCallContext['relatedEntity']): AiCallContext {
+  @Get('ai/usage')
+  @RequirePermission('read', 'AiUsage')
+  @ApiOperation({ summary: 'AI usage for the active tenant: totals, by feature/model/day, budget, forecast, limits' })
+  usageReport(@Query() query: Record<string, string>, @TenantScope() p: TenantPrincipal) {
+    return this.usage.report(p.tenantId, parseUsage(query));
+  }
+
+  @Get('tenants/:tenantId/ai-usage')
+  @RequirePermission('read', 'AiUsage')
+  tenantUsage(@Param('tenantId') tenantId: string, @Query() query: Record<string, string>, @TenantScope() p: TenantPrincipal) {
+    if (tenantId !== p.tenantId) throw forbidden('Switch to this tenant first', { reason: 'TENANT_MISMATCH' });
+    return this.usage.report(tenantId, parseUsage(query));
+  }
+
+  private ctx(principal: TenantPrincipal, req: Request, feature: AiCallContext['feature'], relatedEntity?: AiCallContext['relatedEntity']): AiCallContext {
     return {
       tenantId: principal.tenantId,
       userId: principal.userId,
@@ -114,6 +134,10 @@ export class AiController {
       relatedEntity,
     };
   }
+}
+
+function parseUsage(query: Record<string, string>): UsageQuery {
+  return new ZodBody(usageQuery).transform(query);
 }
 
 function present(r: CompletionResult) {

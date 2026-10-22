@@ -22,10 +22,15 @@ export function buildCandidateChain(
   availableProviders: ReadonlySet<ProviderId>,
 ): ModelInfo[] {
   const allowed = new Set(policy.allowedModels);
-  const isAllowed = (key: ModelKey) => allowed.size === 0 || allowed.has(key);
+  const tiers = policy.allowedTiers ? new Set(policy.allowedTiers) : undefined;
+  const isAllowed = (key: ModelKey) => {
+    if (allowed.size > 0 && !allowed.has(key)) return false;
+    const tier = catalog.get(key)?.tier;
+    return !tiers || (tier !== undefined && tiers.has(tier));
+  };
 
   if (req.model && !isAllowed(req.model)) {
-    throw new AiGatewayError(AI_ERROR_CODES.MODEL_NOT_ALLOWED, `Model ${req.model} is not allowed for this tenant`);
+    throw new AiGatewayError(AI_ERROR_CODES.MODEL_NOT_ALLOWED, `Model ${req.model} is not allowed on this plan or tenant policy`);
   }
 
   const ordered: ModelKey[] = req.model

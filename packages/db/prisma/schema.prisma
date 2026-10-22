@@ -251,26 +251,35 @@ enum BranchChangeStatus {
 // ───────────────────────────────────────────────────────────────────────────
 
 model User {
-  id                     String     @id @default(cuid())
-  email                  String     @unique
-  passwordHash           String?
-  name                   String
-  avatar                 String?
-  phone                  String?
-  emailVerified          DateTime?
-  emailVerificationToken String?    @unique
-  twoFactorEnabled       Boolean    @default(false)
-  /// Encrypted at application level (envelope key from Vault), never plaintext.
-  twoFactorSecret        String?
-  role                   UserRole   @default(VIEWER)
-  status                 UserStatus @default(PENDING_VERIFICATION)
-  lastLoginAt            DateTime?
-  locale                 String     @default("en")
-  preferredAiModel       String?
-  aiSettings             Json       @default("{}")
-  createdAt              DateTime   @default(now())
-  updatedAt              DateTime   @updatedAt
-  deletedAt              DateTime?
+  id                         String     @id @default(cuid())
+  email                      String     @unique
+  passwordHash               String?
+  name                       String
+  avatar                     String?
+  phone                      String?
+  emailVerified              DateTime?
+  /// SHA-256 of the emailed token; the token itself is never stored.
+  emailVerificationToken     String?    @unique
+  emailVerificationExpiresAt DateTime?
+  /// SHA-256 of the reset token; single use, short-lived.
+  passwordResetTokenHash     String?    @unique
+  passwordResetExpiresAt     DateTime?
+  /// Access tokens issued before this instant are rejected (password change = global sign-out).
+  passwordChangedAt          DateTime?
+  twoFactorEnabled           Boolean    @default(false)
+  /// AES-256-GCM ciphertext (iv.tag.data, base64url); key from ENCRYPTION_KEY / Vault.
+  twoFactorSecret            String?
+  /// SHA-256 hashes of unused one-time backup codes.
+  twoFactorBackupCodes       String[]   @default([])
+  role                       UserRole   @default(VIEWER)
+  status                     UserStatus @default(PENDING_VERIFICATION)
+  lastLoginAt                DateTime?
+  locale                     String     @default("en")
+  preferredAiModel           String?
+  aiSettings                 Json       @default("{}")
+  createdAt                  DateTime   @default(now())
+  updatedAt                  DateTime   @updatedAt
+  deletedAt                  DateTime?
 
   memberships    TenantMember[]
   sessions       Session[]
@@ -298,22 +307,30 @@ model User {
   @@map("users")
 }
 
+/// One row per issued refresh token. A "session" (what users see and revoke) is a family:
+/// every rotation revokes the presented row and inserts a successor with the same familyId.
 model Session {
-  id           String    @id @default(cuid())
-  userId       String
+  id            String    @id @default(cuid())
+  userId        String
   /// SHA-256 of the refresh token; the token itself is never stored.
-  tokenHash    String    @unique
+  tokenHash     String    @unique
   /// Rotation chain: reuse of a revoked token in the same family revokes the whole family.
-  familyId     String
-  ipAddress    String?
-  userAgent    String?
-  expiresAt    DateTime
-  revokedAt    DateTime?
-  createdAt    DateTime  @default(now())
+  /// Also the `sid` claim of access tokens, so revoking a family kills its access tokens too.
+  familyId      String
+  /// Active tenant for this session; switching tenant rotates the token.
+  tenantId      String?
+  ipAddress     String?
+  userAgent     String?
+  expiresAt     DateTime
+  lastUsedAt    DateTime  @default(now())
+  revokedAt     DateTime?
+  /// "rotated" | "logout" | "reuse_detected" | "password_changed" | "revoked_by_user" | "admin"
+  revokedReason String?
+  createdAt     DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([userId, revokedAt])
   @@index([familyId])
   @@index([expiresAt])
   @@map("sessions")
@@ -375,16 +392,18 @@ model TenantMember {
 }
 
 model Invitation {
-  id          String     @id @default(cuid())
-  tenantId    String
-  email       String
-  role        MemberRole @default(EDITOR)
+  id           String     @id @default(cuid())
+  tenantId     String
+  email        String
+  role         MemberRole @default(EDITOR)
   /// SHA-256 of the invite token.
-  tokenHash   String     @unique
-  invitedById String
-  expiresAt   DateTime
-  acceptedAt  DateTime?
-  createdAt   DateTime   @default(now())
+  tokenHash    String     @unique
+  invitedById  String
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  acceptedById String?
+  revokedAt    DateTime?
+  createdAt    DateTime   @default(now())
 
   tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   invitedBy User   @relation("InvitedBy", fields: [invitedById], references: [id])
@@ -446,15 +465,15 @@ model Site {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  pages        Page[]
-  collections  Collection[]
-  media        Media[]
-  forms        Form[]
-  webhooks     Webhook[]
-  branches     ContentBranch[]
-  kgEntities   KgEntity[]
-  facts        Fact[]
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pages       Page[]
+  collections Collection[]
+  media       Media[]
+  forms       Form[]
+  webhooks    Webhook[]
+  branches    ContentBranch[]
+  kgEntities  KgEntity[]
+  facts       Fact[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -462,7 +481,7 @@ model Site {
 }
 
 model Page {
-  id                 String        @id @default(cuid())
+  id                 String                   @id @default(cuid())
   tenantId           String
   siteId             String
   parentId           String?
@@ -472,24 +491,24 @@ model Page {
   title              String
   description        String?
   /// Block tree: { root: { id, type, props, children[] } }. Validated against the block registry.
-  content            Json          @default("{}")
-  seo                Json          @default("{}")
-  status             ContentStatus @default(DRAFT)
-  version            Int           @default(1)
+  content            Json                     @default("{}")
+  seo                Json                     @default("{}")
+  status             ContentStatus            @default(DRAFT)
+  version            Int                      @default(1)
   publishedAt        DateTime?
   scheduledAt        DateTime?
   archivedAt         DateTime?
-  locale             String        @default("en")
+  locale             String                   @default("en")
   translationGroupId String?
   templateId         String?
-  analytics          Json          @default("{}")
+  analytics          Json                     @default("{}")
   qualityScore       Float?
   readabilityScore   Float?
-  aiGenerated        Boolean       @default(false)
+  aiGenerated        Boolean                  @default(false)
   createdById        String?
   updatedById        String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
   deletedAt          DateTime?
   /// GENERATED ALWAYS (title A, description B, content strings C) — see search_indexes migration.
   searchVector       Unsupported("tsvector")? @default(dbgenerated())
@@ -537,23 +556,23 @@ model PageVersion {
 }
 
 model Block {
-  id           String   @id @default(cuid())
+  id              String   @id @default(cuid())
   /// Registry key, e.g. "hero", "pricing", "plugin:acme/map".
-  type         String   @unique
-  name         String
-  icon         String?
+  type            String   @unique
+  name            String
+  icon            String?
   /// JSON Schema derived from the block's Zod schema (packages/blocks).
-  schema       Json
-  defaults     Json     @default("{}")
-  category     String
-  isCore       Boolean  @default(true)
-  isContainer  Boolean  @default(false)
+  schema          Json
+  defaults        Json     @default("{}")
+  category        String
+  isCore          Boolean  @default(true)
+  isContainer     Boolean  @default(false)
   allowedChildren String[] @default([])
-  aiGeneratable Boolean @default(true)
-  pluginId     String?
-  rendererKey  String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  aiGeneratable   Boolean  @default(true)
+  pluginId        String?
+  rendererKey     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   plugin Plugin? @relation(fields: [pluginId], references: [id], onDelete: Cascade)
 
@@ -566,7 +585,7 @@ model Block {
 // ───────────────────────────────────────────────────────────────────────────
 
 model Collection {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   tenantId    String
   siteId      String
   name        String
@@ -574,12 +593,12 @@ model Collection {
   description String?
   /// Field definitions: [{name, type, required, localized, relation?, ai?}]
   schema      Json
-  settings    Json     @default("{}")
+  settings    Json      @default("{}")
   /// {autoTag, autoSummary, autoTranslate, extractFacts}
-  aiSettings  Json     @default("{}")
-  isSingleton Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  aiSettings  Json      @default("{}")
+  isSingleton Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
   site        Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -592,23 +611,23 @@ model Collection {
 }
 
 model Entry {
-  id                 String        @id @default(cuid())
+  id                 String                   @id @default(cuid())
   tenantId           String
   collectionId       String
   data               Json
   slug               String
-  status             ContentStatus @default(DRAFT)
-  locale             String        @default("en")
+  status             ContentStatus            @default(DRAFT)
+  locale             String                   @default("en")
   translationGroupId String?
   publishedAt        DateTime?
   scheduledAt        DateTime?
-  version            Int           @default(1)
+  version            Int                      @default(1)
   qualityScore       Float?
-  aiGenerated        Boolean       @default(false)
+  aiGenerated        Boolean                  @default(false)
   createdById        String?
   updatedById        String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
   deletedAt          DateTime?
   /// GENERATED ALWAYS from all string values in `data`.
   searchVector       Unsupported("tsvector")? @default(dbgenerated())
@@ -954,15 +973,15 @@ model PluginInstance {
 // ───────────────────────────────────────────────────────────────────────────
 
 model AiProvider {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   /// Adapter key: "anthropic" | "openai" | "google" | "ollama".
-  name        String    @unique
+  name        String   @unique
   displayName String
-  isActive    Boolean   @default(true)
+  isActive    Boolean  @default(true)
   /// {apiEndpoint?, region?}; credentials never live here (env / Vault only).
-  config      Json      @default("{}")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  config      Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   models AiModel[]
 
@@ -970,27 +989,27 @@ model AiProvider {
 }
 
 model AiModel {
-  id                String   @id @default(cuid())
-  providerId        String
+  id               String   @id @default(cuid())
+  providerId       String
   /// Provider-native model id ("claude-sonnet-5-5"). Gateway addresses models as "provider/name".
-  name              String
-  displayName       String
-  contextWindow     Int
-  maxOutputTokens   Int      @default(8192)
-  inputPricePer1M   Decimal  @db.Decimal(10, 4)
-  outputPricePer1M  Decimal  @db.Decimal(10, 4)
+  name             String
+  displayName      String
+  contextWindow    Int
+  maxOutputTokens  Int      @default(8192)
+  inputPricePer1M  Decimal  @db.Decimal(10, 4)
+  outputPricePer1M Decimal  @db.Decimal(10, 4)
   /// "text" | "vision" | "audio" | "function-calling" | "json-mode" | "embedding"
-  capabilities      String[]
+  capabilities     String[]
   /// Routing hint: "economy" | "standard" | "premium" | "local".
-  tier              String   @default("standard")
-  embeddingDims     Int?
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  tier             String   @default("standard")
+  embeddingDims    Int?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  provider      AiProvider     @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  generations   AiGeneration[]
-  agents        AiAgent[]
+  provider    AiProvider     @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  generations AiGeneration[]
+  agents      AiAgent[]
 
   @@unique([providerId, name])
   @@map("ai_models")
@@ -1037,24 +1056,24 @@ model AiGeneration {
 }
 
 model AiPrompt {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   /// NULL = platform default prompt, overridable per tenant by inserting the same name.
   tenantId        String?
   name            String
   feature         AiFeature
-  version         Int      @default(1)
+  version         Int       @default(1)
   /// Mustache-style template: {{variable}}.
   template        String
   system          String?
-  variables       Json     @default("[]")
-  fewShotExamples Json     @default("[]")
-  guardrails      Json     @default("{}")
+  variables       Json      @default("[]")
+  fewShotExamples Json      @default("[]")
+  guardrails      Json      @default("{}")
   /// Preferred "provider/name"; null = tenant default.
   modelKey        String?
-  isActive        Boolean  @default(true)
+  isActive        Boolean   @default(true)
   createdById     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   tenant      Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdBy   User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
@@ -1262,8 +1281,8 @@ model KgEntity {
   updatedAt     DateTime                     @updatedAt
   deletedAt     DateTime?
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  site         Site?         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site         Site?          @relation(fields: [siteId], references: [id], onDelete: Cascade)
   facts        Fact[]
   outRelations FactRelation[] @relation("RelFrom")
   inRelations  FactRelation[] @relation("RelTo")
@@ -1347,29 +1366,29 @@ model FactVersion {
 
 /// Where a fact appears in content. One row per span, per locale.
 model FactMention {
-  id                    String            @id @default(cuid())
-  tenantId              String
-  factId                String
-  entityType            ContentEntityType
-  entityId              String
-  locale                String
-  blockId               String?
+  id                     String            @id @default(cuid())
+  tenantId               String
+  factId                 String
+  entityType             ContentEntityType
+  entityId               String
+  locale                 String
+  blockId                String?
   /// JSON path inside page.content / entry.data, e.g. "root.children[2].props.text".
-  fieldPath             String
+  fieldPath              String
   /// Survives edits: {yjs: {start, end} (Y.RelativePosition, base64), quote: {prefix, exact, suffix}}.
-  anchor                Json
-  surfaceText           String
+  anchor                 Json
+  surfaceText            String
   /// Value as written in the span (parsed); compared with Fact.value by the linter.
-  observedValue         Json?
-  kind                  MentionKind
-  state                 MentionState      @default(IN_SYNC)
-  confidence            Float             @default(1.0)
+  observedValue          Json?
+  kind                   MentionKind
+  state                  MentionState      @default(IN_SYNC)
+  confidence             Float             @default(1.0)
   /// Fact.version the span was last reconciled with — STALE when Fact.version moves ahead.
-  factVersionSeen       Int
+  factVersionSeen        Int
   detectedByGenerationId String?
-  lastVerifiedAt        DateTime          @default(now())
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  lastVerifiedAt         DateTime          @default(now())
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
 
   fact Fact @relation(fields: [factId], references: [id], onDelete: Cascade)
 

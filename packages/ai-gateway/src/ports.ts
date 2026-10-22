@@ -11,6 +11,7 @@ import type {
   GenerationStatus,
   ModelInfo,
   ModelKey,
+  ModelTier,
   ProviderId,
   ReasoningEffort,
   TokenUsage,
@@ -61,6 +62,8 @@ export interface TenantAiPolicy {
   fallbackModels: ModelKey[];
   /** Empty = every active model is allowed. */
   allowedModels: ModelKey[];
+  /** Plan gate on model cost class (e.g. FREE → economy + local). Undefined = all tiers. */
+  allowedTiers?: ModelTier[];
   embeddingModel: ModelKey;
   guardrails: GuardrailPolicy;
 }
@@ -71,15 +74,23 @@ export interface TenantPolicyProvider {
 
 // ── Quota ──────────────────────────────────────────────────────────────────
 
-export type QuotaDecision =
-  | { allowed: true }
-  | { allowed: false; reason: 'budget' | 'rate'; message: string; retryAfterSec?: number };
+export type QuotaDenial = { allowed: false; reason: 'budget' | 'rate' | 'tokens' | 'concurrency'; message: string; retryAfterSec?: number };
+export type QuotaDecision = { allowed: true } | QuotaDenial;
+
+export interface QuotaSlot {
+  release(): Promise<void>;
+}
 
 export interface QuotaPort {
-  /** Pre-flight: cheap check before spending money (rate + remaining budget vs. estimate). */
-  check(ctx: AiCallContext, estimatedMicroUsd: number): Promise<QuotaDecision>;
+  /** Pre-flight: cheap check before spending money (rate, budget and token cap vs. estimates). */
+  check(ctx: AiCallContext, estimatedMicroUsd: number, estimatedTokens: number): Promise<QuotaDecision>;
   /** Post-flight: commit actual spend; must be idempotent per generationId. */
   commit(ctx: AiCallContext, generationId: string, costMicroUsd: number, usage: TokenUsage): Promise<void>;
+  /**
+   * Optional in-flight slot (concurrency cap). Held from pre-flight until the call — or the
+   * stream — finishes, so a tenant cannot exhaust the shared provider pool with parallel calls.
+   */
+  acquire?(ctx: AiCallContext): Promise<QuotaSlot | QuotaDenial>;
 }
 
 // ── Caches ─────────────────────────────────────────────────────────────────

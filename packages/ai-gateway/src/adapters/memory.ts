@@ -6,6 +6,8 @@ import type {
   GenerationRecord,
   ModelCatalog,
   QuotaDecision,
+  QuotaDenial,
+  QuotaSlot,
   QuotaPort,
   TenantAiPolicy,
   TenantPolicyProvider,
@@ -69,24 +71,49 @@ export class StaticPolicyProvider implements TenantPolicyProvider {
   }
 }
 
-/** Budget in micro-USD per tenant; used by tests and single-node dev without Redis. */
+/** Budget / token cap / concurrency per tenant; used by tests and single-node dev without Redis. */
 export class MemoryQuota implements QuotaPort {
   readonly spent = new Map<string, number>();
+  readonly tokens = new Map<string, number>();
+  readonly inFlight = new Map<string, number>();
   private readonly committed = new Set<string>();
 
-  constructor(private readonly budgetMicroUsd = Number.POSITIVE_INFINITY) {}
+  constructor(
+    private readonly budgetMicroUsd = Number.POSITIVE_INFINITY,
+    private readonly opts: { tokenCap?: number; maxConcurrent?: number } = {},
+  ) {}
 
-  async check(ctx: { tenantId: string }, estimatedMicroUsd: number): Promise<QuotaDecision> {
+  async check(ctx: { tenantId: string }, estimatedMicroUsd: number, estimatedTokens = 0): Promise<QuotaDecision> {
     const spent = this.spent.get(ctx.tenantId) ?? 0;
-    return spent + estimatedMicroUsd > this.budgetMicroUsd
-      ? { allowed: false, reason: 'budget', message: 'Monthly AI budget exhausted' }
-      : { allowed: true };
+    if (spent + estimatedMicroUsd > this.budgetMicroUsd) return { allowed: false, reason: 'budget', message: 'Monthly AI budget exhausted' };
+    const used = this.tokens.get(ctx.tenantId) ?? 0;
+    if (this.opts.tokenCap !== undefined && used + estimatedTokens > this.opts.tokenCap) {
+      return { allowed: false, reason: 'tokens', message: 'Monthly AI token allowance exhausted' };
+    }
+    return { allowed: true };
   }
 
-  async commit(ctx: { tenantId: string }, generationId: string, cost: number, _usage: TokenUsage): Promise<void> {
+  async commit(ctx: { tenantId: string }, generationId: string, cost: number, usage: TokenUsage): Promise<void> {
     if (this.committed.has(generationId)) return;
     this.committed.add(generationId);
     this.spent.set(ctx.tenantId, (this.spent.get(ctx.tenantId) ?? 0) + cost);
+    this.tokens.set(ctx.tenantId, (this.tokens.get(ctx.tenantId) ?? 0) + usage.inputTokens + usage.outputTokens);
+  }
+
+  async acquire(ctx: { tenantId: string }): Promise<QuotaSlot | QuotaDenial> {
+    const n = this.inFlight.get(ctx.tenantId) ?? 0;
+    if (this.opts.maxConcurrent !== undefined && n >= this.opts.maxConcurrent) {
+      return { allowed: false, reason: 'concurrency', message: 'Too many AI requests in flight' };
+    }
+    this.inFlight.set(ctx.tenantId, n + 1);
+    let released = false;
+    return {
+      release: async () => {
+        if (released) return;
+        released = true;
+        this.inFlight.set(ctx.tenantId, (this.inFlight.get(ctx.tenantId) ?? 1) - 1);
+      },
+    };
   }
 }
 

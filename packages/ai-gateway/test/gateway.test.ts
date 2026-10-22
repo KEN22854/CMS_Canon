@@ -200,3 +200,63 @@ describe('AiGateway.stream', () => {
     expect(start?.type === 'start' && start.model).toBe('openai/gpt-4o-mini');
   });
 });
+
+describe('AiGateway quotas', () => {
+  it('restricts the chain to the plan tiers (FREE → economy/local only)', async () => {
+    const anthropic = new FakeProvider('anthropic', [ok('cheap')]);
+    const { gateway } = makeGateway([anthropic], {
+      policy: { allowedTiers: ['economy', 'local'], fallbackModels: ['anthropic/claude-haiku-5-5'] },
+    });
+
+    const res = await gateway.complete(msg('hi'), CTX);
+
+    expect(res.model).toBe('anthropic/claude-haiku-5-5');
+    expect(anthropic.calls[0]?.model).toBe('claude-haiku-5-5');
+  });
+
+  it('rejects an explicitly requested model above the plan tier', async () => {
+    const { gateway } = makeGateway([new FakeProvider('anthropic', [ok('x')])], { policy: { allowedTiers: ['economy'] } });
+
+    await expect(gateway.complete({ ...msg('x'), model: 'anthropic/claude-sonnet-5-5' }, CTX)).rejects.toMatchObject({
+      code: AI_ERROR_CODES.MODEL_NOT_ALLOWED,
+    });
+  });
+
+  it('enforces the monthly token allowance using the pre-flight estimate', async () => {
+    const anthropic = new FakeProvider('anthropic', [ok('x')]);
+    const { gateway } = makeGateway([anthropic], { tokenCap: 100 });
+
+    await expect(gateway.complete({ ...msg('hello'), maxTokens: 500 }, CTX)).rejects.toMatchObject({ code: AI_ERROR_CODES.QUOTA_EXCEEDED });
+    expect(anthropic.calls).toHaveLength(0);
+  });
+
+  it('holds a concurrency slot for the duration of a call and releases it afterwards', async () => {
+    let resolveFirst: (() => void) | undefined;
+    const slow: import('../src').LlmProvider = {
+      id: 'anthropic',
+      complete: () => new Promise((resolve) => {
+        resolveFirst = () => resolve({ text: 'done', usage: { inputTokens: 1, outputTokens: 1 }, finishReason: 'stop' });
+      }),
+      stream: async function* () {},
+    };
+    const { gateway, quota } = makeGateway([slow], { maxConcurrent: 1 });
+
+    const first = gateway.complete({ ...msg('one'), cache: 'none' }, CTX);
+    await new Promise((r) => setTimeout(r, 10));
+    await expect(gateway.complete({ ...msg('two'), cache: 'none' }, CTX)).rejects.toMatchObject({ code: AI_ERROR_CODES.RATE_LIMITED });
+    resolveFirst?.();
+    await first;
+
+    expect(quota.inFlight.get('t_1')).toBe(0);
+  });
+
+  it('releases the slot when a stream consumer stops early', async () => {
+    const { gateway, quota } = makeGateway([new FakeProvider('anthropic', [ok('a b c d e')])], { maxConcurrent: 1 });
+
+    for await (const e of gateway.stream({ ...msg('go'), cache: 'none' }, CTX)) {
+      if (e.type === 'delta') break;
+    }
+
+    expect(quota.inFlight.get('t_1')).toBe(0);
+  });
+});

@@ -5,9 +5,16 @@
     "outDir": "dist",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "declaration": false,
-    "declarationMap": false
+    "declarationMap": false,
+    "module": "Node16",
+    "moduleResolution": "Node16"
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts"
+  ]
 }

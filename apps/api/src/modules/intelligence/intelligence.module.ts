@@ -1,7 +1,9 @@
 import { AiGateway } from '@canon/ai-gateway';
 import { Module, type OnApplicationShutdown } from '@nestjs/common';
-import { DevTenantGuard } from '../../common/tenancy/dev-tenant.guard';
 import { aiGatewayProvider } from './ai-gateway.provider';
+import { AiUsageService } from './application/ai-usage.service';
+import { AiBudgetAlerts } from './infrastructure/ai-budget-alerts';
+import { AiUsageLedger } from './infrastructure/ai-usage-ledger';
 import { DbModelCatalog } from './infrastructure/db-model-catalog';
 import { PgSemanticCache } from './infrastructure/pg-semantic-cache';
 import { PrismaUsageRecorder } from './infrastructure/prisma-usage-recorder';
@@ -19,11 +21,13 @@ import { AiController } from './presentation/ai.controller';
   providers: [
     DbModelCatalog,
     TenantAiSettingsService,
+    AiUsageLedger,
+    AiBudgetAlerts,
+    AiUsageService,
     RedisQuota,
     RedisExactCache,
     PgSemanticCache,
     PrismaUsageRecorder,
-    DevTenantGuard,
     aiGatewayProvider,
   ],
   exports: [AiGateway, TenantAiSettingsService],

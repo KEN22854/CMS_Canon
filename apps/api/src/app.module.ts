@@ -3,14 +3,20 @@ import { Module } from '@nestjs/common';
 import type { Request } from 'express';
 import { APP_FILTER } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
+import { AuthCoreModule } from './common/auth/auth-core.module';
 import { AllExceptionsFilter } from './common/http/all-exceptions.filter';
 import { ConfigModule } from './config/config.module';
 import { APP_CONFIG, type AppConfig } from './config/env';
+import { AuditModule } from './infrastructure/audit/audit.service';
+import { MailModule } from './infrastructure/mail/mailer';
 import { MetricsModule } from './infrastructure/metrics/metrics.module';
 import { PrismaModule } from './infrastructure/prisma/prisma.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
+import { ApiKeysModule } from './modules/api-keys/api-keys.module';
 import { HealthModule } from './modules/health/health.module';
+import { IdentityModule } from './modules/identity/identity.module';
 import { IntelligenceModule } from './modules/intelligence/intelligence.module';
+import { TenancyModule } from './modules/tenancy/tenancy.module';
 
 const REQUEST_ID_HEADER = 'x-request-id';
 
@@ -42,7 +48,13 @@ const REQUEST_ID_HEADER = 'x-request-id';
     MetricsModule,
     PrismaModule,
     RedisModule,
+    MailModule,
+    AuditModule,
+    AuthCoreModule,
     HealthModule,
+    IdentityModule,
+    TenancyModule,
+    ApiKeysModule,
     IntelligenceModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],

@@ -40,3 +40,19 @@ jobs:
       # (catches raw-SQL objects Prisma would otherwise try to drop).
       - run: pnpm --filter @canon/db exec prisma migrate deploy
       - run: pnpm --filter @canon/db exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
+  integration:
+    # Testcontainers starts its own Postgres (pgvector) + Redis; GitHub runners ship Docker.
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @canon/db prisma:generate
+      - run: pnpm --filter @canon/db --filter @canon/ai-gateway build
+      - run: pnpm --filter @canon/api test:integration

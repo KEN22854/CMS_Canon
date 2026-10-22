@@ -22,14 +22,32 @@ export const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(4000),
   API_PUBLIC_URL: z.url().default('http://localhost:4000'),
   CORS_ORIGINS: csv(z.url()),
+  /**
+   * Express 'trust proxy'. Subnets, not a hop count: browser → ingress → Next (admin) → API and
+   * SDK → ingress → API have different depths, and only trusting internal networks yields the real
+   * client IP for both (rate limits and lockouts key on it).
+   */
+  TRUST_PROXY: z.string().default('loopback,linklocal,uniquelocal'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
   APP_DATABASE_URL: z.string().startsWith('postgresql://'),
   SYSTEM_DATABASE_URL: z.string().startsWith('postgresql://'),
   REDIS_URL: z.string().startsWith('redis'),
 
+  ADMIN_PUBLIC_URL: z.url().default('http://localhost:3000'),
+
   JWT_ACCESS_SECRET: z.string().min(32),
-  JWT_REFRESH_SECRET: z.string().min(32),
+  JWT_ACCESS_TTL_SEC: z.coerce.number().int().min(60).max(3_600).default(900),
+  REFRESH_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+  /** 32 random bytes, base64 — field-level encryption (TOTP seeds, webhook secrets). */
+  ENCRYPTION_KEY: z.string().refine((v) => Buffer.from(v, 'base64').length === 32, { message: 'must be 32 bytes, base64' }),
+  /** Set when admin and API live on different subdomains of one site (e.g. ".canon.app"). */
+  AUTH_COOKIE_DOMAIN: z.string().optional().or(z.literal('').transform(() => undefined)),
+
+  SMTP_URL: z.string().startsWith('smtp').default('smtp://localhost:1035'),
+  MAIL_FROM: z.string().default('Canon <no-reply@canon.local>'),
+  /** "smtp" in dev/prod (Mailpit locally); "memory" keeps mails in-process for tests. */
+  MAIL_TRANSPORT: z.enum(['smtp', 'memory']).default('smtp'),
 
   ANTHROPIC_API_KEY: optionalSecret,
   OPENAI_API_KEY: optionalSecret,
@@ -59,8 +77,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     const issues = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
-  if (parsed.data.NODE_ENV === 'production' && parsed.data.JWT_ACCESS_SECRET.startsWith('dev-')) {
-    throw new Error('Refusing to start in production with development JWT secrets');
+  if (parsed.data.NODE_ENV === 'production') {
+    if (parsed.data.JWT_ACCESS_SECRET.startsWith('dev-')) throw new Error('Refusing to start in production with development JWT secrets');
+    if (parsed.data.MAIL_TRANSPORT === 'memory') throw new Error('MAIL_TRANSPORT=memory is test-only');
   }
   return parsed.data;
 }
