@@ -1,0 +1,1504 @@
+// Canon CMS — primary data model.
+//
+// Conventions
+// - Every tenant-scoped table carries a denormalised `tenantId`, even when reachable via siteId.
+//   RLS policies then stay a single equality check (no joins in policies → no planner surprises),
+//   and a leaked siteId can never cross tenants.
+// - Soft delete via `deletedAt`. Uniqueness that must ignore deleted rows is enforced by partial
+//   unique indexes in raw SQL migrations (Prisma cannot express `WHERE "deletedAt" IS NULL`).
+// - `version Int` = optimistic locking for aggregates edited concurrently (Page, Entry, Fact).
+// - Vector columns are `Unsupported("vector(N)")`: read/written only through $queryRaw in repositories.
+// - AnalyticsEvent / AuditLog are range-partitioned by createdAt (raw SQL); their PK includes createdAt.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector, pg_trgm, pgcrypto]
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Enums
+// ───────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+  AUTHOR
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+  DISABLED
+}
+
+enum TenantPlan {
+  FREE
+  PRO
+  BUSINESS
+  ENTERPRISE
+}
+
+enum TenantIsolation {
+  SHARED
+  SCHEMA
+  DATABASE
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  EDITOR
+  AUTHOR
+  VIEWER
+}
+
+enum ContentStatus {
+  DRAFT
+  IN_REVIEW
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ContentEntityType {
+  PAGE
+  ENTRY
+  MEDIA
+  FORM
+  FACT
+}
+
+enum ScheduledAction {
+  PUBLISH
+  UNPUBLISH
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  DEAD
+}
+
+enum SubmissionStatus {
+  NEW
+  READ
+  ARCHIVED
+  SPAM
+}
+
+enum AbTestStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  COMPLETED
+}
+
+enum AiFeature {
+  TEXT
+  REWRITE
+  TRANSLATE
+  SEO
+  ALT_TEXT
+  IMAGE
+  CODE
+  CHAT
+  EMBEDDING
+  CLASSIFY
+  SUMMARIZE
+  FACT_CHECK
+  FACT_EXTRACT
+  FACT_PROPAGATE
+  AGENT_STEP
+}
+
+enum AiGenerationStatus {
+  PENDING
+  STREAMING
+  SUCCEEDED
+  FAILED
+  BLOCKED
+  DEGRADED
+}
+
+enum AiAgentType {
+  CONTENT_STRATEGIST
+  SEO_SPECIALIST
+  COPYWRITER
+  DESIGNER
+  FACT_CHECKER
+  TRANSLATOR
+  CUSTOM
+}
+
+enum AiAgentRunStatus {
+  QUEUED
+  RUNNING
+  WAITING_HUMAN
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum GuardrailType {
+  PROMPT_INJECTION
+  PII
+  TOXICITY
+  JAILBREAK
+  OFF_TOPIC
+}
+
+enum GuardrailSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum GuardrailAction {
+  BLOCKED
+  MODIFIED
+  LOGGED
+}
+
+// Canon (fact graph)
+
+enum FactValueType {
+  TEXT
+  NUMBER
+  MONEY
+  PERCENT
+  DATE
+  BOOLEAN
+  URL
+  ENTITY_REF
+  LIST
+}
+
+enum FactStatus {
+  ACTIVE
+  DISPUTED
+  DEPRECATED
+}
+
+/// BOUND = inline fact token in rich text, rendered deterministically.
+/// DETECTED = free-text span the extractor matched to a fact; needs AI to rewrite.
+enum MentionKind {
+  BOUND
+  DETECTED
+}
+
+enum MentionState {
+  IN_SYNC
+  STALE
+  CONFLICT
+  DISMISSED
+}
+
+enum FactSourceKind {
+  MANUAL
+  URL
+  API
+  COLLECTION
+  DOCUMENT
+}
+
+enum FactChangeOrigin {
+  USER
+  AGENT
+  SENTINEL
+  IMPORT
+}
+
+enum BranchStatus {
+  OPEN
+  IN_REVIEW
+  MERGED
+  CLOSED
+  CONFLICTED
+}
+
+enum BranchChangeOp {
+  UPSERT
+  DELETE
+}
+
+enum BranchChangeStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Identity & tenancy
+// ───────────────────────────────────────────────────────────────────────────
+
+model User {
+  id                     String     @id @default(cuid())
+  email                  String     @unique
+  passwordHash           String?
+  name                   String
+  avatar                 String?
+  phone                  String?
+  emailVerified          DateTime?
+  emailVerificationToken String?    @unique
+  twoFactorEnabled       Boolean    @default(false)
+  /// Encrypted at application level (envelope key from Vault), never plaintext.
+  twoFactorSecret        String?
+  role                   UserRole   @default(VIEWER)
+  status                 UserStatus @default(PENDING_VERIFICATION)
+  lastLoginAt            DateTime?
+  locale                 String     @default("en")
+  preferredAiModel       String?
+  aiSettings             Json       @default("{}")
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  deletedAt              DateTime?
+
+  memberships    TenantMember[]
+  sessions       Session[]
+  notifications  Notification[]
+  invitationsOut Invitation[]     @relation("InvitedBy")
+  pagesCreated   Page[]           @relation("PageCreatedBy")
+  pagesUpdated   Page[]           @relation("PageUpdatedBy")
+  pageVersions   PageVersion[]
+  entriesCreated Entry[]          @relation("EntryCreatedBy")
+  entriesUpdated Entry[]          @relation("EntryUpdatedBy")
+  entryVersions  EntryVersion[]
+  media          Media[]
+  apiKeys        ApiKey[]
+  aiGenerations  AiGeneration[]
+  aiPrompts      AiPrompt[]
+  aiAgents       AiAgent[]
+  aiAgentRuns    AiAgentRun[]
+  aiFeedback     AiFeedback[]
+  pluginInstalls PluginInstance[]
+  factVersions   FactVersion[]
+  branches       ContentBranch[]  @relation("BranchCreatedBy")
+  branchesMerged ContentBranch[]  @relation("BranchMergedBy")
+
+  @@index([status])
+  @@map("users")
+}
+
+model Session {
+  id           String    @id @default(cuid())
+  userId       String
+  /// SHA-256 of the refresh token; the token itself is never stored.
+  tokenHash    String    @unique
+  /// Rotation chain: reuse of a revoked token in the same family revokes the whole family.
+  familyId     String
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Tenant {
+  id                String          @id @default(cuid())
+  name              String
+  slug              String          @unique
+  plan              TenantPlan      @default(FREE)
+  isolation         TenantIsolation @default(SHARED)
+  settings          Json            @default("{}")
+  billingCustomerId String?         @unique
+  trialEndsAt       DateTime?
+  /// {sites, pages, storageMb, apiCallsPerMonth, aiTokensPerMonth, aiRequestsPerMin, maxAgents, vectorDimensions}
+  quota             Json            @default("{}")
+  /// {defaultModel, fallbackModels[], budgetUsd, hardLimit, allowedModels[], guardrailsPolicy}
+  aiSettings        Json            @default("{}")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  deletedAt         DateTime?
+
+  members           TenantMember[]
+  sites             Site[]
+  apiKeys           ApiKey[]
+  webhooks          Webhook[]
+  invitations       Invitation[]
+  pluginInstances   PluginInstance[]
+  aiGenerations     AiGeneration[]
+  aiPrompts         AiPrompt[]
+  aiAgents          AiAgent[]
+  aiAgentRuns       AiAgentRun[]
+  aiVectorDocuments AiVectorDocument[]
+  aiSemanticCache   AiSemanticCache[]
+  aiGuardrailEvents AiGuardrailEvent[]
+  kgEntities        KgEntity[]
+  facts             Fact[]
+  factSources       FactSource[]
+
+  @@map("tenants")
+}
+
+model TenantMember {
+  id        String     @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      MemberRole @default(VIEWER)
+  invitedAt DateTime?
+  joinedAt  DateTime?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("tenant_members")
+}
+
+model Invitation {
+  id          String     @id @default(cuid())
+  tenantId    String
+  email       String
+  role        MemberRole @default(EDITOR)
+  /// SHA-256 of the invite token.
+  tokenHash   String     @unique
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedBy User   @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@index([tenantId, email])
+  @@map("invitations")
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  tenantId    String
+  name        String
+  /// First 8 chars shown in UI to identify the key; full key is shown once at creation.
+  keyPrefix   String
+  keyHash     String    @unique
+  scopes      String[]
+  /// AI-agent keys get their own rate limits and are flagged in audit logs.
+  isAgentKey  Boolean   @default(false)
+  rateLimit   Int?
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User   @relation(fields: [createdById], references: [id])
+
+  @@index([tenantId])
+  @@index([keyPrefix])
+  @@map("api_keys")
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Sites, pages, blocks
+// ───────────────────────────────────────────────────────────────────────────
+
+model Site {
+  id             String    @id @default(cuid())
+  tenantId       String
+  name           String
+  slug           String
+  /// Custom domain; partial unique index (deletedAt IS NULL) in raw SQL.
+  domain         String?
+  internalDomain String    @unique
+  description    String?
+  favicon        String?
+  logo           String?
+  theme          Json      @default("{}")
+  defaultLocale  String    @default("en")
+  locales        String[]  @default(["en"])
+  seoDefaults    Json      @default("{}")
+  isPublished    Boolean   @default(false)
+  publishedAt    DateTime?
+  settings       Json      @default("{}")
+  /// {brandVoice, glossary[], forbiddenTopics[], defaultModel, budgetUsd}
+  aiSettings     Json      @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pages        Page[]
+  collections  Collection[]
+  media        Media[]
+  forms        Form[]
+  webhooks     Webhook[]
+  branches     ContentBranch[]
+  kgEntities   KgEntity[]
+  facts        Fact[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("sites")
+}
+
+model Page {
+  id                 String        @id @default(cuid())
+  tenantId           String
+  siteId             String
+  parentId           String?
+  slug               String
+  /// Materialised path ("/blog/post") so routing is a single indexed lookup.
+  fullPath           String
+  title              String
+  description        String?
+  /// Block tree: { root: { id, type, props, children[] } }. Validated against the block registry.
+  content            Json          @default("{}")
+  seo                Json          @default("{}")
+  status             ContentStatus @default(DRAFT)
+  version            Int           @default(1)
+  publishedAt        DateTime?
+  scheduledAt        DateTime?
+  archivedAt         DateTime?
+  locale             String        @default("en")
+  translationGroupId String?
+  templateId         String?
+  analytics          Json          @default("{}")
+  qualityScore       Float?
+  readabilityScore   Float?
+  aiGenerated        Boolean       @default(false)
+  createdById        String?
+  updatedById        String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  deletedAt          DateTime?
+  /// GENERATED ALWAYS (title A, description B, content strings C) — see search_indexes migration.
+  searchVector       Unsupported("tsvector")? @default(dbgenerated())
+
+  site      Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  parent    Page?         @relation("PageTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Page[]        @relation("PageTree")
+  template  Page?         @relation("PageTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  usedBy    Page[]        @relation("PageTemplate")
+  createdBy User?         @relation("PageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?         @relation("PageUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  versions  PageVersion[]
+  abTests   AbTest[]
+
+  // Uniqueness (siteId, fullPath, locale) WHERE deletedAt IS NULL lives in raw SQL.
+  @@index([siteId, fullPath, locale])
+  @@index([tenantId, siteId, status])
+  @@index([siteId, parentId])
+  @@index([translationGroupId])
+  @@index([scheduledAt])
+  @@index([searchVector], type: Gin, map: "pages_search_vector_gin")
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "pages_title_trgm")
+  @@map("pages")
+}
+
+model PageVersion {
+  id          String   @id @default(cuid())
+  tenantId    String
+  pageId      String
+  version     Int
+  content     Json
+  seo         Json     @default("{}")
+  comment     String?
+  /// AI explanation of what changed vs. previous version: {summary, changes[{path, kind, why}]}
+  aiDiff      Json?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  page      Page  @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([pageId, version])
+  @@index([tenantId])
+  @@map("page_versions")
+}
+
+model Block {
+  id           String   @id @default(cuid())
+  /// Registry key, e.g. "hero", "pricing", "plugin:acme/map".
+  type         String   @unique
+  name         String
+  icon         String?
+  /// JSON Schema derived from the block's Zod schema (packages/blocks).
+  schema       Json
+  defaults     Json     @default("{}")
+  category     String
+  isCore       Boolean  @default(true)
+  isContainer  Boolean  @default(false)
+  allowedChildren String[] @default([])
+  aiGeneratable Boolean @default(true)
+  pluginId     String?
+  rendererKey  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  plugin Plugin? @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@index([category])
+  @@map("blocks")
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Collections & entries
+// ───────────────────────────────────────────────────────────────────────────
+
+model Collection {
+  id          String   @id @default(cuid())
+  tenantId    String
+  siteId      String
+  name        String
+  slug        String
+  description String?
+  /// Field definitions: [{name, type, required, localized, relation?, ai?}]
+  schema      Json
+  settings    Json     @default("{}")
+  /// {autoTag, autoSummary, autoTranslate, extractFacts}
+  aiSettings  Json     @default("{}")
+  isSingleton Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  site        Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  entries     Entry[]
+  factSources FactSource[]
+
+  @@unique([siteId, slug])
+  @@index([tenantId])
+  @@map("collections")
+}
+
+model Entry {
+  id                 String        @id @default(cuid())
+  tenantId           String
+  collectionId       String
+  data               Json
+  slug               String
+  status             ContentStatus @default(DRAFT)
+  locale             String        @default("en")
+  translationGroupId String?
+  publishedAt        DateTime?
+  scheduledAt        DateTime?
+  version            Int           @default(1)
+  qualityScore       Float?
+  aiGenerated        Boolean       @default(false)
+  createdById        String?
+  updatedById        String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  deletedAt          DateTime?
+  /// GENERATED ALWAYS from all string values in `data`.
+  searchVector       Unsupported("tsvector")? @default(dbgenerated())
+
+  collection Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  createdBy  User?          @relation("EntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy  User?          @relation("EntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  versions   EntryVersion[]
+
+  // Uniqueness (collectionId, slug, locale) WHERE deletedAt IS NULL lives in raw SQL.
+  @@index([collectionId, slug, locale])
+  @@index([tenantId, collectionId, status])
+  @@index([translationGroupId])
+  @@index([searchVector], type: Gin, map: "entries_search_vector_gin")
+  @@index([data(ops: JsonbPathOps)], type: Gin, map: "entries_data_gin")
+  @@map("entries")
+}
+
+model EntryVersion {
+  id          String   @id @default(cuid())
+  tenantId    String
+  entryId     String
+  version     Int
+  data        Json
+  comment     String?
+  aiDiff      Json?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  entry     Entry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([entryId, version])
+  @@index([tenantId])
+  @@map("entry_versions")
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Media
+// ───────────────────────────────────────────────────────────────────────────
+
+model Media {
+  id           String    @id @default(cuid())
+  tenantId     String
+  siteId       String
+  filename     String
+  originalName String
+  mimeType     String
+  size         BigInt
+  /// SHA-256 of the original bytes → duplicate detection.
+  contentHash  String
+  url          String
+  thumbnailUrl String?
+  cdnUrl       String?
+  width        Int?
+  height       Int?
+  duration     Float?
+  alt          String?
+  altGenerated Boolean   @default(false)
+  caption      String?
+  title        String?
+  folder       String    @default("/")
+  tags         String[]  @default([])
+  metadata     Json      @default("{}")
+  variants     Json      @default("{}")
+  /// {detectedObjects[], ocrText, dominantColors[]}; the embedding lives in ai_vector_documents.
+  aiMetadata   Json      @default("{}")
+  uploadedById String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  site       Site  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  uploadedBy User? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, siteId, folder])
+  @@index([siteId, contentHash])
+  @@index([tags], type: Gin)
+  @@index([originalName(ops: raw("gin_trgm_ops"))], type: Gin, map: "media_original_name_trgm")
+  @@map("media")
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Webhooks, forms, A/B tests
+// ───────────────────────────────────────────────────────────────────────────
+
+model Webhook {
+  id              String    @id @default(cuid())
+  tenantId        String
+  siteId          String?
+  name            String
+  url             String
+  events          String[]
+  /// HMAC signing secret, encrypted at application level.
+  secret          String
+  isActive        Boolean   @default(true)
+  lastTriggeredAt DateTime?
+  failureCount    Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site       Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId, isActive])
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id             String                @id @default(cuid())
+  tenantId       String
+  webhookId      String
+  event          String
+  /// Same key across retries so receivers can dedupe.
+  idempotencyKey String
+  payload        Json
+  responseStatus Int?
+  responseBody   String?
+  attempts       Int                   @default(0)
+  nextRetryAt    DateTime?
+  status         WebhookDeliveryStatus @default(PENDING)
+  createdAt      DateTime              @default(now())
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, createdAt])
+  @@index([status, nextRetryAt])
+  @@map("webhook_deliveries")
+}
+
+model Form {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  siteId             String
+  name               String
+  slug               String
+  fields             Json
+  settings           Json     @default("{}")
+  notificationEmails String[] @default([])
+  webhookUrl         String?
+  successMessage     String?
+  redirectUrl        String?
+  /// {spamDetection, autoTagging, autoReplyDraft}
+  aiSettings         Json     @default("{}")
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  site        Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  submissions FormSubmission[]
+
+  @@unique([siteId, slug])
+  @@index([tenantId])
+  @@map("forms")
+}
+
+model FormSubmission {
+  id               String           @id @default(cuid())
+  tenantId         String
+  formId           String
+  data             Json
+  /// Truncated/hashed per site privacy setting before insert (GDPR).
+  ipAddress        String?
+  userAgent        String?
+  status           SubmissionStatus @default(NEW)
+  spamScore        Float?
+  aiClassification Json?
+  createdAt        DateTime         @default(now())
+
+  form Form @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId, status, createdAt])
+  @@index([tenantId])
+  @@map("form_submissions")
+}
+
+model AbTest {
+  id                String       @id @default(cuid())
+  tenantId          String
+  pageId            String
+  name              String
+  /// [{id, name, weight, contentPatch}]
+  variants          Json
+  status            AbTestStatus @default(DRAFT)
+  trafficAllocation Float        @default(1.0)
+  goalMetric        String
+  startedAt         DateTime?
+  endedAt           DateTime?
+  winnerVariantId   String?
+  aiRecommendation  Json?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  page   Page          @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  events AbTestEvent[]
+
+  @@index([tenantId, status])
+  @@index([pageId])
+  @@map("ab_tests")
+}
+
+model AbTestEvent {
+  id        String   @id @default(cuid())
+  tenantId  String
+  testId    String
+  variantId String
+  visitorId String
+  event     String
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  test AbTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@index([testId, variantId, event])
+  @@map("ab_test_events")
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// High-volume append-only (partitioned in raw SQL, no FKs on purpose:
+// FKs on hot write paths cost throughput, and audit must outlive deleted users)
+// ───────────────────────────────────────────────────────────────────────────
+
+model AnalyticsEvent {
+  id        String   @default(cuid())
+  tenantId  String
+  siteId    String
+  pageId    String?
+  event     String
+  visitorId String
+  sessionId String
+  referrer  String?
+  userAgent String?
+  country   String?
+  device    String?
+  browser   String?
+  os        String?
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@id([id, createdAt])
+  @@index([siteId, createdAt])
+  @@index([pageId, createdAt])
+  @@map("analytics_events")
+}
+
+model AuditLog {
+  id         String   @default(cuid())
+  tenantId   String
+  userId     String?
+  /// Set when an API key or agent acted; combined with aiInvolved for AI-audit reports.
+  actorType  String   @default("user")
+  action     String
+  entityType String
+  entityId   String
+  changes    Json     @default("{}")
+  ipAddress  String?
+  userAgent  String?
+  aiInvolved Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@id([id, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  tenantId  String?
+  type      String
+  title     String
+  message   String
+  data      Json      @default("{}")
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@map("notifications")
+}
+
+model ScheduledPublish {
+  id          String            @id @default(cuid())
+  tenantId    String
+  entityType  ContentEntityType
+  entityId    String
+  action      ScheduledAction   @default(PUBLISH)
+  scheduledAt DateTime
+  timezone    String            @default("UTC")
+  status      JobStatus         @default(PENDING)
+  jobId       String?
+  createdAt   DateTime          @default(now())
+
+  @@index([status, scheduledAt])
+  @@index([tenantId, entityType, entityId])
+  @@map("scheduled_publishes")
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Plugins
+// ───────────────────────────────────────────────────────────────────────────
+
+model Plugin {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  version     String
+  description String?
+  author      String?
+  /// {blocks[], adminPages[], apiRoutes[], hooks[], settingsSchema, migrations[], aiTools[]}
+  manifest    Json
+  isActive    Boolean  @default(true)
+  installedAt DateTime @default(now())
+
+  blocks    Block[]
+  instances PluginInstance[]
+
+  @@map("plugins")
+}
+
+model PluginInstance {
+  id            String   @id @default(cuid())
+  pluginId      String
+  tenantId      String
+  settings      Json     @default("{}")
+  isActive      Boolean  @default(true)
+  installedById String?
+  createdAt     DateTime @default(now())
+
+  plugin      Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  installedBy User?  @relation(fields: [installedById], references: [id], onDelete: SetNull)
+
+  @@unique([pluginId, tenantId])
+  @@map("plugin_instances")
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Intelligence (AI) bounded context
+// ───────────────────────────────────────────────────────────────────────────
+
+model AiProvider {
+  id          String    @id @default(cuid())
+  /// Adapter key: "anthropic" | "openai" | "google" | "ollama".
+  name        String    @unique
+  displayName String
+  isActive    Boolean   @default(true)
+  /// {apiEndpoint?, region?}; credentials never live here (env / Vault only).
+  config      Json      @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  models AiModel[]
+
+  @@map("ai_providers")
+}
+
+model AiModel {
+  id                String   @id @default(cuid())
+  providerId        String
+  /// Provider-native model id ("claude-sonnet-5-5"). Gateway addresses models as "provider/name".
+  name              String
+  displayName       String
+  contextWindow     Int
+  maxOutputTokens   Int      @default(8192)
+  inputPricePer1M   Decimal  @db.Decimal(10, 4)
+  outputPricePer1M  Decimal  @db.Decimal(10, 4)
+  /// "text" | "vision" | "audio" | "function-calling" | "json-mode" | "embedding"
+  capabilities      String[]
+  /// Routing hint: "economy" | "standard" | "premium" | "local".
+  tier              String   @default("standard")
+  embeddingDims     Int?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  provider      AiProvider     @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  generations   AiGeneration[]
+  agents        AiAgent[]
+
+  @@unique([providerId, name])
+  @@map("ai_models")
+}
+
+model AiGeneration {
+  id                String             @id @default(cuid())
+  tenantId          String
+  userId            String?
+  feature           AiFeature
+  modelId           String?
+  /// "provider/name" as actually served — survives model deletion and covers degraded responses.
+  modelKey          String
+  promptId          String?
+  traceId           String?
+  /// Stored after PII redaction; raw prompt is never persisted.
+  promptText        String
+  promptTokens      Int                @default(0)
+  completionTokens  Int                @default(0)
+  totalTokens       Int                @default(0)
+  costUsd           Decimal            @default(0) @db.Decimal(14, 6)
+  latencyMs         Int                @default(0)
+  cacheHit          Boolean            @default(false)
+  fallbackUsed      Boolean            @default(false)
+  status            AiGenerationStatus @default(PENDING)
+  errorMessage      String?
+  responseText      String?
+  responseMetadata  Json               @default("{}")
+  relatedEntityType ContentEntityType?
+  relatedEntityId   String?
+  createdAt         DateTime           @default(now())
+
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user            User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  model           AiModel?           @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  prompt          AiPrompt?          @relation(fields: [promptId], references: [id], onDelete: SetNull)
+  feedback        AiFeedback[]
+  guardrailEvents AiGuardrailEvent[]
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, feature, createdAt])
+  @@index([relatedEntityType, relatedEntityId])
+  @@map("ai_generations")
+}
+
+model AiPrompt {
+  id              String   @id @default(cuid())
+  /// NULL = platform default prompt, overridable per tenant by inserting the same name.
+  tenantId        String?
+  name            String
+  feature         AiFeature
+  version         Int      @default(1)
+  /// Mustache-style template: {{variable}}.
+  template        String
+  system          String?
+  variables       Json     @default("[]")
+  fewShotExamples Json     @default("[]")
+  guardrails      Json     @default("{}")
+  /// Preferred "provider/name"; null = tenant default.
+  modelKey        String?
+  isActive        Boolean  @default(true)
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant      Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy   User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  runs        AiPromptRun[]
+  generations AiGeneration[]
+
+  // NULL tenantId is distinct in a plain UNIQUE, so global prompts get a partial index in raw SQL.
+  @@unique([tenantId, name, version])
+  @@index([name, isActive])
+  @@map("ai_prompts")
+}
+
+model AiPromptRun {
+  id            String   @id @default(cuid())
+  tenantId      String
+  promptId      String
+  input         Json
+  output        Json
+  tokens        Int
+  costUsd       Decimal  @db.Decimal(14, 6)
+  latencyMs     Int
+  qualityScore  Float?
+  feedbackScore Int?
+  createdAt     DateTime @default(now())
+
+  prompt AiPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
+  @@index([promptId, createdAt])
+  @@map("ai_prompt_runs")
+}
+
+model AiAgent {
+  id           String      @id @default(cuid())
+  tenantId     String
+  name         String
+  type         AiAgentType
+  config       Json        @default("{}")
+  systemPrompt String
+  /// Tool registry keys (MCP-compatible names).
+  tools        String[]
+  modelId      String?
+  isActive     Boolean     @default(true)
+  createdById  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  model     AiModel?     @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  createdBy User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  runs      AiAgentRun[]
+
+  @@unique([tenantId, name])
+  @@map("ai_agents")
+}
+
+model AiAgentRun {
+  id          String           @id @default(cuid())
+  agentId     String
+  tenantId    String
+  userId      String?
+  /// Team runs (Canon propagation) group several agent runs under one parent.
+  parentRunId String?
+  input       Json
+  status      AiAgentRunStatus @default(QUEUED)
+  /// LangGraph checkpoint — lets WAITING_HUMAN runs resume after approval / process restart.
+  state       Json             @default("{}")
+  result      Json?
+  totalTokens Int              @default(0)
+  costUsd     Decimal          @default(0) @db.Decimal(14, 6)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime         @default(now())
+
+  agent    AiAgent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  parent   AiAgentRun?     @relation("RunTree", fields: [parentRunId], references: [id], onDelete: Cascade)
+  children AiAgentRun[]    @relation("RunTree")
+  steps    AiAgentStep[]
+  branches ContentBranch[]
+
+  @@index([tenantId, status, createdAt])
+  @@index([parentRunId])
+  @@map("ai_agent_runs")
+}
+
+model AiAgentStep {
+  id          String   @id @default(cuid())
+  tenantId    String
+  runId       String
+  stepNumber  Int
+  node        String?
+  toolName    String?
+  toolInput   Json?
+  toolOutput  Json?
+  llmResponse String?
+  tokens      Int      @default(0)
+  costUsd     Decimal  @default(0) @db.Decimal(14, 6)
+  durationMs  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  run AiAgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, stepNumber])
+  @@map("ai_agent_steps")
+}
+
+model AiVectorDocument {
+  id             String                       @id @default(cuid())
+  tenantId       String
+  siteId         String?
+  entityType     ContentEntityType
+  entityId       String
+  locale         String?
+  chunkIndex     Int
+  chunkText      String
+  /// Hash of chunkText+embeddingModel — re-embedding is skipped when unchanged.
+  contentHash    String
+  embedding      Unsupported("vector(1536)")?
+  metadata       Json                         @default("{}")
+  embeddingModel String
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([entityType, entityId, chunkIndex, embeddingModel])
+  @@index([tenantId, siteId])
+  @@map("ai_vector_documents")
+}
+
+model AiSemanticCache {
+  id           String                       @id @default(cuid())
+  /// Tenant-scoped on purpose: a shared cache would leak one tenant's content into another's answers.
+  tenantId     String
+  queryHash    String
+  queryText    String
+  responseText String
+  embedding    Unsupported("vector(1536)")?
+  modelKey     String
+  feature      AiFeature
+  hitCount     Int                          @default(0)
+  createdAt    DateTime                     @default(now())
+  expiresAt    DateTime
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, queryHash, modelKey])
+  @@index([expiresAt])
+  @@map("ai_semantic_cache")
+}
+
+model AiFeedback {
+  id           String   @id @default(cuid())
+  tenantId     String
+  generationId String
+  userId       String?
+  /// -1 / +1 thumbs, or 1..5 when rated in the playground.
+  rating       Int
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  generation AiGeneration @relation(fields: [generationId], references: [id], onDelete: Cascade)
+  user       User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([generationId])
+  @@map("ai_feedback")
+}
+
+model AiGuardrailEvent {
+  id           String            @id @default(cuid())
+  tenantId     String
+  generationId String?
+  type         GuardrailType
+  severity     GuardrailSeverity
+  action       GuardrailAction
+  details      Json              @default("{}")
+  createdAt    DateTime          @default(now())
+
+  tenant     Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  generation AiGeneration? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([type, severity])
+  @@map("ai_guardrail_events")
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Canon — fact graph (killer feature). See docs/canon.md.
+// ───────────────────────────────────────────────────────────────────────────
+
+/// A thing facts are about: a product, plan, person, org, place, concept.
+model KgEntity {
+  id            String                       @id @default(cuid())
+  tenantId      String
+  siteId        String?
+  type          String
+  canonicalName String
+  aliases       String[]                     @default([])
+  description   String?
+  metadata      Json                         @default("{}")
+  /// Used to resolve extractor output ("Pro tier", "Pro plan") to the same entity.
+  embedding     Unsupported("vector(1536)")?
+  createdAt     DateTime                     @default(now())
+  updatedAt     DateTime                     @updatedAt
+  deletedAt     DateTime?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site         Site?         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  facts        Fact[]
+  outRelations FactRelation[] @relation("RelFrom")
+  inRelations  FactRelation[] @relation("RelTo")
+
+  @@unique([tenantId, type, canonicalName])
+  @@index([aliases], type: Gin)
+  @@index([canonicalName(ops: raw("gin_trgm_ops"))], type: Gin, map: "kg_entities_name_trgm")
+  @@map("kg_entities")
+}
+
+/// One canonical claim: (subject, predicate) → value. Pages reference facts; facts never reference pages.
+model Fact {
+  id           String                       @id @default(cuid())
+  tenantId     String
+  siteId       String?
+  /// Stable human key used by bound tokens: {{fact:pro_plan.price}}.
+  key          String
+  subjectId    String
+  predicate    String
+  valueType    FactValueType
+  /// Typed value, e.g. MONEY → {amount: 49, currency: "USD"}.
+  value        Json
+  /// Default rendering when a bound token has no locale-specific format.
+  displayValue String
+  unit         String?
+  /// NULL = locale-agnostic (prices, dates). Set only for facts that are inherently textual per locale.
+  locale       String?
+  status       FactStatus                   @default(ACTIVE)
+  confidence   Float                        @default(1.0)
+  /// Time-travel: when the current value became true in the world (not when it was typed in).
+  validFrom    DateTime                     @default(now())
+  validUntil   DateTime?
+  /// Freshness SLA: Drift Sentinel re-verifies after this.
+  expiresAt    DateTime?
+  version      Int                          @default(1)
+  sourceId     String?
+  embedding    Unsupported("vector(1536)")?
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
+  deletedAt    DateTime?
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site      Site?          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  subject   KgEntity       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  source    FactSource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  versions  FactVersion[]
+  mentions  FactMention[]
+  relations FactRelation[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, subjectId, predicate])
+  @@index([tenantId, status])
+  @@index([expiresAt])
+  @@map("facts")
+}
+
+/// Append-only history of a fact; the basis of "what did the site claim on date X".
+model FactVersion {
+  id           String           @id @default(cuid())
+  tenantId     String
+  factId       String
+  version      Int
+  value        Json
+  displayValue String
+  origin       FactChangeOrigin
+  reason       String?
+  changedById  String?
+  agentRunId   String?
+  branchId     String?
+  validFrom    DateTime
+  createdAt    DateTime         @default(now())
+
+  fact      Fact           @relation(fields: [factId], references: [id], onDelete: Cascade)
+  changedBy User?          @relation(fields: [changedById], references: [id], onDelete: SetNull)
+  branch    ContentBranch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@unique([factId, version])
+  @@index([tenantId, createdAt])
+  @@map("fact_versions")
+}
+
+/// Where a fact appears in content. One row per span, per locale.
+model FactMention {
+  id                    String            @id @default(cuid())
+  tenantId              String
+  factId                String
+  entityType            ContentEntityType
+  entityId              String
+  locale                String
+  blockId               String?
+  /// JSON path inside page.content / entry.data, e.g. "root.children[2].props.text".
+  fieldPath             String
+  /// Survives edits: {yjs: {start, end} (Y.RelativePosition, base64), quote: {prefix, exact, suffix}}.
+  anchor                Json
+  surfaceText           String
+  /// Value as written in the span (parsed); compared with Fact.value by the linter.
+  observedValue         Json?
+  kind                  MentionKind
+  state                 MentionState      @default(IN_SYNC)
+  confidence            Float             @default(1.0)
+  /// Fact.version the span was last reconciled with — STALE when Fact.version moves ahead.
+  factVersionSeen       Int
+  detectedByGenerationId String?
+  lastVerifiedAt        DateTime          @default(now())
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  fact Fact @relation(fields: [factId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, factId, state])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, state])
+  @@map("fact_mentions")
+}
+
+/// Typed edge between entities (Plan —includes→ Feature), optionally justified by a fact.
+model FactRelation {
+  id           String   @id @default(cuid())
+  tenantId     String
+  fromEntityId String
+  toEntityId   String
+  predicate    String
+  factId       String?
+  weight       Float    @default(1.0)
+  createdAt    DateTime @default(now())
+
+  from KgEntity @relation("RelFrom", fields: [fromEntityId], references: [id], onDelete: Cascade)
+  to   KgEntity @relation("RelTo", fields: [toEntityId], references: [id], onDelete: Cascade)
+  fact Fact?    @relation(fields: [factId], references: [id], onDelete: SetNull)
+
+  @@unique([fromEntityId, toEntityId, predicate])
+  @@index([tenantId, toEntityId])
+  @@map("fact_relations")
+}
+
+/// Where truth comes from. Drift Sentinel polls URL/API/COLLECTION sources and proposes changes.
+model FactSource {
+  id               String         @id @default(cuid())
+  tenantId         String
+  kind             FactSourceKind
+  name             String
+  uri              String?
+  /// {css?, jsonPath?, regex?} — how to extract the value from the source document.
+  selector         Json           @default("{}")
+  collectionId     String?
+  checkIntervalSec Int?
+  lastCheckedAt    DateTime?
+  lastHash         String?
+  lastValue        Json?
+  failureCount     Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  facts      Fact[]
+
+  @@index([tenantId, kind])
+  @@index([lastCheckedAt])
+  @@map("fact_sources")
+}
+
+/// Git-like change set. Canon propagation and humans both work through branches; merge is atomic.
+model ContentBranch {
+  id             String       @id @default(cuid())
+  tenantId       String
+  siteId         String
+  name           String
+  description    String?
+  status         BranchStatus @default(OPEN)
+  /// Point-in-time the branch forked from; merge detects conflicts against versions after it.
+  baseSnapshotAt DateTime     @default(now())
+  agentRunId     String?
+  /// {summary, risk, perEntity[{entityId, explanation}]} produced by the reviewer agent.
+  aiSummary      Json?
+  createdById    String?
+  mergedById     String?
+  mergedAt       DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  site         Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  agentRun     AiAgentRun?    @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  createdBy    User?          @relation("BranchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  mergedBy     User?          @relation("BranchMergedBy", fields: [mergedById], references: [id], onDelete: SetNull)
+  changes      BranchChange[]
+  factVersions FactVersion[]
+
+  @@unique([siteId, name])
+  @@index([tenantId, status])
+  @@map("content_branches")
+}
+
+model BranchChange {
+  id            String             @id @default(cuid())
+  tenantId      String
+  branchId      String
+  entityType    ContentEntityType
+  entityId      String
+  op            BranchChangeOp     @default(UPSERT)
+  /// Entity version this change was computed against (optimistic merge check).
+  baseVersion   Int
+  /// RFC 6902 JSON Patch against the base version.
+  patch         Json
+  aiExplanation Json?
+  status        BranchChangeStatus @default(PROPOSED)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  branch ContentBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, entityType, entityId])
+  @@index([tenantId])
+  @@map("branch_changes")
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Outbox (transactional events → BullMQ / Kafka relay)
+// ───────────────────────────────────────────────────────────────────────────
+
+model OutboxEvent {
+  id            String    @id @default(cuid())
+  tenantId      String
+  aggregateType String
+  aggregateId   String
+  /// e.g. "PagePublished"
+  type          String
+  /// Schema version of `payload` — consumers upcast older versions.
+  schemaVersion Int       @default(1)
+  payload       Json
+  occurredAt    DateTime  @default(now())
+  publishedAt   DateTime?
+  attempts      Int       @default(0)
+
+  @@index([publishedAt, occurredAt])
+  @@index([aggregateType, aggregateId])
+  @@map("outbox_events")
+}

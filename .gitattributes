@@ -1,0 +1,5 @@
+# LF everywhere: Prisma checksums migration.sql files, so CRLF conversion on checkout
+# would make applied migrations look modified.
+* text=auto eol=lf
+*.png binary
+*.ico binary

@@ -1,0 +1,31 @@
+{
+  "name": "@canon/ai-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Provider-agnostic LLM gateway: routing, fallback, caching, guardrails, cost accounting, tracing",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.1.0",
+    "@google/genai": "^2.30.0",
+    "openai": "^7.42.0",
+    "opossum": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/opossum": "^8.1.9",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2",
+    "vitest": "^5.0.5"
+  }
+}

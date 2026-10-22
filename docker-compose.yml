@@ -1,0 +1,165 @@
+# Dev infrastructure. Core services start by default; heavier ones are opt-in profiles:
+#   --profile observability  → Langfuse v3 (web + worker + ClickHouse)
+#   --profile local-llm      → Ollama (degraded/offline AI tier)
+#   --profile vector-scale   → Qdrant (only needed past ~50M vectors per cluster)
+name: canon
+
+x-healthcheck: &hc
+  interval: 5s
+  timeout: 5s
+  retries: 20
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: canon
+      POSTGRES_PASSWORD: canon
+      POSTGRES_DB: canon
+    ports: ["${CANON_PG_PORT:-5442}:5432"]
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "max_connections=200"]
+    healthcheck:
+      <<: *hc
+      test: ["CMD-SHELL", "pg_isready -U canon -d canon"]
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports: ["${CANON_REDIS_PORT:-6389}:6379"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "redis-cli", "ping"]
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: canon
+      MINIO_ROOT_PASSWORD: canon-minio-secret
+    ports: ["${CANON_MINIO_PORT:-9010}:9000", "${CANON_MINIO_CONSOLE_PORT:-9011}:9001"]
+    volumes: [minio-data:/data]
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "mc", "ready", "local"]
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      minio: { condition: service_healthy }
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 canon canon-minio-secret &&
+      mc mb --ignore-existing local/canon-media &&
+      mc mb --ignore-existing local/langfuse &&
+      mc anonymous set download local/canon-media/public
+      "
+    restart: "no"
+
+  # Mailpit replaces MailHog (unmaintained since 2020) with the same SMTP/UI contract.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports: ["${CANON_SMTP_PORT:-1035}:1025", "${CANON_MAILPIT_UI_PORT:-8035}:8025"]
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    environment:
+      MEILI_MASTER_KEY: canon-meili-master-key-dev-only
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+    ports: ["${CANON_MEILI_PORT:-7710}:7700"]
+    volumes: [meili-data:/meili_data]
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "curl", "-sf", "http://localhost:7700/health"]
+
+  # ─── observability profile ────────────────────────────────────────────────
+  clickhouse:
+    profiles: ["observability"]
+    image: clickhouse/clickhouse-server:24.12
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes: [clickhouse-data:/var/lib/clickhouse]
+    healthcheck:
+      <<: *hc
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping || exit 1"]
+
+  langfuse-worker: &langfuse
+    profiles: ["observability"]
+    image: langfuse/langfuse-worker:3
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    environment: &langfuse-env
+      DATABASE_URL: postgresql://canon:canon@postgres:5432/langfuse
+      SALT: canon-dev-salt
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      TELEMETRY_ENABLED: "false"
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: canon
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: canon-minio-secret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+
+  langfuse-web:
+    <<: *langfuse
+    image: langfuse/langfuse:3
+    ports: ["${CANON_LANGFUSE_PORT:-3110}:3000"]
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_URL: http://localhost:${CANON_LANGFUSE_PORT:-3110}
+      NEXTAUTH_SECRET: canon-dev-nextauth-secret
+      # Headless init so the API can trace immediately with the keys from .env.example.
+      LANGFUSE_INIT_ORG_ID: canon
+      LANGFUSE_INIT_ORG_NAME: Canon
+      LANGFUSE_INIT_PROJECT_ID: canon-dev
+      LANGFUSE_INIT_PROJECT_NAME: canon-dev
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-canon-dev
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-canon-dev
+      LANGFUSE_INIT_USER_EMAIL: admin@canon.local
+      LANGFUSE_INIT_USER_NAME: Canon Admin
+      LANGFUSE_INIT_USER_PASSWORD: canon-langfuse-dev
+
+  # ─── local-llm profile ────────────────────────────────────────────────────
+  ollama:
+    profiles: ["local-llm"]
+    image: ollama/ollama:0.5.7
+    ports: ["11434:11434"]
+    volumes: [ollama-data:/root/.ollama]
+    # GPU: uncomment on hosts with the NVIDIA container toolkit.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+  # ─── vector-scale profile ─────────────────────────────────────────────────
+  qdrant:
+    profiles: ["vector-scale"]
+    image: qdrant/qdrant:v1.13.2
+    ports: ["6333:6333"]
+    volumes: [qdrant-data:/qdrant/storage]
+
+volumes:
+  pg-data:
+  redis-data:
+  minio-data:
+  meili-data:
+  clickhouse-data:
+  ollama-data:
+  qdrant-data:

@@ -1,0 +1,45 @@
+{
+  "name": "canon-cms",
+  "private": true,
+  "description": "Canon — AI-native headless CMS with a fact graph as the single source of truth",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --filter=@canon/api...",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rimraf node_modules",
+    "infra:up": "docker compose up -d postgres redis minio minio-init mailpit meilisearch",
+    "infra:up:full": "docker compose --profile observability --profile local-llm up -d",
+    "infra:down": "docker compose down",
+    "db:generate": "pnpm --filter @canon/db prisma:generate",
+    "db:migrate": "pnpm --filter @canon/db migrate:deploy",
+    "db:migrate:dev": "pnpm --filter @canon/db migrate:dev",
+    "db:seed": "pnpm --filter @canon/db seed",
+    "db:reset": "pnpm --filter @canon/db migrate:reset",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md,yml,yaml}\"",
+    "changeset": "changeset"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.11",
+    "@types/node": "^22.10.0",
+    "prettier": "^3.4.2",
+    "rimraf": "^6.0.1",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "@swc/core",
+      "@nestjs/core",
+      "esbuild"
+    ]
+  }
+}

@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: canon
+          POSTGRES_PASSWORD: canon
+          POSTGRES_DB: canon
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U canon" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://canon:canon@localhost:5432/canon?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @canon/db exec prisma validate
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+      # Migrations must apply cleanly and leave zero drift against schema.prisma
+      # (catches raw-SQL objects Prisma would otherwise try to drop).
+      - run: pnpm --filter @canon/db exec prisma migrate deploy
+      - run: pnpm --filter @canon/db exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
