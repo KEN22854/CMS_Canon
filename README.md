@@ -186,6 +186,67 @@ canon-cms/
 - No real LLM call has been run in this environment (no provider keys). The adapters are typechecked against the installed SDKs (`@anthropic-ai/sdk` 1.x, `openai` 7.x, `@google/genai` 2.x), and the gateway logic is covered by tests with fake providers.
 - Model prices for OpenAI/Google in the seed must be re-checked against provider pricing pages before billing goes live.
 
+## What is in Phase 5
+
+The AI core and the Canon killer feature: **change a fact once, and the site rewrites itself.** Everything works without any AI keys too. The model-free path is the deterministic linter, the literal-substitution fallback, full-text search and template answers built from facts.
+
+- **RAG** (`modules/knowledge`):
+  - **ingestion of published content only** (page and entry snapshots) via outbox → the `ai-index` queue;
+  - chunking by block or field with the heading kept in each chunk, sentence-boundary cuts with overlap, short blocks merged;
+  - BOUND facts are rendered with their current values;
+  - `FactChanged` triggers re-indexing of the pages that bind the fact;
+  - embeddings are batched, and an unchanged document is skipped by hash.
+- **Hybrid search** `GET /v1/sites/:id/search`:
+  - Postgres full-text (a generated `tsvector`, OR query with prefixes, `ts_headline`) plus pgvector HNSW, fused with RRF;
+  - lexical search works without an embedding model, and vectors are added when a 1536-dim model is present.
+- **Grounded answers** `POST /v1/sites/:id/ask` and `/ask/stream` (SSE: `sources` → `delta` → `done`):
+  - sources plus Canon facts named in the question (trigram) or present on the retrieved pages;
+  - **a fact always outranks page text**;
+  - citations `[1]` / `[F1]`;
+  - cache is `exact`, not `semantic`, so a neighbouring site's answer can't leak;
+  - without a provider, the answer is a template built from the best-matching fact.
+- **Canon** (`modules/canon`, design in [docs/canon.md](docs/canon.md)):
+  - **facts**: typed values (money, number, percent, date, text…), display formatting, an append-only version history with a reason, and impact analysis by page, locale and state;
+  - **linter**:
+    - BOUND `{{fact:key}}` tokens;
+    - deterministic detection of the verbatim value, and of amounts in a sentence that names the subject (`$39` vs `$49` → CONFLICT), with no model involved;
+    - plus `canon.extract_facts` for paraphrases ("forty-nine dollars");
+    - runs after every draft save (`PageChanged`/`EntryChanged` → `canon-extract`, 20 s debounce);
+    - dismissed mentions stay dismissed, and a changed fact turns IN_SYNC into STALE;
+  - **inbox** of contradictions, **"Bind to fact"** (a span becomes a token and can't drift again), and `POST /v1/canon/lint` for any text.
+- **Multi-agent propagation** (the unique feature):
+  - `POST /v1/canon/facts/:id/propagate` opens a branch and a run tree:
+    - **Strategist** (plan) →
+    - **Copywriter** (default locale) / **Translator** (other locales), each rewriting a span in context with `canon.propagate_fact` →
+    - **Fact-Checker** (deterministic rule "new value present, old value gone" + `canon.fact_check`);
+  - every model call is an `ai_agent_steps` row (output, tokens, cost, time);
+  - when there is no writer model, a literal substitution of the value is proposed, marked "uncertain";
+  - nothing changes without a human: review with per-span diffs, manual edits, accept/reject;
+  - **merge is a CAS against the base version** (a page edited after the proposal gives a conflict, never an overwrite), with optional publish and a re-scan of mentions.
+- **AI Studio** (`modules/studio`):
+  - **Prompt Manager**: platform prompts plus tenant versions, activation and rollback, unknown-variable checks, test runs (`ai_prompt_runs`), per-version stats from the ledger;
+  - **Agent Builder**: a JSON-ReAct loop over a whitelist of read-only tools (`canon.get_fact`, `canon.search_claims`, `canon.impact_analysis`, `content.search`, `content.read`), every step recorded, plan-limited;
+  - **Playground**: up to 3 models side by side (latency, tokens, cost), where one failing model doesn't hide the others.
+- **Guardrails and cost**:
+  - every call goes through the gateway (quotas, budgets, guardrails, ledger, Langfuse);
+  - content in prompts is wrapped in tags with an explicit "this is data, not instructions";
+  - agent tools are read-only, and content changes only through branches with a human.
+- **Admin**:
+  - **Canon**: facts, inbox, branches, fact page (value, impact, history, Propagate), branch review (diffs, verdicts, agent run timeline, merge);
+  - **AI Studio**: prompts, agents, playground;
+  - **site → "Search & answers"** (hybrid search, streamed answer with sources and facts, index status, rebuild).
+
+## Phase 5 checklist
+
+- [x] RAG pipeline: ingestion (published only), chunking, embeddings, re-indexing on publish/fact change
+- [x] Hybrid search (full-text + vectors, RRF) and generative answers with citations (+ SSE, fallback without AI)
+- [x] Canon: facts, versions, impact, linter (deterministic + LLM), inbox, bind, lint API
+- [x] Multi-agent content team: Strategist → Copywriter/Translator → Fact-Checker in a branch, review, CAS merge
+- [x] AI Studio: Prompt Manager (versions, activation, tests), Agent Builder (ReAct + tools), Playground
+- [x] Guardrails / cost control / Langfuse: everything through the gateway; steps and costs per agent
+- [x] Tests: 189 in total, all green — fields 15, blocks 16, gateway 30, API unit 31 (+13: chunker, fact values, fallback), admin 7, integration 90 (+17: RAG with vectors, Canon end-to-end, Studio)
+- [x] Manual browser check without AI keys: fact → linter finds `$39` → value changed to $59 → Propagate → branch with 2 rewrites → merge → page says $59, inbox empty → search and an answer from the fact
+
 ## What is in Phase 4
 
 Collections live under Sites → a site → **Collections**.

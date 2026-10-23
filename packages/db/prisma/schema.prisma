@@ -1250,11 +1250,15 @@ model AiVectorDocument {
   embeddingModel String
   createdAt      DateTime                     @default(now())
   updatedAt      DateTime                     @updatedAt
+  /// GENERATED from metadata.title (A) + chunkText (B): lexical half of hybrid search.
+  searchVector   Unsupported("tsvector")?     @default(dbgenerated())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([entityType, entityId, chunkIndex, embeddingModel])
   @@index([tenantId, siteId])
+  @@index([tenantId, entityType, entityId], map: "ai_vector_documents_entity_idx")
+  @@index([searchVector], type: Gin, map: "ai_vector_documents_search_gin")
   @@map("ai_vector_documents")
 }
 

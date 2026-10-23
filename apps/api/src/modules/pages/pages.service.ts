@@ -103,8 +103,8 @@ export class PagesService {
     const fullPath = this.buildPath(site, parent, body.slug);
     const content = body.content === undefined ? emptyPageContent() : await this.blocks.validate(body.content);
 
-    const page = await this.write(actor, (tx) =>
-      tx.page.create({
+    const page = await this.write(actor, async (tx) => {
+      const created = await tx.page.create({
         data: {
           tenantId: actor.tenantId,
           siteId,
@@ -120,8 +120,10 @@ export class PagesService {
           createdById: actor.userId ?? null,
           updatedById: actor.userId ?? null,
         },
-      }),
-    );
+      });
+      await this.outbox.enqueue(tx, pageEvent(created, 'PageChanged', { version: 1 }));
+      return created;
+    });
     await this.audit.record({ tenantId: actor.tenantId, action: 'page.created', entityType: 'Page', entityId: page.id, changes: { fullPath, locale } }, actor);
     return this.detail(actor.tenantId, siteId, page.id);
   }
@@ -156,6 +158,8 @@ export class PagesService {
       if (res.count === 0) {
         throw new ApiError('VERSION_CONFLICT', 'The page was changed by someone else — reload to get the latest version', 409, { currentVersion: page.version });
       }
+      // Draft text changed: Canon re-scans it for fact mentions (consumers subscribe by type).
+      if (body.content !== undefined) await this.outbox.enqueue(tx, pageEvent(page, 'PageChanged', { version: page.version + 1 }));
       if (moving && newPath !== page.fullPath) {
         await this.rewriteDescendantPaths(tx, page, newPath);
         if (page.publishedVersion) {

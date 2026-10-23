@@ -20,6 +20,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
     { href: `/sites/${siteId}/pages`, label: 'Pages' },
     { href: `/sites/${siteId}/collections`, label: 'Collections' },
     { href: `/sites/${siteId}/media`, label: 'Media' },
+    { href: `/sites/${siteId}/search`, label: 'Search & answers' },
     ...(ability.can('update', 'Site') ? [{ href: `/sites/${siteId}/settings`, label: 'Settings' }] : []),
   ];
   return (

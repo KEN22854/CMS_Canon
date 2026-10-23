@@ -77,7 +77,7 @@ export default async function setup(project: TestProject): Promise<() => Promise
 
   project.provide('testEnv', {
     NODE_ENV: 'test',
-    LOG_LEVEL: 'error',
+    LOG_LEVEL: process.env.TEST_LOG_LEVEL ?? 'error',
     API_PUBLIC_URL: 'http://localhost:4000',
     ADMIN_PUBLIC_URL: 'http://localhost:3000',
     CORS_ORIGINS: 'http://localhost:3000',

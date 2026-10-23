@@ -13,7 +13,7 @@ import { PagesService } from '../pages/pages.service';
 import { DEFAULT_THEME } from '../sites/sites.service';
 
 const CACHE_TTL_SEC = 300;
-const INVALIDATING_EVENTS = ['PagePublished', 'PageUnpublished', 'PageMoved', 'SiteUpdated', 'SiteDeleted', 'EntryPublished', 'EntryUnpublished', 'CollectionUpdated', 'CollectionDeleted'];
+const INVALIDATING_EVENTS = ['PagePublished', 'PageUnpublished', 'PageMoved', 'SiteUpdated', 'SiteDeleted', 'EntryPublished', 'EntryUnpublished', 'CollectionUpdated', 'CollectionDeleted', 'FactChanged'];
 
 /**
  * Read model for the public renderer. Runs on the system role because the visitor has no tenant

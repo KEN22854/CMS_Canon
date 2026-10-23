@@ -8,6 +8,7 @@ import { inject } from 'vitest';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/bootstrap';
 import { APP_CONFIG, type AppConfig } from '../../src/config/env';
+import { OutboxRelay } from '../../src/infrastructure/events/outbox';
 import { MemoryMailer } from '../../src/infrastructure/mail/mailer';
 import { SystemPrismaService } from '../../src/infrastructure/prisma/prisma.service';
 
@@ -23,6 +24,13 @@ export async function startFakeOllama(): Promise<{ url: string; close: () => Pro
     let raw = '';
     req.on('data', (c: Buffer) => (raw += c.toString()));
     req.on('end', () => {
+      if (req.url === '/api/embed') {
+        // Hashed bag-of-words: deterministic, and texts sharing words land close together.
+        const input = (JSON.parse(raw || '{}') as { input?: string[] }).input ?? [];
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ embeddings: input.map(fakeEmbedding), prompt_eval_count: input.join(' ').split(/\s+/).length }));
+        return;
+      }
       state.calls += 1;
       const body = JSON.parse(raw || '{}') as { messages?: { content: string; images?: string[] }[]; stream?: boolean; format?: string };
       const lastMsg = body.messages?.at(-1);
@@ -59,7 +67,7 @@ export async function startFakeOllama(): Promise<{ url: string; close: () => Pro
  * can see what was translated), an SEO object, a vision description, else an echo.
  */
 function fakeReply(user: string, json: boolean, hasImage: boolean, transcript = user): string {
-  const builder = builderReply(user, hasImage, transcript) ?? collectionsReply(user);
+  const builder = builderReply(user, hasImage, transcript) ?? collectionsReply(user) ?? canonReply(user, transcript);
   if (builder) return builder;
   if (hasImage) return 'A purple square with a yellow circle in the middle';
   if (json) {
@@ -76,6 +84,56 @@ function fakeReply(user: string, json: boolean, hasImage: boolean, transcript = 
     return JSON.stringify({ title: 'Simple, fair pricing', description: 'Plans for every team size.', keywords: ['pricing', 'plans'] });
   }
   return `echo: ${user.slice(0, 40)}`;
+}
+
+export function fakeEmbedding(text: string): number[] {
+  const v = new Array<number>(1536).fill(0);
+  for (const w of text.toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length > 2)) {
+    let h = 0;
+    for (const c of w) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    v[h % 1536]! += 1;
+  }
+  const n = Math.hypot(...v) || 1;
+  return v.map((x) => x / n);
+}
+
+const WORD_NUMBERS: Record<string, number> = { 'thirty-nine': 39, 'forty-nine': 49, 'fifty-nine': 59 };
+
+/**
+ * Phase 5 prompts: grounded answers cite the first fact and source; extraction reports spelled-out
+ * prices the deterministic linter can't read; the copywriter swaps the old number for the new one
+ * ("[escalate]" and "[keep-old]" in the span steer failures); agents call one tool, then finish.
+ */
+function canonReply(user: string, transcript: string): string | null {
+  if (user.includes('<sources>') && user.includes('<question>')) {
+    const fact = user.match(/\[F1\][^:]*:\s*([^\n(]+?)\s*\(key/);
+    const source = user.includes('<source n="1"');
+    if (!fact && !source) return 'I could not find that in the site content.';
+    return `${fact ? `It is ${fact[1]} [F1].` : 'See the page.'}${source ? ' Details are on the page [1].' : ''}`;
+  }
+  if (user.includes('<known_facts>')) {
+    const money = user.split('\n').find((l) => /\|\s*MONEY\s*\|/.test(l));
+    const key = money?.split('|')[0]?.trim();
+    const claims = [...user.matchAll(/\b((?:thirty|forty|fifty)-nine) dollars\b/gi)].map((m) => ({ subject: { type: 'plan', name: 'Pro' }, predicate: 'monthly_price', valueType: 'MONEY', value: { amount: WORD_NUMBERS[m[1]!.toLowerCase()], currency: 'USD' }, surfaceText: m[0], matchesFactKey: key, confidence: 0.9 }));
+    if (/support hours/i.test(user)) claims.push({ subject: { type: 'org', name: 'Acme' }, predicate: 'support_hours', valueType: 'TEXT', value: { text: '24/7' } as never, surfaceText: 'support hours', matchesFactKey: undefined, confidence: 0.6 });
+    return JSON.stringify({ claims });
+  }
+  if (user.includes('Old value:') && user.includes('<span>')) {
+    const span = user.match(/<span>([\s\S]*?)<\/span>/)?.[1] ?? '';
+    const next = user.match(/New value: ([^\n]+)/)?.[1] ?? '';
+    if (span.includes('[escalate]') || transcript.includes('[escalate]')) return JSON.stringify({ action: 'escalate', reason: 'Comparison cannot stay true' });
+    if (transcript.includes('[keep-old]')) return JSON.stringify({ action: 'replace', text: span, explanation: 'unchanged' });
+    const n = next.match(/\d+(?:\.\d+)?/)?.[0] ?? next;
+    const text = /\d/.test(span) ? span.replace(/\d+(?:[.,]\d+)?/, n) : next;
+    return JSON.stringify({ action: 'replace', text, explanation: `Updated to ${next}` });
+  }
+  if (user.includes('<proposed>')) return JSON.stringify({ verdict: 'pass', issues: [], confidence: 0.9 });
+  if (user.startsWith('<observation')) return JSON.stringify({ thought: 'I have what I need', final: `Answer based on ${user.slice(0, 120)}` });
+  if (user.includes('[agent]')) {
+    const key = user.match(/fact:([a-z0-9_.]+)/)?.[1] ?? 'missing.key';
+    return JSON.stringify({ thought: 'Look up the fact', tool: user.includes('[forbidden-tool]') ? 'content.delete' : 'canon.get_fact', input: { key } });
+  }
+  return null;
 }
 
 /**
@@ -201,3 +259,20 @@ export async function signUp(t: TestApp, opts: { email?: string; name?: string; 
 }
 
 export const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
+
+/**
+ * Delivers this tenant's pending outbox events. One tick is not enough: test files share a
+ * database, so another app's poller may hold the batch lock (tick() then returns 0) or the batch
+ * may be full of other tenants' events.
+ */
+export async function drainOutbox(t: TestApp, tenantId: string): Promise<void> {
+  const relay = t.app.get(OutboxRelay);
+  for (let i = 0; i < 200; i++) {
+    await relay.tick();
+    const pending = await t.system.outboxEvent.count({ where: { tenantId, publishedAt: null } });
+    if (pending === 0) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  const stuck = await t.system.outboxEvent.findMany({ where: { tenantId, publishedAt: null }, select: { type: true, attempts: true } });
+  throw new Error(`outbox for tenant ${tenantId} did not drain: ${JSON.stringify(stuck)}`);
+}

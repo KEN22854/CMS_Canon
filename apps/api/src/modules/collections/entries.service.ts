@@ -140,6 +140,7 @@ export class EntriesService {
         },
       });
       await this.syncRelations(tx, e, c.fields, data);
+      await this.outbox.enqueue(tx, entryEvent(e, siteId, 'EntryChanged', { version: 1 }));
       return e;
     });
     await this.audit.record({ tenantId: actor.tenantId, action: 'entry.created', entityType: 'Entry', entityId: entry.id, changes: { collectionId, slug, source: opts.source ?? 'editor' } }, actor);
@@ -175,7 +176,10 @@ export class EntriesService {
       // Compare-and-swap on version, exactly like pages: stale tabs and concurrent imports can't clobber.
       const res = await tx.entry.updateMany({ where: { id: entryId, version: body.expectedVersion, deletedAt: null }, data: patch });
       if (res.count === 0) throw new ApiError('VERSION_CONFLICT', 'The entry was changed by someone else — reload to get the latest version', 409, { currentVersion: e.version });
-      if (data) await this.syncRelations(tx, e, c.fields, data);
+      if (data) {
+        await this.syncRelations(tx, e, c.fields, data);
+        await this.outbox.enqueue(tx, entryEvent(e, siteId, 'EntryChanged', { version: e.version + 1 }));
+      }
     });
     if (data && !opts.skipEnrichment) await this.enrichment.schedule(actor.tenantId, entryId, c.ai);
     return this.detail(actor.tenantId, siteId, collectionId, entryId);

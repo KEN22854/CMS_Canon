@@ -50,6 +50,11 @@ export class PromptRegistry {
     return value;
   }
 
+  /** After a Studio edit/activation; other API instances pick the change up within TTL_MS. */
+  invalidate(tenantId: string, name: string): void {
+    this.cache.delete(`${tenantId}:${name}`);
+  }
+
   render(p: ResolvedPrompt, vars: Record<string, string | number>): { system: string; user: string } {
     return { system: renderTemplate(p.system, vars), user: renderTemplate(p.template, vars) };
   }

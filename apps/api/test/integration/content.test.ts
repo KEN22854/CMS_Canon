@@ -1,8 +1,7 @@
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { OutboxRelay } from '../../src/infrastructure/events/outbox';
 import { PublishScheduler } from '../../src/modules/pages/publish-scheduler';
-import { PASSWORD, bearer, createTestApp, ip, refreshCookie, signUp, startFakeOllama, tokenFromMail, uniqueEmail, type SignedIn, type TestApp } from './harness';
+import { PASSWORD, bearer, createTestApp, drainOutbox, ip, refreshCookie, signUp, startFakeOllama, tokenFromMail, uniqueEmail, type SignedIn, type TestApp } from './harness';
 
 let t: TestApp;
 let ollama: Awaited<ReturnType<typeof startFakeOllama>>;
@@ -41,7 +40,7 @@ async function invited(owner: SignedIn, role: string): Promise<SignedIn> {
   return { email, accessToken: r.body.accessToken, cookie: refreshCookie(r), userId: r.body.user.id, tenantId: r.body.tenant.id };
 }
 
-const drain = () => t.app.get(OutboxRelay).tick();
+
 
 describe('sites', () => {
   it('creates a site with a starter home page and enforces the plan site limit', async () => {
@@ -110,7 +109,7 @@ describe('pages', () => {
 
     const pub = await t.http.post(`/v1/sites/${site.id}/pages/${p.id}/publish`).set(bearer(owner.accessToken)).send({}).expect(200);
     expect(pub.body).toMatchObject({ status: 'PUBLISHED', publishedVersion: 2 });
-    await drain();
+    await drainOutbox(t, owner.tenantId);
     const live = await t.http.get(`/v1/delivery/sites/${site.id}/page?path=/pricing`).set(DELIVERY).expect(200);
     expect(live.body.page.content.root.children[0].props.text).toBe('Live v2');
 
@@ -124,7 +123,7 @@ describe('pages', () => {
     expect(restored.body.content.root.children[0].props.text).toBe('Live v2');
 
     await t.http.post(`/v1/sites/${site.id}/pages/${p.id}/unpublish`).set(bearer(owner.accessToken)).send({}).expect(200);
-    await drain();
+    await drainOutbox(t, owner.tenantId);
     await t.http.get(`/v1/delivery/sites/${site.id}/page?path=/pricing`).set(DELIVERY).expect(404);
   });
 
@@ -185,7 +184,7 @@ describe('pages', () => {
     const child = await page(owner, site.id, { title: 'Post', slug: 'post', parentId: parent.id });
     await t.http.post(`/v1/sites/${site.id}/pages/${child.id}/publish`).set(bearer(owner.accessToken)).send({}).expect(200);
     await t.http.delete(`/v1/sites/${site.id}/pages/${parent.id}`).set(bearer(owner.accessToken)).expect(204);
-    await drain();
+    await drainOutbox(t, owner.tenantId);
     await t.http.get(`/v1/delivery/sites/${site.id}/page?path=/blog/post`).set(DELIVERY).expect(404);
     await t.http.get(`/v1/sites/${site.id}/pages/${child.id}`).set(bearer(owner.accessToken)).expect(404);
   });

@@ -69,10 +69,31 @@ flowchart LR
 
 ### API surface (Phase 5)
 
-`GET/POST /v1/canon/facts`, `PATCH /v1/canon/facts/:id` (creates a version and returns the impact),
-`GET /v1/canon/facts/:id/mentions`, `POST /v1/canon/facts/:id/propagate` (opens a branch and an agent run),
-`GET /v1/canon/conflicts`, `GET /v1/canon/timeline?subject=&from=&to=`,
-`POST /v1/branches/:id/merge`, MCP tools `canon.get_fact`, `canon.search_claims`, `canon.impact`.
+Implemented in Phase 5:
+
+- **Facts**:
+  - `GET/POST /v1/canon/facts`, `GET/PATCH/DELETE /v1/canon/facts/:id` (PATCH creates a version and returns the impact);
+  - `GET /v1/canon/facts/:id/versions`, `GET /v1/canon/facts/:id/impact?siteId=`;
+  - `POST /v1/canon/facts/:id/propagate` (opens a branch and an agent run).
+- **Mentions and linting**:
+  - `GET /v1/canon/conflicts?siteId=`;
+  - `POST /v1/canon/mentions/:id/dismiss`, `POST /v1/canon/mentions/:id/bind`;
+  - `POST /v1/canon/lint` (deterministic), `POST /v1/canon/scan` (re-scan one page or entry).
+- **Entities and runs**: `GET /v1/canon/entities`, `GET /v1/canon/runs/:id` (run tree with steps).
+- **Branches**:
+  - `GET /v1/sites/:id/branches`, `GET /v1/branches/:id`;
+  - `PATCH /v1/branches/:id/changes/:changeId` (accept, reject, span overrides);
+  - `POST /v1/branches/:id/merge` (CAS on the base version, optional publish), `POST /v1/branches/:id/close`.
+
+Not in Phase 5 yet:
+
+- **Later phases**: `GET /v1/canon/timeline` (time-travel), Drift Sentinel (`fact_sources` polling) and Yjs span anchors (Phase 6, together with collaboration).
+- **Phase 7**: the MCP tools `canon.get_fact`, `canon.search_claims`, `canon.impact`. Until then, the same read-only operations are available to AI Studio agents as tools.
+
+Deviations from the original design:
+
+- Anchors are text-quote selectors only, and a rescan replaces an entity's mentions while preserving DISMISSED and STALE states.
+- A propagation branch holds one change per page or entry: the patched draft plus per-span explanations.
 
 ### Infrastructure
 
