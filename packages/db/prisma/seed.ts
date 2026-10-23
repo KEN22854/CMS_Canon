@@ -20,6 +20,7 @@ import { AI_AGENTS, AI_MODELS, AI_PROMPTS, AI_PROVIDERS } from './seed/ai';
 import { BLOCKS } from '@canon/blocks';
 import { z } from 'zod';
 import { CORE_BLOCKS, toJsonSchema } from './seed/blocks';
+import { COLLECTION_PRESETS, collectionAiSettingsSchema, collectionFieldsSchema, validateEntryData } from '@canon/fields';
 
 config({ path: resolve(__dirname, '../../../.env') });
 
@@ -423,36 +424,42 @@ async function seedDemoTenant(adminId: string, modelIds: Map<string, string>): P
   await prisma.factMention.createMany({ data: mentions });
 
   // ── Collection + entries ─────────────────────────────────────────────────
+  // Built from the shared preset and validated with the same meta-schema the API uses, so the
+  // demo can never drift from what the editor accepts. Updates repair rows seeded by older phases.
+  const blog = COLLECTION_PRESETS.find((p) => p.id === 'blog')!;
+  const blogFields = collectionFieldsSchema.parse(blog.fields);
+  const blogAi = collectionAiSettingsSchema.parse({ ...blog.ai, tagVocabulary: ['pricing', 'launch', 'integrations', 'security', 'product'] });
+  const collectionData = { name: blog.name, schema: blogFields, settings: { titleField: blog.titleField }, aiSettings: blogAi };
   const posts = await prisma.collection.upsert({
     where: { siteId_slug: { siteId: site.id, slug: 'posts' } },
-    create: {
-      tenantId: tenant.id,
-      siteId: site.id,
-      name: 'Blog posts',
-      slug: 'posts',
-      schema: [
-        { name: 'title', type: 'text', required: true, localized: true },
-        { name: 'excerpt', type: 'textarea', localized: true, ai: { autoSummary: true } },
-        { name: 'body', type: 'richtext', localized: true },
-        { name: 'tags', type: 'tags', ai: { autoTag: true } },
-      ],
-      aiSettings: { autoTag: true, autoSummary: true, autoTranslate: false, extractFacts: true },
-    },
-    update: {},
+    create: { tenantId: tenant.id, siteId: site.id, slug: 'posts', ...collectionData },
+    update: collectionData,
   });
+  const para = (text: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
   const entries = [
-    { slug: 'launch-pro', data: { title: 'Introducing Pro', excerpt: 'Pro is here at $49/month.', tags: ['pricing', 'launch'] } },
-    { slug: '120-integrations', data: { title: 'We now support 120 integrations', excerpt: 'From Slack to SAP.', tags: ['integrations'] } },
+    { slug: 'launch-pro', tags: ['pricing', 'launch'], data: { title: 'Introducing Pro', excerpt: 'Pro is here for growing teams.', body: para('Pro adds SSO, audit logs and priority support.'), category: 'Product' } },
+    { slug: '120-integrations', tags: ['integrations'], data: { title: 'We now support 120 integrations', excerpt: 'From Slack to SAP.', body: para('Connect the tools your team already uses in minutes.'), category: 'News' } },
   ];
   for (const e of entries) {
+    const checked = validateEntryData(blogFields, e.data, 'publish');
+    if (!checked.ok) throw new Error(`Seed entry ${e.slug} is invalid: ${JSON.stringify(checked.issues)}`);
+    const json = checked.data as Prisma.InputJsonObject;
+    const title = e.data.title;
     const exists = await prisma.entry.findFirst({ where: { collectionId: posts.id, slug: e.slug, locale: 'en', deletedAt: null } });
     if (!exists) {
       await prisma.entry.create({
         data: {
-          tenantId: tenant.id, collectionId: posts.id, slug: e.slug, data: e.data, status: ContentStatus.PUBLISHED,
-          publishedAt: new Date(), createdById: adminId, updatedById: adminId,
-          versions: { create: { tenantId: tenant.id, version: 1, data: e.data, createdById: adminId } },
+          tenantId: tenant.id, collectionId: posts.id, slug: e.slug, title, tags: e.tags, data: json, status: ContentStatus.PUBLISHED,
+          publishedAt: new Date(), publishedVersion: 1, createdById: adminId, updatedById: adminId,
+          versions: { create: { tenantId: tenant.id, version: 1, data: json, slug: e.slug, title, tags: e.tags, comment: 'Seeded', createdById: adminId } },
         },
+      });
+    } else if (!exists.title) {
+      await prisma.entry.update({ where: { id: exists.id }, data: { title, tags: e.tags, data: json, publishedVersion: exists.version } });
+      await prisma.entryVersion.upsert({
+        where: { entryId_version: { entryId: exists.id, version: exists.version } },
+        create: { tenantId: tenant.id, entryId: exists.id, version: exists.version, data: json, slug: e.slug, title, tags: e.tags, comment: 'Seeded' },
+        update: { data: json, slug: e.slug, title, tags: e.tags },
       });
     }
   }

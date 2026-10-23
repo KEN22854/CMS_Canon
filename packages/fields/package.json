@@ -1,0 +1,27 @@
+{
+  "name": "@canon/fields",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Collection field types: field definitions, entry validation, display/AI text, CSV codec and schema diffs — shared by API and admin",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@canon/blocks": "workspace:^",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2",
+    "vitest": "^5.0.5"
+  }
+}

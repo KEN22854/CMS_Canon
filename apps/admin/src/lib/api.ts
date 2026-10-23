@@ -81,6 +81,18 @@ export function refreshSession(): Promise<boolean> {
   return inflight;
 }
 
+/** Authenticated file download (exports): a plain <a href> can't carry the in-memory bearer token. */
+export async function download(path: string, fallbackName: string): Promise<void> {
+  let res = await send(path, {}, true);
+  if (res.status === 401 && (await refreshSession())) res = await send(path, {}, true);
+  if (!res.ok) await parse(res);
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
   return 'Something went wrong. Please try again.';

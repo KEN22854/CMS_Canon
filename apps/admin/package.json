@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@canon/blocks": "workspace:^",
+    "@canon/fields": "workspace:^",
     "@canon/ui-blocks": "workspace:^",
     "@casl/ability": "^7.0.2",
     "@dnd-kit/core": "^6.3.1",

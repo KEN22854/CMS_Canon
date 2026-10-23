@@ -19,6 +19,7 @@ import { RedisModule } from './infrastructure/redis/redis.module';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module';
 import { ContentAiModule } from './modules/content-ai/content-ai.module';
 import { FactsModule } from './modules/facts/facts.module';
+import { CollectionsModule } from './modules/collections/collections.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { HealthModule } from './modules/health/health.module';
 import { IdentityModule } from './modules/identity/identity.module';
@@ -75,6 +76,7 @@ const REQUEST_ID_HEADER = 'x-request-id';
     MediaModule,
     ContentAiModule,
     FactsModule,
+    CollectionsModule,
     DeliveryModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],

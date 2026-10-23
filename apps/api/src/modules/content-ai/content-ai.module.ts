@@ -97,5 +97,6 @@ export class ContentAiController {
   imports: [IntelligenceModule, SitesModule, PagesModule, MediaModule],
   controllers: [ContentAiController],
   providers: [AiContentService, AiBuilderService],
+  exports: [AiContentService],
 })
 export class ContentAiModule {}

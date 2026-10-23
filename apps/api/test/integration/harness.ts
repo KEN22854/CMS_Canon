@@ -59,7 +59,7 @@ export async function startFakeOllama(): Promise<{ url: string; close: () => Pro
  * can see what was translated), an SEO object, a vision description, else an echo.
  */
 function fakeReply(user: string, json: boolean, hasImage: boolean, transcript = user): string {
-  const builder = builderReply(user, hasImage, transcript);
+  const builder = builderReply(user, hasImage, transcript) ?? collectionsReply(user);
   if (builder) return builder;
   if (hasImage) return 'A purple square with a yellow circle in the middle';
   if (json) {
@@ -76,6 +76,31 @@ function fakeReply(user: string, json: boolean, hasImage: boolean, transcript = 
     return JSON.stringify({ title: 'Simple, fair pricing', description: 'Plans for every team size.', keywords: ['pricing', 'plans'] });
   }
   return `echo: ${user.slice(0, 40)}`;
+}
+
+/**
+ * Collections prompts: enrichment returns tags in mixed case (one outside any vocabulary) so tests
+ * see normalisation and filtering; schema suggestion includes a reserved field name to be dropped.
+ */
+function collectionsReply(user: string): string | null {
+  const entry = user.match(/<entry>\n([\s\S]*)\n<\/entry>/);
+  if (entry) {
+    const text = entry[1]!;
+    return JSON.stringify({ summary: `About: ${text.split('\n')[0]!.slice(0, 60)}`, tags: ['Pricing', 'Brand New Tag', 'security', 'pricing'], quality: { score: 80, issues: ['Add a concrete example'] } });
+  }
+  if (user.includes('<description>')) {
+    return JSON.stringify({
+      name: 'Recipes',
+      slug: 'recipes',
+      fields: [
+        { name: 'title', label: 'Title', type: 'text', required: true },
+        { name: 'slug', label: 'Slug', type: 'text' },
+        { name: 'difficulty', label: 'Difficulty', type: 'select', options: ['easy', 'hard'] },
+        { name: 'steps', label: 'Steps', type: 'richtext' },
+      ],
+    });
+  }
+  return null;
 }
 
 /**

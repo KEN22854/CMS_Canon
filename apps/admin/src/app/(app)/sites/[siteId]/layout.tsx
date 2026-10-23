@@ -18,6 +18,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
 
   const tabs = [
     { href: `/sites/${siteId}/pages`, label: 'Pages' },
+    { href: `/sites/${siteId}/collections`, label: 'Collections' },
     { href: `/sites/${siteId}/media`, label: 'Media' },
     ...(ability.can('update', 'Site') ? [{ href: `/sites/${siteId}/settings`, label: 'Settings' }] : []),
   ];

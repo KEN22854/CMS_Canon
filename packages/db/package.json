@@ -27,6 +27,7 @@
   },
   "devDependencies": {
     "@canon/blocks": "workspace:^",
+    "@canon/fields": "workspace:^",
     "@node-rs/argon2": "^2.0.2",
     "dotenv": "^16.4.7",
     "dotenv-cli": "^11.0.0",

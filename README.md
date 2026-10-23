@@ -186,6 +186,57 @@ canon-cms/
 - No real LLM call has been run in this environment (no provider keys). The adapters are typechecked against the installed SDKs (`@anthropic-ai/sdk` 1.x, `openai` 7.x, `@google/genai` 2.x), and the gateway logic is covered by tests with fake providers.
 - Model prices for OpenAI/Google in the seed must be re-checked against provider pricing pages before billing goes live.
 
+## What is in Phase 4
+
+Collections live under Sites → a site → **Collections**.
+
+- **Field types** (`@canon/fields`, shared by the API and the admin):
+  - 14 types: text, long text, rich text, number, yes/no, date, date & time, choice (single or multiple), email, URL, image/file (single or multiple), reference, colour, JSON;
+  - each field can be required, unique, min/max and "use for AI";
+  - a collection's schema is data checked by a meta-schema: reserved names, choice fields need options, references need a target collection;
+  - entries are validated from the definitions; drafts may be incomplete and `required` applies on publish. An empty rich-text document counts as empty;
+  - presets: blog, products, team, FAQ, blank.
+- **Collections API**:
+  - CRUD; a schema change is compared against the data, so a lossy type change on a field with values gives 409 `SCHEMA_CONFLICT` with the number of affected entries (or `force`);
+  - delete is refused while other collections reference this one.
+- **Entries API**:
+  - CAS on `version` (409 `VERSION_CONFLICT`), publish snapshots (`entry_versions` stores slug/title/tags/summary too), versions with restore, duplicate;
+  - slugs are generated from the title with a suffix on collision; the placeholder slug of an empty entry follows the title until first publish;
+  - unique fields are checked per locale;
+  - search with full-text (`tsvector`) + ILIKE, tag filter with counts, sorting including quality, plan limits on collections/entries.
+- **Relations**: ids live in `data`, and the reverse index `entry_relations` (with RLS) gives "used by". Target existence is checked; deleting a referenced entry gives 409 `ENTRY_IN_USE` (or `force`).
+- **Import/export**:
+  - CSV (RFC 4180, BOM for Excel, formula-injection guard) and lossless JSON;
+  - import has a dry run, upsert by slug + locale as a partial update, per-line errors that never stop the rest, references by slug, and publish on import.
+- **Headless read API** `GET /v1/content/sites/:id/collections/:slug/entries[/:entrySlug]`:
+  - only publish snapshots, so draft edits and draft summaries never leak;
+  - `expand=true` resolves references (unpublished ones become null);
+  - works with `content:read` API keys; Redis cache keyed by tenant and site version, invalidated through the outbox.
+- **AI enrichment** (BullMQ, ~15 s debounce after saving, skipped when the text hasn't changed, never bumps `version`):
+  - **tags + summary + quality score in one model call**; tags are normalised and filtered by the vocabulary;
+  - **quality** = 40% measured completeness + 60% AI judgement, with concrete hints; without AI, the measured score with no hints;
+  - **duplicate detection** combines trigram, full-text and word shingles in Postgres and works without any AI key; vector similarity is added when an embedding model is available;
+  - plus "describe your content → field schema" (invalid fields are dropped).
+- **Admin**:
+  - collection list and creation from a preset or AI description;
+  - entries table (search, tags, status, locale, sorting, pagination, quality);
+  - CSV import with a preview of the dry-run report, CSV/JSON export;
+  - field & AI settings editor with a warning about lossy changes;
+  - **dynamic entry form generated from the schema** (rich text with Canon facts, references with search, media, multiple choice), autosave, inline publish errors, live duplicate warning, AI panel, "used by", versions.
+- Not in this phase: the public form builder (`forms`/`form_submissions` models already exist), and entries inside page blocks (a "collection list" block).
+
+## Phase 4 checklist
+
+- [x] Collections: CRUD, field meta-schema, schema-change guard, presets, plan limits
+- [x] Entries: CRUD, versions/snapshots, publish/unpublish, CAS, unique fields, slugs, search, tags
+- [x] Dynamic forms in the admin generated from the schema (14 field types)
+- [x] Relations with a reverse index, "used by", delete protection, expand in delivery
+- [x] Import/export CSV + JSON (dry run, upsert, per-line errors)
+- [x] AI: auto-tag, summary, quality score, duplicate detection (+ AI schema suggestion)
+- [x] Headless read API for published content (API keys)
+- [x] Tests: 159 in total, all green — fields 15, blocks 16, gateway 30, API unit 18, admin 7, integration 73 (+15)
+- [x] Manual browser check: collection from a preset → new entry → publish blocked by a required field → publish → AI panel without keys (fallback) → live duplicate warning
+
 ## What is in Phase 3
 
 The page builder: open any page in the admin (Sites → Pages → a page).

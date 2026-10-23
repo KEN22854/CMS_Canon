@@ -116,11 +116,13 @@ export class TenantsService {
     const limits = this.limits(tenant);
     const db = this.prisma.forTenant({ tenantId });
     const monthStart = startOfMonthUtc();
-    const [members, pendingInvites, sites, pages, storage, ai] = await Promise.all([
+    const [members, pendingInvites, sites, pages, collections, entries, storage, ai] = await Promise.all([
       db.tenantMember.count({ where: { tenantId } }),
       db.invitation.count({ where: { tenantId, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } } }),
       db.site.count({ where: { tenantId, deletedAt: null } }),
       db.page.count({ where: { tenantId, deletedAt: null } }),
+      db.collection.count({ where: { tenantId, deletedAt: null } }),
+      db.entry.count({ where: { tenantId, deletedAt: null } }),
       db.media.aggregate({ where: { tenantId, deletedAt: null }, _sum: { size: true } }),
       db.aiGeneration.aggregate({ where: { tenantId, createdAt: { gte: monthStart } }, _sum: { totalTokens: true, costUsd: true }, _count: true }),
     ]);
@@ -133,6 +135,8 @@ export class TenantsService {
         pendingInvites,
         sites,
         pages,
+        collections,
+        entries,
         storageMb: Math.round(storageMb * 10) / 10,
         aiTokens: ai._sum.totalTokens ?? 0,
         aiCostUsd: ai._sum.costUsd?.toNumber() ?? 0,

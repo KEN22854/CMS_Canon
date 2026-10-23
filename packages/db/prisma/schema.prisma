@@ -630,6 +630,8 @@ model Entry {
   collectionId       String
   data               Json
   slug               String
+  /// Display title derived from the collection's title field on every save (lists, relations, duplicates).
+  title              String                   @default("")
   status             ContentStatus            @default(DRAFT)
   locale             String                   @default("en")
   translationGroupId String?
@@ -637,6 +639,13 @@ model Entry {
   scheduledAt        DateTime?
   version            Int                      @default(1)
   qualityScore       Float?
+  /// Normalised (lowercase-dashed). AI-suggested tags are merged in and recorded in aiMeta.tags.
+  tags               String[]                 @default([])
+  summary            String?
+  /// Enrichment state: {enrichedHash, tags: {ai: [...]}, quality: {score, completeness, issues}, summaryModel}.
+  aiMeta             Json                     @default("{}")
+  /// Delivery serves the snapshot with this version, so drafts never leak (same model as pages).
+  publishedVersion   Int?
   aiGenerated        Boolean                  @default(false)
   createdById        String?
   updatedById        String?
@@ -646,10 +655,12 @@ model Entry {
   /// GENERATED ALWAYS from all string values in `data`.
   searchVector       Unsupported("tsvector")? @default(dbgenerated())
 
-  collection Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  createdBy  User?          @relation("EntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy  User?          @relation("EntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  versions   EntryVersion[]
+  collection   Collection      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  createdBy    User?           @relation("EntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy    User?           @relation("EntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  versions     EntryVersion[]
+  relationsOut EntryRelation[] @relation("RelationFrom")
+  relationsIn  EntryRelation[] @relation("RelationTo")
 
   // Uniqueness (collectionId, slug, locale) WHERE deletedAt IS NULL lives in raw SQL.
   @@index([collectionId, slug, locale])
@@ -657,7 +668,27 @@ model Entry {
   @@index([translationGroupId])
   @@index([searchVector], type: Gin, map: "entries_search_vector_gin")
   @@index([data(ops: JsonbPathOps)], type: Gin, map: "entries_data_gin")
+  @@index([tags], type: Gin, map: "entries_tags_gin")
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "entries_title_trgm")
   @@map("entries")
+}
+
+/// Reverse index of relation fields (entry.data holds the ids): "used by" lookups and delete protection.
+model EntryRelation {
+  id          String @id @default(cuid())
+  tenantId    String
+  fromEntryId String
+  field       String
+  toEntryId   String
+  position    Int
+
+  from Entry @relation("RelationFrom", fields: [fromEntryId], references: [id], onDelete: Cascade)
+  to   Entry @relation("RelationTo", fields: [toEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([fromEntryId, field, position])
+  @@index([toEntryId])
+  @@index([tenantId])
+  @@map("entry_relations")
 }
 
 model EntryVersion {
@@ -666,6 +697,11 @@ model EntryVersion {
   entryId     String
   version     Int
   data        Json
+  /// Published metadata travels with the snapshot, so delivery never mixes live data with draft title/tags/summary.
+  slug        String   @default("")
+  title       String   @default("")
+  tags        String[] @default([])
+  summary     String?
   comment     String?
   aiDiff      Json?
   createdById String?
@@ -684,7 +720,7 @@ model EntryVersion {
 // ───────────────────────────────────────────────────────────────────────────
 
 model Media {
-  id           String    @id @default(cuid())
+  id           String      @id @default(cuid())
   tenantId     String
   siteId       String
   filename     String
@@ -703,18 +739,18 @@ model Media {
   height       Int?
   duration     Float?
   alt          String?
-  altGenerated Boolean   @default(false)
+  altGenerated Boolean     @default(false)
   caption      String?
   title        String?
-  folder       String    @default("/")
-  tags         String[]  @default([])
-  metadata     Json      @default("{}")
-  variants     Json      @default("{}")
+  folder       String      @default("/")
+  tags         String[]    @default([])
+  metadata     Json        @default("{}")
+  variants     Json        @default("{}")
   /// {detectedObjects[], ocrText, dominantColors[]}; the embedding lives in ai_vector_documents.
-  aiMetadata   Json      @default("{}")
+  aiMetadata   Json        @default("{}")
   uploadedById String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
   deletedAt    DateTime?
 
   site       Site  @relation(fields: [siteId], references: [id], onDelete: Cascade)
