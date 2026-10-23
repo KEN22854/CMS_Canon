@@ -6,7 +6,8 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "types": [
-      "node"
+      "node",
+      "multer"
     ],
     "declaration": false,
     "declarationMap": false,

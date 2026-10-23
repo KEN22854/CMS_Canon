@@ -77,6 +77,13 @@ enum ContentEntityType {
   FACT
 }
 
+enum MediaStatus {
+  PENDING_UPLOAD
+  PROCESSING
+  READY
+  FAILED
+}
+
 enum ScheduledAction {
   PUBLISH
   UNPUBLISH
@@ -494,7 +501,12 @@ model Page {
   content            Json                     @default("{}")
   seo                Json                     @default("{}")
   status             ContentStatus            @default(DRAFT)
+  /// Optimistic lock for the draft; bumped on every save.
   version            Int                      @default(1)
+  /// PageVersion.version that is live. The draft (content) can move ahead without affecting the site.
+  publishedVersion   Int?
+  /// Sibling order within the parent (menus, sitemaps, tree view).
+  position           Int                      @default(0)
   publishedAt        DateTime?
   scheduledAt        DateTime?
   archivedAt         DateTime?
@@ -526,7 +538,7 @@ model Page {
   // Uniqueness (siteId, fullPath, locale) WHERE deletedAt IS NULL lives in raw SQL.
   @@index([siteId, fullPath, locale])
   @@index([tenantId, siteId, status])
-  @@index([siteId, parentId])
+  @@index([siteId, parentId, position])
   @@index([translationGroupId])
   @@index([scheduledAt])
   @@index([searchVector], type: Gin, map: "pages_search_vector_gin")
@@ -679,6 +691,9 @@ model Media {
   size         BigInt
   /// SHA-256 of the original bytes → duplicate detection.
   contentHash  String
+  status       MediaStatus @default(READY)
+  /// Object-store key of the original; variants live under the same prefix.
+  storageKey   String
   url          String
   thumbnailUrl String?
   cdnUrl       String?

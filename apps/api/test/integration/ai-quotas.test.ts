@@ -41,7 +41,7 @@ describe('AI gateway behind real auth', () => {
   it('lists only models the plan can use', async () => {
     const s = await signUp(t);
     const res = await t.http.get('/v1/ai/models').set(bearer(s.accessToken)).expect(200);
-    expect(res.body.models.map((m: { key: string }) => m.key)).toEqual(['ollama/llama3.1:8b']);
+    expect(res.body.models.map((m: { key: string }) => m.key).sort()).toEqual(['ollama/llama3.1:8b', 'ollama/qwen2.5vl:7b']);
   });
 
   it('enforces the per-user rate limit (FREE: 5/min)', async () => {

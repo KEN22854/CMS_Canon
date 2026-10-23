@@ -1,0 +1,30 @@
+{
+  "name": "@canon/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "dotenv -e ../../.env -- next dev -p 3001",
+    "build": "dotenv -e ../../.env -v NODE_ENV=production -- next build",
+    "start": "dotenv -e ../../.env -v NODE_ENV=production -- next start -p 3001",
+    "typecheck": "next typegen && tsc --noEmit",
+    "clean": "rimraf .next"
+  },
+  "dependencies": {
+    "@canon/blocks": "workspace:^",
+    "next": "^16.4.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.6.1",
+    "dotenv-cli": "^11.0.0",
+    "postcss": "^8.5.31",
+    "rimraf": "^6.0.1",
+    "tailwindcss": "^3.4",
+    "typescript": "^5.7.2"
+  }
+}

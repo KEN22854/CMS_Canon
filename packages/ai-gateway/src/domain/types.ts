@@ -54,6 +54,11 @@ export interface CompletionRequest {
   /** Explicit model; omitted → tenant default. Fallback chain is appended unless `strictModel`. */
   model?: ModelKey;
   strictModel?: boolean;
+  /**
+   * Soft preference (e.g. the model a versioned prompt was tuned on): tried first when the tenant's
+   * plan and providers allow it, silently skipped otherwise — unlike `model`, never a 403.
+   */
+  preferModel?: ModelKey;
   system?: string;
   messages: ChatMessage[];
   maxTokens?: number;

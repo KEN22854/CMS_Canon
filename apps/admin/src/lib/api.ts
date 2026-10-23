@@ -14,6 +14,8 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
+  /** Multipart uploads; the browser sets the boundary header itself. */
+  form?: FormData;
   /** Attach the in-memory access token and retry once through /auth/refresh on 401. */
   auth?: boolean;
 }
@@ -37,12 +39,12 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
 function send(path: string, opts: RequestOptions, auth: boolean): Promise<Response> {
   const token = useAuth.getState().accessToken;
   return fetch(`${BASE}${path}`, {
-    method: opts.method ?? (opts.body === undefined ? 'GET' : 'POST'),
+    method: opts.method ?? (opts.body === undefined && !opts.form ? 'GET' : 'POST'),
     headers: {
       ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),
       ...(auth && token ? { authorization: `Bearer ${token}` } : {}),
     },
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    body: opts.form ?? (opts.body === undefined ? undefined : JSON.stringify(opts.body)),
     credentials: 'same-origin',
   });
 }

@@ -39,6 +39,8 @@ export type SubjectName = (typeof SUBJECTS)[number];
 export type AppAbility = Ability<[Action, SubjectName | object], MongoQuery>;
 
 const CONTENT: SubjectName[] = ['Site', 'Page', 'Entry', 'Collection', 'Media', 'Form', 'AbTest', 'Fact', 'Branch'];
+/** Sites (domains, locales, theme) are workspace configuration: editors work inside them, admins shape them. */
+const EDITABLE: SubjectName[] = CONTENT.filter((s) => s !== 'Site');
 const AUTHORED: SubjectName[] = ['Page', 'Entry', 'Media', 'Fact', 'Branch'];
 
 /**
@@ -102,7 +104,8 @@ export function defineAbilityFor(p: RequestPrincipal): AppAbility {
       cannot('invite', 'Member', ownerRows);
       break;
     case 'EDITOR':
-      can(['create', 'read', 'update', 'delete', 'publish'], CONTENT, own);
+      can(['create', 'read', 'update', 'delete', 'publish'], EDITABLE, own);
+      can('read', 'Site', own);
       can('invoke', 'Ai', own);
       can('read', ['Tenant', 'Member', 'AiUsage', 'Analytics', 'AiAgent', 'AiPrompt'], own);
       break;

@@ -24,9 +24,10 @@ export async function startFakeOllama(): Promise<{ url: string; close: () => Pro
     req.on('data', (c: Buffer) => (raw += c.toString()));
     req.on('end', () => {
       state.calls += 1;
-      const body = JSON.parse(raw || '{}') as { messages?: { content: string }[]; stream?: boolean };
-      const last = body.messages?.at(-1)?.content ?? '';
-      const reply = `echo: ${last.slice(0, 40)}`;
+      const body = JSON.parse(raw || '{}') as { messages?: { content: string; images?: string[] }[]; stream?: boolean; format?: string };
+      const lastMsg = body.messages?.at(-1);
+      const last = lastMsg?.content ?? '';
+      const reply = fakeReply(last, body.format === 'json', Boolean(lastMsg?.images?.length));
       const send = () => {
         if (body.stream) {
           res.setHeader('content-type', 'application/x-ndjson');
@@ -50,6 +51,27 @@ export async function startFakeOllama(): Promise<{ url: string; close: () => Pro
     },
     close: () => new Promise((r) => server.close(() => r())),
   };
+}
+
+/**
+ * Deterministic stand-ins for the shapes our prompts ask for: JSON translations (prefixed so tests
+ * can see what was translated), an SEO object, a vision description, else an echo.
+ */
+function fakeReply(user: string, json: boolean, hasImage: boolean): string {
+  if (hasImage) return 'A purple square with a yellow circle in the middle';
+  if (json) {
+    const m = user.match(/<text>\n([\s\S]*)\n<\/text>/);
+    if (m) {
+      try {
+        const arr = JSON.parse(m[1]!) as string[];
+        if (Array.isArray(arr)) return JSON.stringify({ translations: arr.map((t) => (t.trim() ? `[tr] ${t}` : t)) });
+      } catch {
+        /* not a translation request */
+      }
+    }
+    return JSON.stringify({ title: 'Simple, fair pricing', description: 'Plans for every team size.', keywords: ['pricing', 'plans'] });
+  }
+  return `echo: ${user.slice(0, 40)}`;
 }
 
 export interface TestApp {

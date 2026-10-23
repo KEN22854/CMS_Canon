@@ -3,7 +3,8 @@ import type { MemberRole, UserRole } from '@canon/db';
 import type { Request } from 'express';
 import { API_ERROR_CODES, ApiError } from '../http/api-error';
 
-export type ActorType = 'user' | 'api-key' | 'agent';
+/** 'system' = scheduled jobs and other platform-initiated actions (no human or key behind them). */
+export type ActorType = 'user' | 'api-key' | 'agent' | 'system';
 
 /** Who is calling, resolved once per request by AuthGuard from a JWT or an API key. */
 export interface RequestPrincipal {

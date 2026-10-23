@@ -94,7 +94,7 @@ Host ports are offset so Canon runs next to other stacks; override with `CANON_*
 | API | 4000 |
 | Postgres (pgvector) | 5442 |
 | Redis | 6389 |
-| MinIO API / console | 9010 / 9011 |
+| S3 (SeaweedFS) | 9010 |
 | Mailpit SMTP / UI | 1035 / 8035 |
 | Meilisearch | 7710 |
 | Langfuse (`--profile observability`) | 3110 |
@@ -125,12 +125,12 @@ canon-cms/
 │   │   │       ├── intelligence/ AI gateway, quotas, budget alerts, usage ledger, REST + SSE
 │   │   │       └── health/       /health, /health/ready, /metrics
 │   │   └── test/                 unit/ (vitest) · integration/ (Testcontainers: Postgres + Redis)
-│   ├── admin/                    Next.js 16: auth, workspaces, members, security, AI usage, API keys (Phase 1 ✔; builder 2–3)
-│   └── web/                      Next.js public renderer                 (Phase 2)
+│   ├── admin/                    Next.js 16: auth, workspaces, sites, pages editor, media, AI (Phases 1–2 ✔; visual builder: 3)
+│   └── web/                      Next.js 16 multi-domain renderer: proxy.ts → /s/<host>, ISR + tag revalidation, preview (Phase 2 ✔)
 ├── packages/
 │   ├── db/                       Prisma schema (47 models), raw SQL migrations, RLS helper, seed
 │   ├── ai-gateway/               Provider-agnostic LLM gateway (ports & adapters) + tests
-│   ├── blocks/                   Block registry (Zod schemas + renderers) (Phase 3)
+│   ├── blocks/                   Block schemas, rich text, tree validation & text helpers (Phase 2 ✔; full set: 3)
 │   ├── canon/                    Fact graph domain: extract, lint, propagate (Phase 5)
 │   ├── agents/                   LangGraph agent runtime + tool registry  (Phase 5)
 │   ├── sdk/                      Typed client (ts-rest/orval)            (Phase 2)
@@ -185,6 +185,75 @@ canon-cms/
 ### Known limits
 - No real LLM call has been run in this environment (no provider keys). The adapters are typechecked against the installed SDKs (`@anthropic-ai/sdk` 1.x, `openai` 7.x, `@google/genai` 2.x), and the gateway logic is covered by tests with fake providers.
 - Model prices for OpenAI/Google in the seed must be re-checked against provider pricing pages before billing goes live.
+
+## What is in Phase 2
+
+Run it locally:
+
+```bash
+pnpm infra:up
+```
+
+```bash
+pnpm db:migrate && pnpm db:seed
+```
+
+```bash
+pnpm dev
+```
+
+Then open the admin at <http://localhost:3000> and the demo site at <http://acme-cloud.canon.localhost:3001>. `*.localhost` resolves to 127.0.0.1 in browsers, so no hosts-file entry is needed.
+
+- **Sites**:
+  - plan-limited creation with starter content (landing/blog/docs/blank) and an automatic `<site>-<tenant>.canon.localhost` address;
+  - custom domain, locales, theme tokens, AI voice/glossary/forbidden topics;
+  - admins configure sites, editors work inside them.
+- **Pages**:
+  - tree with materialised paths; moving or renaming a parent rewrites the subtree, and cycles are rejected;
+  - reserved slugs and locale prefixes are protected;
+  - every save is a compare-and-swap on `version` (409 `VERSION_CONFLICT`), with 5 s autosave and Ctrl+S in the editor;
+  - **publishing snapshots the draft** into `page_versions`, and delivery only ever serves `publishedVersion`, so drafts can't leak;
+  - restore copies a version into the draft; duplicate; soft delete with sub-pages;
+  - scheduled publish via BullMQ, with the DB row as source of truth and pending jobs re-armed on boot;
+  - signed preview links.
+- **Blocks** (`@canon/blocks`):
+  - Zod schemas for section, hero, heading, text, image and button;
+  - closed rich-text schema with no raw HTML and safe links only;
+  - Canon `factRef` nodes;
+  - tree validation (types, nesting, depth ≤ 6, ≤ 500 nodes, unique ids);
+  - text helpers used by translation.
+- **Media**:
+  - type detected from magic bytes, never the client MIME; HTML posing as `.jpg` is rejected and SVG is deferred;
+  - sharp: EXIF orientation, metadata/GPS stripped, WebP + AVIF at 5 widths, thumbnail, dominant colour, decompression-bomb guard;
+  - SHA-256 dedupe per site, presigned uploads for large files, storage quota;
+  - usage lookup (`jsonb_path_exists`) and 409 `MEDIA_IN_USE` on delete.
+- **Delivery & renderer**:
+  - token-protected delivery API: resolve host, published page (with Canon facts, media, hreflang alternates, nav), list, preview;
+  - Redis cache invalidated O(1) by a per-site version counter;
+  - **transactional outbox** (`FOR UPDATE SKIP LOCKED`, backoff, dead letters) → `revalidateTag` on the renderer, so a publish is live in about a second;
+  - renderer: Next 16 `proxy.ts` host routing, ISR, locale prefixes, metadata/OG/hreflang, `<picture>` AVIF/WebP, sitemap.xml with alternates, robots.txt, draft mode.
+- **Basic AI**, all through the gateway with versioned prompts:
+  - rewrite / shorten / expand / simplify / formalize / fix with the site brand voice;
+  - glossary-aware batch translation;
+  - **page translation into a new-locale draft** that keeps structure, links, media and Canon facts;
+  - SEO suggestions;
+  - vision alt text.
+  - `preferModel` uses a prompt's tuned model when the plan allows it and falls back otherwise.
+- **Admin**:
+  - sites list and creation, page list with statuses and "changes" badges;
+  - structured page editor: outline, generated inspector, ✨ AI on text fields, media picker, page/SEO, versions, schedule, translate, preview;
+  - media library with drag & drop and AI alt text; site settings.
+- **Infra**: MinIO replaced by SeaweedFS, because MinIO stopped publishing images in 2025; any S3 works via `S3_*`.
+
+## Phase 2 checklist
+
+- [x] Sites CRUD + theme + AI settings, plan limits
+- [x] Pages: CRUD, tree/paths, versions, publish/unpublish/schedule, preview, optimistic locking
+- [x] Media: upload/presign, S3, sharp variants, dedupe, usage, quotas
+- [x] Admin: dashboard → sites → pages list → editor, media library, settings
+- [x] Public renderer MVP (6 blocks), ISR + on-demand revalidation via outbox
+- [x] AI: text actions, translate (texts + whole page), SEO, alt text
+- [x] Tests: 108 total. 50 are integration tests on Postgres + Redis + SeaweedFS containers; Phase 2 alone adds 16, covering paths, conflicts, drafts vs live, preview, facts, ABAC, scheduling, cascade delete, media variants/dedupe/in-use, and AI translate/SEO/alt.
 
 ## What is in Phase 1
 

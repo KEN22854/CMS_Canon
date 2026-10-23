@@ -260,3 +260,19 @@ describe('AiGateway quotas', () => {
     expect(quota.inFlight.get('t_1')).toBe(0);
   });
 });
+
+describe('preferModel', () => {
+  it('uses the preferred model when allowed', async () => {
+    const anthropic = new FakeProvider('anthropic', [ok('x')]);
+    const { gateway } = makeGateway([anthropic]);
+    const res = await gateway.complete({ ...msg('hi'), preferModel: 'anthropic/claude-haiku-5-5' }, CTX);
+    expect(res.model).toBe('anthropic/claude-haiku-5-5');
+  });
+
+  it('skips a preferred model the plan forbids instead of failing', async () => {
+    const anthropic = new FakeProvider('anthropic', [ok('x')]);
+    const { gateway } = makeGateway([anthropic], { policy: { allowedTiers: ['economy'], defaultModel: 'anthropic/claude-haiku-5-5', fallbackModels: [] } });
+    const res = await gateway.complete({ ...msg('hi'), preferModel: 'anthropic/claude-sonnet-5-5' }, CTX);
+    expect(res.model).toBe('anthropic/claude-haiku-5-5');
+  });
+});

@@ -85,6 +85,15 @@ describe('RBAC matrix', () => {
     expect(a.can('invoke', 'Ai')).toBe(true);
   });
 
+  it('editors work inside sites but cannot reconfigure them', () => {
+    const a = user('EDITOR');
+    expect(a.can('read', 'Site')).toBe(true);
+    expect(a.can('update', 'Site')).toBe(false);
+    expect(a.can('create', 'Site')).toBe(false);
+    expect(a.can('publish', 'Page')).toBe(true);
+    expect(a.can('delete', 'Media')).toBe(true);
+  });
+
   it('viewers read but cannot invoke AI', () => {
     const a = user('VIEWER');
     expect(a.can('read', 'Page')).toBe(true);

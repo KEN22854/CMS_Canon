@@ -29,6 +29,6 @@ import { SessionRevoker } from './session-revoker';
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
-  exports: [AccessTokenService, ApiKeyAuthenticator, SessionRevoker],
+  exports: [AccessTokenService, ApiKeyAuthenticator, SessionRevoker, JwtModule],
 })
 export class AuthCoreModule {}

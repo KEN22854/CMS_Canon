@@ -44,6 +44,25 @@ export const envSchema = z.object({
   /** Set when admin and API live on different subdomains of one site (e.g. ".canon.app"). */
   AUTH_COOKIE_DOMAIN: z.string().optional().or(z.literal('').transform(() => undefined)),
 
+  /** Sites get <site>-<tenant>.<domain>; *.localhost resolves to 127.0.0.1 in browsers, so dev needs no hosts file. */
+  PUBLIC_SITES_DOMAIN: z.string().default('canon.localhost'),
+  /** Public renderer (apps/web): preview links and on-demand ISR revalidation. */
+  WEB_PUBLIC_PORT: z.coerce.number().int().positive().default(3001),
+  WEB_REVALIDATE_URL: z.url().optional().or(z.literal('').transform(() => undefined)),
+  REVALIDATE_SECRET: z.string().min(16).default('dev-revalidate-secret-change-me'),
+  /** Shared secret the renderer presents to the delivery API (published content is public, but the API is not a CDN). */
+  DELIVERY_TOKEN: z.string().min(16).default('dev-delivery-token-change-me'),
+  PREVIEW_TTL_SEC: z.coerce.number().int().min(60).max(86_400).default(1_800),
+
+  S3_ENDPOINT: z.url().optional().or(z.literal('').transform(() => undefined)),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_BUCKET: z.string().default('canon-media'),
+  S3_ACCESS_KEY: z.string().default(''),
+  S3_SECRET_KEY: z.string().default(''),
+  /** Base URL objects are served from (CDN in prod; MinIO bucket URL in dev). */
+  S3_PUBLIC_URL: z.url().optional().or(z.literal('').transform(() => undefined)),
+  MEDIA_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(5_000).default(25),
+
   SMTP_URL: z.string().startsWith('smtp').default('smtp://localhost:1035'),
   MAIL_FROM: z.string().default('Canon <no-reply@canon.local>'),
   /** "smtp" in dev/prod (Mailpit locally); "memory" keeps mails in-process for tests. */
@@ -80,6 +99,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (parsed.data.NODE_ENV === 'production') {
     if (parsed.data.JWT_ACCESS_SECRET.startsWith('dev-')) throw new Error('Refusing to start in production with development JWT secrets');
     if (parsed.data.MAIL_TRANSPORT === 'memory') throw new Error('MAIL_TRANSPORT=memory is test-only');
+    for (const k of ['REVALIDATE_SECRET', 'DELIVERY_TOKEN'] as const) if (parsed.data[k].startsWith('dev-')) throw new Error(`Refusing to start in production with the development ${k}`);
   }
   return parsed.data;
 }

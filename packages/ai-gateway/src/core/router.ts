@@ -33,11 +33,12 @@ export function buildCandidateChain(
     throw new AiGatewayError(AI_ERROR_CODES.MODEL_NOT_ALLOWED, `Model ${req.model} is not allowed on this plan or tenant policy`);
   }
 
+  const preferred = req.preferModel && !req.model && isAllowed(req.preferModel) ? [req.preferModel] : [];
   const ordered: ModelKey[] = req.model
     ? req.strictModel
       ? [req.model]
       : [req.model, policy.defaultModel, ...policy.fallbackModels]
-    : [policy.defaultModel, ...policy.fallbackModels];
+    : [...preferred, policy.defaultModel, ...policy.fallbackModels];
 
   const caps = requiredCapabilities(req);
   const seen = new Set<ModelKey>();

@@ -36,6 +36,7 @@ export const AI_MODELS: SeedModel[] = [
   { provider: 'openai', name: 'text-embedding-3-small', displayName: 'text-embedding-3-small', contextWindow: 8_191, maxOutputTokens: 0, inputPricePer1M: 0.02, outputPricePer1M: 0, capabilities: ['embedding'], tier: 'economy', embeddingDims: 1536 },
   { provider: 'google', name: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', contextWindow: 1_000_000, maxOutputTokens: 65_536, inputPricePer1M: 0.3, outputPricePer1M: 2.5, capabilities: ['text', 'vision', 'function-calling', 'json-mode'], tier: 'economy' },
   { provider: 'google', name: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', contextWindow: 1_000_000, maxOutputTokens: 65_536, inputPricePer1M: 1.25, outputPricePer1M: 10, capabilities: ['text', 'vision', 'function-calling', 'json-mode'], tier: 'standard' },
+  { provider: 'ollama', name: 'qwen2.5vl:7b', displayName: 'Qwen2.5-VL 7B (local, vision)', contextWindow: 128_000, maxOutputTokens: 8_192, inputPricePer1M: 0, outputPricePer1M: 0, capabilities: ['text', 'vision', 'json-mode'], tier: 'local' },
   { provider: 'ollama', name: 'llama3.1:8b', displayName: 'Llama 3.1 8B (local)', contextWindow: 128_000, maxOutputTokens: 8_192, inputPricePer1M: 0, outputPricePer1M: 0, capabilities: ['text', 'function-calling', 'json-mode'], tier: 'local' },
 ];
 

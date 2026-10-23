@@ -29,7 +29,7 @@ const prisma = new PrismaClient({
 const DEMO = {
   tenantSlug: 'acme',
   siteSlug: 'acme-cloud',
-  internalDomain: 'acme-cloud.canon.local',
+  internalDomain: 'acme-cloud.canon.localhost',
 } as const;
 
 const log = (msg: string): void => {
@@ -154,7 +154,7 @@ async function seedDemoTenant(adminId: string, modelIds: Map<string, string>): P
       },
       aiSettings: {
         defaultModel: 'anthropic/claude-sonnet-5-5',
-        fallbackModels: ['anthropic/claude-haiku-5-5', 'openai/gpt-4o-mini', 'ollama/llama3.1:8b'],
+        fallbackModels: ['anthropic/claude-haiku-5-5', 'openai/gpt-4o-mini', 'ollama/llama3.1:8b', 'ollama/qwen2.5vl:7b'],
         budgetUsd: 500,
         hardLimit: false,
         allowedModels: [],
@@ -185,7 +185,7 @@ async function seedDemoTenant(adminId: string, modelIds: Map<string, string>): P
       theme: { colors: { primary: '#4f46e5' }, font: 'Inter' },
       aiSettings: {
         brandVoice: 'Confident, plain-spoken, no hype. Short sentences.',
-        glossary: [{ term: 'Pro plan', de: 'Pro-Tarif', es: 'plan Pro' }],
+        glossary: [{ term: 'Pro plan', translations: { de: 'Pro-Tarif', es: 'plan Pro' } }],
         forbiddenTopics: ['competitor pricing', 'legal advice'],
       },
     },
@@ -216,7 +216,7 @@ async function seedDemoTenant(adminId: string, modelIds: Map<string, string>): P
         tenantId: tenant.id,
         kind: FactSourceKind.URL,
         name: 'Integrations directory',
-        uri: 'https://acme-cloud.canon.local/integrations',
+        uri: 'https://acme-cloud.canon.localhost/integrations',
         selector: { css: '[data-integrations-count]' },
         checkIntervalSec: 86_400,
       },
@@ -357,6 +357,7 @@ async function seedDemoTenant(adminId: string, modelIds: Map<string, string>): P
           locale: p.locale,
           content: p.content,
           status: ContentStatus.PUBLISHED,
+          publishedVersion: 1,
           publishedAt: new Date(),
           translationGroupId: p.fullPath === '/' ? translationGroupId : null,
           createdById: adminId,

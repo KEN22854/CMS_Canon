@@ -6,6 +6,7 @@ import { AiBudgetAlerts } from './infrastructure/ai-budget-alerts';
 import { AiUsageLedger } from './infrastructure/ai-usage-ledger';
 import { DbModelCatalog } from './infrastructure/db-model-catalog';
 import { PgSemanticCache } from './infrastructure/pg-semantic-cache';
+import { PromptRegistry } from './infrastructure/prompt-registry';
 import { PrismaUsageRecorder } from './infrastructure/prisma-usage-recorder';
 import { RedisExactCache } from './infrastructure/redis-exact-cache';
 import { RedisQuota } from './infrastructure/redis-quota';
@@ -28,9 +29,10 @@ import { AiController } from './presentation/ai.controller';
     RedisExactCache,
     PgSemanticCache,
     PrismaUsageRecorder,
+    PromptRegistry,
     aiGatewayProvider,
   ],
-  exports: [AiGateway, TenantAiSettingsService],
+  exports: [AiGateway, TenantAiSettingsService, PromptRegistry],
 })
 export class IntelligenceModule implements OnApplicationShutdown {
   constructor(private readonly gateway: AiGateway) {}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { Building2, Check, ChevronsUpDown, KeyRound, LayoutDashboard, Loader2, LogOut, Plus, Shield, Sparkles, Users } from 'lucide-react';
+import { Building2, Globe, Check, ChevronsUpDown, KeyRound, LayoutDashboard, Loader2, LogOut, Plus, Shield, Sparkles, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -35,6 +35,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
 const NAV = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard, can: null },
+  { href: '/sites', label: 'Sites', icon: Globe, can: ['read', 'Site'] },
   { href: '/settings/members', label: 'Members', icon: Users, can: ['read', 'Member'] },
   { href: '/settings/ai-usage', label: 'AI usage', icon: Sparkles, can: ['read', 'AiUsage'] },
   { href: '/settings/api-keys', label: 'API keys', icon: KeyRound, can: ['read', 'ApiKey'] },
