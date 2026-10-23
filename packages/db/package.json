@@ -26,12 +26,14 @@
     "@prisma/client": "^6.1.0"
   },
   "devDependencies": {
+    "@canon/blocks": "workspace:^",
     "@node-rs/argon2": "^2.0.2",
     "dotenv": "^16.4.7",
     "dotenv-cli": "^11.0.0",
     "prisma": "^6.1.0",
     "rimraf": "^6.0.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "zod": "^4.6.7"
   }
 }

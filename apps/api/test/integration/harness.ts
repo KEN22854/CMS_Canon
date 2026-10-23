@@ -27,7 +27,8 @@ export async function startFakeOllama(): Promise<{ url: string; close: () => Pro
       const body = JSON.parse(raw || '{}') as { messages?: { content: string; images?: string[] }[]; stream?: boolean; format?: string };
       const lastMsg = body.messages?.at(-1);
       const last = lastMsg?.content ?? '';
-      const reply = fakeReply(last, body.format === 'json', Boolean(lastMsg?.images?.length));
+      const transcript = (body.messages ?? []).map((m) => m.content).join('\n');
+      const reply = fakeReply(last, body.format === 'json', Boolean(lastMsg?.images?.length), transcript);
       const send = () => {
         if (body.stream) {
           res.setHeader('content-type', 'application/x-ndjson');
@@ -57,13 +58,16 @@ export async function startFakeOllama(): Promise<{ url: string; close: () => Pro
  * Deterministic stand-ins for the shapes our prompts ask for: JSON translations (prefixed so tests
  * can see what was translated), an SEO object, a vision description, else an echo.
  */
-function fakeReply(user: string, json: boolean, hasImage: boolean): string {
+function fakeReply(user: string, json: boolean, hasImage: boolean, transcript = user): string {
+  const builder = builderReply(user, hasImage, transcript);
+  if (builder) return builder;
   if (hasImage) return 'A purple square with a yellow circle in the middle';
   if (json) {
     const m = user.match(/<text>\n([\s\S]*)\n<\/text>/);
     if (m) {
       try {
         const arr = JSON.parse(m[1]!) as string[];
+        if (Array.isArray(arr) && user.startsWith('Rewrite the text below')) return JSON.stringify({ texts: arr.map((t) => t.toUpperCase()) });
         if (Array.isArray(arr)) return JSON.stringify({ translations: arr.map((t) => (t.trim() ? `[tr] ${t}` : t)) });
       } catch {
         /* not a translation request */
@@ -72,6 +76,31 @@ function fakeReply(user: string, json: boolean, hasImage: boolean): string {
     return JSON.stringify({ title: 'Simple, fair pricing', description: 'Plans for every team size.', keywords: ['pricing', 'plans'] });
   }
   return `echo: ${user.slice(0, 40)}`;
+}
+
+/**
+ * Page builder prompts. Markers in the brief steer the outcome: "[broken]" returns one invalid
+ * block first (repaired on the validator's follow-up), "[garbage]" never returns JSON.
+ */
+function builderReply(user: string, hasImage: boolean, transcript: string): string | null {
+  const good = [
+    { type: 'hero', props: { title: hasImage ? 'From your screenshot' : 'Ship faster', subtitle: 'One plan: {{fact:pro.price}}', ctaLabel: 'Start', ctaHref: '/signup' } },
+    { type: 'text', props: { doc: 'Pro costs {{fact:pro.price}} per month.\n\nNo surprises {{fact:made.up}}.' } },
+    { type: 'row', children: [{ type: 'column', children: [{ type: 'heading', props: { text: 'Left', level: '3' } }] }, { type: 'column' }] },
+    { type: 'cta', props: { title: 'Ready?', buttonLabel: 'Go', buttonHref: '/signup' } },
+  ];
+  if (transcript.includes('[garbage]')) return 'I would love to help, but here is prose instead of JSON.';
+  if (user.includes('rejected by the validator')) return JSON.stringify({ title: 'Fixed page', description: 'Repaired.', blocks: good });
+  if (user.includes('<brief>')) {
+    if (user.includes('[garbage]')) return 'I would love to help, but here is prose instead of JSON.';
+    const blocks = user.includes('[broken]') ? [...good, { type: 'button', props: { label: 'Bad', href: 'javascript:alert(1)' } }] : good;
+    return JSON.stringify({ title: 'Pricing that scales', description: 'Plans for teams.', blocks });
+  }
+  if (user.includes('<request>')) {
+    if (user.includes('Use block type "stats"')) return JSON.stringify({ block: { type: 'stats', props: { items: [{ value: '{{fact:pro.price}}', label: 'Pro plan' }] } } });
+    return JSON.stringify({ block: { type: 'faq', props: { title: 'Questions', items: [{ q: 'Is it fast?', a: 'Yes.' }] } } });
+  }
+  return null;
 }
 
 export interface TestApp {

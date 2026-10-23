@@ -3,6 +3,8 @@ import type { NextConfig } from 'next';
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Shared block renderers are consumed as TS source.
+  transpilePackages: ['@canon/ui-blocks'],
   async headers() {
     return [
       {

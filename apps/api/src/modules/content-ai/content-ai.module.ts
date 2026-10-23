@@ -10,14 +10,43 @@ import { IntelligenceModule } from '../intelligence/intelligence.module';
 import { MediaModule } from '../media/media.module';
 import { PagesModule } from '../pages/pages.module';
 import { SitesModule } from '../sites/sites.module';
+import { AiBuilderService } from './ai-builder.service';
 import { AiContentService } from './ai-content.service';
-import { altBody, textBody, translateBody, translatePageBody, type TextBody, type TranslateBody } from './content-ai.dto';
+import { altBody, generateBlockBody, generatePageBody, improveBlockBody, textBody, translateBody, translatePageBody, type GenerateBlockBody, type GeneratePageBody, type ImproveBlockBody, type TextBody, type TranslateBody } from './content-ai.dto';
 
 @ApiTags('ai')
 @ApiBearerAuth()
 @Controller({ version: '1' })
 export class ContentAiController {
-  constructor(private readonly ai: AiContentService) {}
+  constructor(
+    private readonly ai: AiContentService,
+    private readonly builder: AiBuilderService,
+  ) {}
+
+  @Post('sites/:siteId/ai/generate-page')
+  @HttpCode(200)
+  @RequirePermission('invoke', 'Ai')
+  @ApiOperation({ summary: 'Generate a page layout + copy from a brief (and optional reference screenshot); validated, facts bound. Not saved unless createPage is set.' })
+  generatePage(@Param('siteId') siteId: string, @Body(new ZodBody(generatePageBody)) body: GeneratePageBody, @TenantScope() p: TenantPrincipal, @Req() req: Request) {
+    if (body.createPage && !abilityOf(req).can('create', 'Page')) throw forbidden('Your role cannot create pages');
+    return this.builder.generatePage(p, siteId, body);
+  }
+
+  @Post('sites/:siteId/ai/generate-block')
+  @HttpCode(200)
+  @RequirePermission('invoke', 'Ai')
+  @ApiOperation({ summary: 'Generate one validated block that fits the page outline' })
+  generateBlock(@Param('siteId') siteId: string, @Body(new ZodBody(generateBlockBody)) body: GenerateBlockBody, @TenantScope() p: TenantPrincipal) {
+    return this.builder.generateBlock(p, siteId, body);
+  }
+
+  @Post('sites/:siteId/ai/improve-block')
+  @HttpCode(200)
+  @RequirePermission('invoke', 'Ai')
+  @ApiOperation({ summary: 'Rewrite every text of one block in one call (marks, links and fact tokens preserved); returns the block, not saved' })
+  improveBlock(@Param('siteId') siteId: string, @Body(new ZodBody(improveBlockBody)) body: ImproveBlockBody, @TenantScope() p: TenantPrincipal) {
+    return this.builder.improveBlock(p, siteId, body);
+  }
 
   @Post('ai/text')
   @HttpCode(200)
@@ -67,6 +96,6 @@ export class ContentAiController {
 @Module({
   imports: [IntelligenceModule, SitesModule, PagesModule, MediaModule],
   controllers: [ContentAiController],
-  providers: [AiContentService],
+  providers: [AiContentService, AiBuilderService],
 })
 export class ContentAiModule {}

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { cookies, draftMode } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { BlockRenderer } from '@/components/blocks';
+import { BlockRenderer } from '@canon/ui-blocks';
 import { PREVIEW_COOKIE } from '@/lib/preview';
 import { getPage, getPreview, localizedHref, resolveSite, splitLocale, type DeliveryPage, type DeliverySite } from '@/lib/delivery';
 
@@ -67,19 +67,19 @@ export default async function SitePage({ params }: { params: Params }) {
           <a href="/api/draft/exit" className="underline">Exit preview</a>
         </div>
       )}
-      <header className="border-b border-foreground/10">
+      <header className="border-b border-site-fg/10">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-4">
           <a href={localizedHref(site, page.locale, '/')} className="text-lg font-bold">
             {site.name}
           </a>
           <nav className="flex flex-wrap items-center gap-5 text-sm" aria-label="Main">
             {data.nav.map((n) => (
-              <a key={n.path} href={localizedHref(site, page.locale, n.path)} className={`hover:text-primary ${n.path === page.path ? 'font-semibold text-primary' : ''}`}>
+              <a key={n.path} href={localizedHref(site, page.locale, n.path)} className={`hover:text-site-primary ${n.path === page.path ? 'font-semibold text-site-primary' : ''}`}>
                 {n.title}
               </a>
             ))}
             {data.alternates.length > 1 && (
-              <span className="flex gap-2 border-l border-foreground/10 pl-4 uppercase">
+              <span className="flex gap-2 border-l border-site-fg/10 pl-4 uppercase">
                 {data.alternates.map((a) => (
                   <a key={a.locale} href={localizedHref(site, a.locale, a.path)} hrefLang={a.locale} className={a.locale === page.locale ? 'font-semibold' : 'opacity-60 hover:opacity-100'}>
                     {a.locale}
@@ -93,7 +93,7 @@ export default async function SitePage({ params }: { params: Params }) {
       <main>
         <BlockRenderer node={page.content.root} ctx={{ media: data.media, facts: data.facts, draft: data.draft }} isRoot />
       </main>
-      <footer className="border-t border-foreground/10 py-8 text-center text-sm opacity-60">
+      <footer className="border-t border-site-fg/10 py-8 text-center text-sm opacity-60">
         © {new Date().getFullYear()} {site.name}
       </footer>
     </div>

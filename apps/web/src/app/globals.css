@@ -13,5 +13,5 @@
 }
 
 body {
-  @apply bg-background font-site text-foreground antialiased;
+  @apply bg-site-bg font-site text-site-fg antialiased;
 }

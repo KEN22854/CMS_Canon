@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  blockCatalogForPrompt,
+  materializeBlocks,
+  videoEmbedUrl,
   collectMediaIds,
   collectPageFactKeys,
   collectTextFields,
@@ -95,5 +98,64 @@ describe('text field helpers', () => {
   it('empty content is valid', () => {
     expect(validatePageContent(emptyPageContent()).ok).toBe(true);
     expect(richTextSchema.safeParse(emptyDoc('hi')).success).toBe(true);
+  });
+});
+
+describe('phase 3 blocks', () => {
+  it('validates columns: rows hold only columns', () => {
+    const ok = validatePageContent({ root: node('root', 'section', {}, [node('r', 'row', {}, [node('c1', 'column', { width: '1/2' }, [node('h', 'heading', { text: 'A' })]), node('c2', 'column')])]) });
+    expect(ok.ok).toBe(true);
+    const bad = validatePageContent({ root: node('root', 'section', {}, [node('r', 'row', {}, [node('h', 'heading', { text: 'A' })])]) });
+    expect(bad.ok).toBe(false);
+  });
+
+  it('only accepts YouTube/Vimeo video URLs and builds privacy-friendly embeds', () => {
+    expect(validatePageContent({ root: node('root', 'section', {}, [node('v', 'video', { url: 'https://evil.example/x' })]) }).ok).toBe(false);
+    expect(videoEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ');
+    expect(videoEmbedUrl('https://vimeo.com/123456789')).toBe('https://player.vimeo.com/video/123456789?dnt=1');
+  });
+
+  it('collects and maps text inside list items', () => {
+    const content = { root: node('root', 'section', {}, [node('f', 'faq', { title: 'FAQ', items: [{ q: 'Why?', a: 'Because.' }] })]) };
+    expect(collectTextFields(content).map((f) => `${f.prop}${f.item ? `[${f.item.index}].${f.item.prop}` : ''}`)).toEqual(['title', 'items[0].q', 'items[0].a']);
+    const out = mapTextFields(content, (t) => `<${t}>`);
+    expect(out.root.children[0]!.props.items).toEqual([{ q: '<Why?>', a: '<Because.>' }]);
+  });
+});
+
+describe('AI catalog & materialize', () => {
+  it('describes every block for prompts', () => {
+    const cat = blockCatalogForPrompt();
+    for (const t of ['hero', 'faq', 'row', 'stats']) expect(cat).toContain(`- ${t}:`);
+    expect(cat).toContain('children: column only');
+  });
+
+  it('keeps valid generated blocks, drops invalid ones with reasons and regenerates ids', () => {
+    const res = materializeBlocks([
+      { id: 'root', type: 'hero', props: { title: 'Hi' } },
+      { type: 'button', props: { label: 'x', href: 'javascript:1' } },
+      { type: 'marquee', props: {} },
+      'garbage',
+    ]);
+    expect(res.content.root.children.map((c) => c.type)).toEqual(['hero']);
+    expect(res.content.root.children[0]!.id).not.toBe('root');
+    expect(res.dropped.map((d) => d.type)).toEqual(['button', 'marquee', 'unknown']);
+  });
+
+  it('coerces model quirks and binds known fact tokens', () => {
+    const res = materializeBlocks(
+      [
+        { type: 'heading', props: { text: 'Plans', level: '3', bogus: 1 } },
+        { type: 'text', props: { doc: 'Pro costs {{fact:pro_plan.price}} today.\n\nAsk {{fact:nope.key}} us.' } },
+        { type: 'stats', props: { items: [{ value: '{{fact:pro_plan.price}}', label: 'Pro' }] } },
+      ],
+      { facts: { 'pro_plan.price': '$49/month' } },
+    );
+    expect(res.dropped).toEqual([]);
+    const [h, t, st] = res.content.root.children;
+    expect(h!.props.level).toBe(3);
+    expect(collectPageFactKeys(res.content)).toEqual(['pro_plan.price']);
+    expect(richTextToPlain(t!.props.doc as Parameters<typeof richTextToPlain>[0], { 'pro_plan.price': '$49' })).toBe('Pro costs $49 today.\n\nAsk  us.');
+    expect(st!.props.items).toEqual([{ value: '$49/month', label: 'Pro' }]);
   });
 });

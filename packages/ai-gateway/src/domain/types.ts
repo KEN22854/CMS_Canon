@@ -10,6 +10,7 @@ export type AiFeature =
   | 'CHAT'
   | 'EMBEDDING'
   | 'CLASSIFY'
+  | 'LAYOUT'
   | 'SUMMARIZE'
   | 'FACT_CHECK'
   | 'FACT_EXTRACT'

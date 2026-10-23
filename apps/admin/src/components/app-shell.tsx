@@ -87,7 +87,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             ))}
           </nav>
         </div>
-        <div className="mx-auto max-w-5xl px-4 py-8 md:px-8">{children}</div>
+        {/* The page builder is a full-bleed workspace; everything else reads best in a column. */}
+        {/^\/sites\/[^/]+\/pages\/[^/]+/.test(pathname) ? children : <div className="mx-auto max-w-5xl px-4 py-8 md:px-8">{children}</div>}
       </main>
     </div>
   );

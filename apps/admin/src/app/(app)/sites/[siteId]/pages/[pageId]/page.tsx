@@ -1,32 +1,32 @@
 'use client';
 
 import { subject } from '@casl/ability';
-import { BLOCKS, type PageContent } from '@canon/blocks';
+import type { RenderMedia, SiteThemeInput } from '@canon/ui-blocks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, ArrowUp, CalendarClock, Copy, Eye, History, Languages, Loader2, Plus, Save, Settings2, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Eye, History, Languages, Loader2, Monitor, Redo2, Save, Settings2, Smartphone, Sparkles, Tablet, Undo2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Inspector } from '@/components/editor/inspector';
-import { duplicateBlock, findNode, insertBlock, moveBlock, newBlock, outline, removeBlock, updateProps } from '@/components/editor/tree-ops';
+import { GeneratePageDialog } from '@/components/builder/generate-page';
+import { Inspector } from '@/components/builder/inspector';
+import { useFacts } from '@/components/builder/rich-text-editor';
+import { BuilderContext, createBuilderStore, selectedNode, useBuilder, useBuilderStore, useHistory, type Breakpoint, type Draft } from '@/components/builder/store';
+import { Workspace } from '@/components/builder/workspace';
 import { Alert, Badge, Button, Input, Label, Select } from '@/components/ui';
 import { useAbility } from '@/lib/ability';
 import { ApiError, api, errorMessage } from '@/lib/api';
-import { STATUS_STYLE, usePage, useSite, type PageDetail } from '@/lib/content';
+import { STATUS_STYLE, useMedia, usePage, useSite, type PageDetail, type Site } from '@/lib/content';
 import { useTenantId } from '@/lib/queries';
 import { cn, formatUsd, relativeTime } from '@/lib/utils';
 
-interface Draft {
-  title: string;
-  slug: string;
-  description: string;
-  seo: PageDetail['seo'];
-  content: PageContent;
-}
-
 type Panel = 'block' | 'page' | 'versions' | 'translate';
 const AUTOSAVE_MS = 5_000;
+const BREAKPOINTS = [
+  ['desktop', Monitor],
+  ['tablet', Tablet],
+  ['mobile', Smartphone],
+] as const;
 
 export default function PageEditor() {
   const { siteId, pageId } = useParams<{ siteId: string; pageId: string }>();
@@ -41,55 +41,80 @@ export default function PageEditor() {
   }
   if (page.isError || !page.data || !site.data) return <Alert tone="error">{errorMessage(page.error)}</Alert>;
   // Keyed by page id so switching pages (e.g. after translating) resets all editor state.
-  return <Editor key={page.data.id} initial={page.data} siteId={siteId} locales={site.data.locales} />;
+  return <EditorRoot key={page.data.id} initial={page.data} site={site.data} />;
 }
 
-function Editor({ initial, siteId, locales }: { initial: PageDetail; siteId: string; locales: string[] }) {
+function EditorRoot({ initial, site }: { initial: PageDetail; site: Site }) {
+  const [store] = useState(() => createBuilderStore(toDraft(initial)));
+  return (
+    <BuilderContext.Provider value={store}>
+      <Editor initial={initial} site={site} />
+    </BuilderContext.Provider>
+  );
+}
+
+function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
+  const siteId = site.id;
   const router = useRouter();
   const qc = useQueryClient();
   const tid = useTenantId();
   const ability = useAbility();
+  const store = useBuilderStore();
+  const history = useHistory();
   const [meta, setMeta] = useState<PageDetail>(initial);
-  const [draft, setDraft] = useState<Draft>(() => toDraft(initial));
   const [version, setVersion] = useState(initial.version);
-  const [dirty, setDirty] = useState(false);
-  const [selected, setSelected] = useState<string | null>(initial.content.root.children[0]?.id ?? null);
   const [panel, setPanel] = useState<Panel>('block');
   const [conflict, setConflict] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const saving = useRef(false);
+
+  const draft = useBuilder((s) => s.draft);
+  const dirty = useBuilder((s) => s.draft !== s.saved);
+  const selected = useBuilder(selectedNode);
+  const breakpoint = useBuilder((s) => s.breakpoint);
+  const setBreakpoint = useBuilder((s) => s.setBreakpoint);
+  const setDraftMeta = useBuilder((s) => s.setMeta);
 
   const own = subject('Page', { tenantId: tid, createdById: initial.createdById });
   const canEdit = ability.can('update', own);
   const canPublish = ability.can('publish', own);
+  const canAi = ability.can('invoke', 'Ai');
 
-  const edit = useCallback((fn: (d: Draft) => Draft) => {
-    setDraft((d) => fn(d));
-    setDirty(true);
-  }, []);
+  const mediaQ = useMedia(siteId);
+  const media = useMemo(() => Object.fromEntries((mediaQ.data ?? []).map((m) => [m.id, m as RenderMedia])), [mediaQ.data]);
+  const factsQ = useFacts(siteId);
+  const facts = useMemo(() => Object.fromEntries((factsQ.data ?? []).map((f) => [f.key, f.displayValue])), [factsQ.data]);
 
+  /**
+   * Optimistic: the canvas never waits for the server. Each save is a CAS on `version`; edits made
+   * while a save is in flight stay dirty (the store compares draft references) and go next time.
+   */
   const save = useCallback(async (): Promise<boolean> => {
-    if (!dirty || saving.current || conflict) return !dirty;
+    const s = store.getState();
+    if (s.draft === s.saved) return true;
+    if (saving.current || conflict) return false;
+    const sending = s.draft;
     saving.current = true;
     try {
       const res = await api<PageDetail>(`/sites/${siteId}/pages/${initial.id}`, {
         method: 'PATCH',
-        body: { expectedVersion: version, title: draft.title, slug: draft.slug, description: draft.description || null, seo: draft.seo, content: draft.content },
+        body: { expectedVersion: version, title: sending.title, slug: sending.slug, description: sending.description || null, seo: sending.seo, content: sending.content },
       });
       setVersion(res.version);
       setMeta(res);
-      setDirty(false);
+      store.getState().markSaved(sending);
       void qc.invalidateQueries({ queryKey: ['pages', tid, siteId] });
       return true;
     } catch (err) {
       if (err instanceof ApiError && err.code === 'VERSION_CONFLICT') setConflict(true);
-      else toast.error(errorMessage(err));
+      else toast.error(errorMessage(err), { id: 'save-error' });
       return false;
     } finally {
       saving.current = false;
     }
-  }, [dirty, conflict, siteId, initial.id, version, draft, qc, tid]);
+  }, [store, conflict, siteId, initial.id, version, qc, tid]);
 
-  // Debounced autosave; every save is a CAS on `version`, so two tabs can't clobber each other.
+  // Debounced autosave after the last edit.
   useEffect(() => {
     if (!dirty || !canEdit) return;
     const t = setTimeout(() => void save(), AUTOSAVE_MS);
@@ -104,7 +129,7 @@ function Editor({ initial, siteId, locales }: { initial: PageDetail; siteId: str
       }
     };
     const onLeave = (e: BeforeUnloadEvent) => {
-      if (dirty) e.preventDefault();
+      if (store.getState().draft !== store.getState().saved) e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     window.addEventListener('beforeunload', onLeave);
@@ -112,7 +137,13 @@ function Editor({ initial, siteId, locales }: { initial: PageDetail; siteId: str
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('beforeunload', onLeave);
     };
-  }, [save, dirty]);
+  }, [save, store]);
+
+  // Selecting a block on the canvas or in Layers brings its inspector forward.
+  const selectedId = selected?.id;
+  useEffect(() => {
+    if (selectedId) setPanel('block');
+  }, [selectedId]);
 
   const lifecycle = useMutation({
     mutationFn: async (op: 'publish' | 'unpublish') => {
@@ -140,37 +171,15 @@ function Editor({ initial, siteId, locales }: { initial: PageDetail; siteId: str
     }
   };
 
-  const items = useMemo(() => outline(draft.content.root), [draft.content]);
-  const selectedNode = selected ? findNode(draft.content.root, selected) : null;
-
-  const addBlock = (type: string) => {
-    const block = newBlock(type);
-    const sel = selected ? items.find((i) => i.node.id === selected) : undefined;
-    // Into a selected section, otherwise after the selected block, otherwise at the end.
-    edit((d) => {
-      if (sel?.node.type === 'section') return { ...d, content: insertBlock(d.content, sel.node.id, sel.node.children.length, block) };
-      if (sel) return { ...d, content: insertBlock(d.content, sel.parentId, sel.index + 1, block) };
-      return { ...d, content: insertBlock(d.content, d.content.root.id, d.content.root.children.length, block) };
-    });
-    setSelected(block.id);
-    setPanel('block');
-  };
-
   return (
-    <div className="-mx-4 -my-8 flex min-h-screen flex-col md:-mx-8">
+    <div className="flex h-dvh flex-col">
       {/* Toolbar */}
-      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-2 backdrop-blur">
+      <div className="z-20 flex flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-2 backdrop-blur">
         <Link href={`/sites/${siteId}/pages`} className="rounded p-1.5 hover:bg-muted" aria-label="Back to pages">
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div className="min-w-0 flex-1">
-          <input
-            aria-label="Page title"
-            value={draft.title}
-            disabled={!canEdit}
-            onChange={(e) => edit((d) => ({ ...d, title: e.target.value }))}
-            className="w-full truncate bg-transparent text-base font-semibold outline-none"
-          />
+          <input aria-label="Page title" value={draft.title} disabled={!canEdit} onChange={(e) => setDraftMeta({ title: e.target.value }, 'title')} className="w-full truncate bg-transparent text-base font-semibold outline-none" />
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>{meta.locale}</span>·<span>{meta.fullPath}</span>
             <Badge className={STATUS_STYLE[meta.status]}>{meta.status.toLowerCase()}</Badge>
@@ -184,6 +193,28 @@ function Editor({ initial, siteId, locales }: { initial: PageDetail; siteId: str
             <span aria-live="polite">{dirty ? 'Unsaved…' : `Saved · v${version}`}</span>
           </div>
         </div>
+        {canEdit && (
+          <div className="flex items-center gap-0.5">
+            <ToolBtn label="Undo (Ctrl+Z)" disabled={!history.canUndo} onClick={history.undo}>
+              <Undo2 className="h-4 w-4" />
+            </ToolBtn>
+            <ToolBtn label="Redo (Ctrl+Shift+Z)" disabled={!history.canRedo} onClick={history.redo}>
+              <Redo2 className="h-4 w-4" />
+            </ToolBtn>
+          </div>
+        )}
+        <div className="flex items-center rounded-md border p-0.5" role="radiogroup" aria-label="Preview width">
+          {BREAKPOINTS.map(([b, Icon]) => (
+            <button key={b} type="button" role="radio" aria-checked={breakpoint === b} aria-label={b} title={b} onClick={() => setBreakpoint(b as Breakpoint)} className={cn('rounded p-1', breakpoint === b ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+              <Icon className="h-4 w-4" />
+            </button>
+          ))}
+        </div>
+        {canEdit && canAi && (
+          <Button size="sm" variant="outline" onClick={() => setGenerating(true)}>
+            <Sparkles className="h-4 w-4 text-primary" /> Generate page
+          </Button>
+        )}
         <Button size="sm" variant="ghost" onClick={() => void preview()}>
           <Eye className="h-4 w-4" /> Preview
         </Button>
@@ -206,7 +237,7 @@ function Editor({ initial, siteId, locales }: { initial: PageDetail; siteId: str
 
       {conflict && (
         <Alert tone="error" className="mx-4 mt-3">
-          Someone else changed this page. Your edits are kept here but can't be saved over theirs.{' '}
+          Someone else changed this page. Your edits are kept here but can&apos;t be saved over theirs.{' '}
           <button type="button" className="font-medium underline" onClick={() => window.location.reload()}>
             Reload the latest version
           </button>
@@ -214,93 +245,53 @@ function Editor({ initial, siteId, locales }: { initial: PageDetail; siteId: str
       )}
       {!canEdit && <Alert className="mx-4 mt-3">Read-only: your role cannot edit this page.</Alert>}
 
-      <div className="flex flex-1 flex-col md:flex-row">
-        {/* Outline */}
-        <section className="flex-1 space-y-2 p-4" aria-label="Blocks">
-          {items.map(({ node, depth, index, siblings }) => (
-            <div
-              key={node.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => (setSelected(node.id), setPanel('block'))}
-              onKeyDown={(e) => e.key === 'Enter' && (setSelected(node.id), setPanel('block'))}
-              style={{ marginLeft: depth * 20 }}
-              className={cn('group flex items-center gap-3 rounded-md border bg-card px-3 py-2 text-sm', selected === node.id && 'border-primary ring-1 ring-primary')}
-            >
-              <span className="w-20 shrink-0 text-xs font-medium uppercase text-muted-foreground">{node.type}</span>
-              <span className="min-w-0 flex-1 truncate">{blockSummary(node.props)}</span>
-              {canEdit && (
-                <span className="flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
-                  <IconBtn label="Move up" disabled={index === 0} onClick={() => edit((d) => ({ ...d, content: moveBlock(d.content, node.id, -1) }))}>
-                    <ArrowUp className="h-3.5 w-3.5" />
-                  </IconBtn>
-                  <IconBtn label="Move down" disabled={index === siblings - 1} onClick={() => edit((d) => ({ ...d, content: moveBlock(d.content, node.id, 1) }))}>
-                    <ArrowDown className="h-3.5 w-3.5" />
-                  </IconBtn>
-                  <IconBtn label="Duplicate" onClick={() => edit((d) => ({ ...d, content: duplicateBlock(d.content, node.id) }))}>
-                    <Copy className="h-3.5 w-3.5" />
-                  </IconBtn>
-                  <IconBtn
-                    label="Delete"
-                    onClick={() => {
-                      edit((d) => ({ ...d, content: removeBlock(d.content, node.id) }));
-                      if (selected === node.id) setSelected(null);
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </IconBtn>
-                </span>
-              )}
-            </div>
-          ))}
-          {items.length === 0 && <p className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">This page is empty — add a block.</p>}
-          {canEdit && (
-            <div className="flex flex-wrap items-center gap-2 pt-2">
-              <Plus className="h-4 w-4 text-muted-foreground" aria-hidden />
-              {BLOCKS.map((b) => (
-                <Button key={b.type} size="sm" variant="outline" onClick={() => addBlock(b.type)}>
-                  {b.name}
-                </Button>
+      <Workspace
+        siteId={siteId}
+        pageId={initial.id}
+        locale={meta.locale}
+        theme={site.theme as SiteThemeInput}
+        media={media}
+        facts={facts}
+        readOnly={!canEdit}
+        inspector={
+          <>
+            <div className="sticky top-0 z-10 flex border-b bg-background text-sm">
+              {(
+                [
+                  ['block', 'Block', Settings2],
+                  ['page', 'Page & SEO', Sparkles],
+                  ['versions', 'Versions', History],
+                  ['translate', 'Translate', Languages],
+                ] as const
+              ).map(([id, label, Icon]) => (
+                <button key={id} type="button" onClick={() => setPanel(id)} className={cn('flex flex-1 items-center justify-center gap-1 px-1 py-2 text-xs', panel === id ? 'border-b-2 border-primary font-medium' : 'text-muted-foreground')}>
+                  <Icon className="h-3.5 w-3.5" aria-hidden /> {label}
+                </button>
               ))}
             </div>
-          )}
-        </section>
-
-        {/* Side panel */}
-        <aside className="w-full border-t md:w-96 md:border-l md:border-t-0" aria-label="Inspector">
-          <div className="flex border-b text-sm">
-            {(
-              [
-                ['block', 'Block', Settings2],
-                ['page', 'Page & SEO', Sparkles],
-                ['versions', 'Versions', History],
-                ['translate', 'Translate', Languages],
-              ] as const
-            ).map(([id, label, Icon]) => (
-              <button key={id} type="button" onClick={() => setPanel(id)} className={cn('flex flex-1 items-center justify-center gap-1 px-2 py-2', panel === id ? 'border-b-2 border-primary font-medium' : 'text-muted-foreground')}>
-                <Icon className="h-3.5 w-3.5" aria-hidden /> {label}
-              </button>
-            ))}
-          </div>
-          <div className="p-4">
-            {panel === 'block' &&
-              (selectedNode && selectedNode.id !== draft.content.root.id ? (
-                <Inspector node={selectedNode} siteId={siteId} pageId={initial.id} readOnly={!canEdit} onChange={(patch) => edit((d) => ({ ...d, content: updateProps(d.content, selectedNode.id, patch) }))} />
-              ) : (
-                <p className="text-sm text-muted-foreground">Select a block to edit it.</p>
-              ))}
-            {panel === 'page' && <PagePanel draft={draft} edit={edit} readOnly={!canEdit} siteId={siteId} pageId={initial.id} isHome={meta.fullPath === '/'} />}
-            {panel === 'versions' && <VersionsPanel siteId={siteId} pageId={initial.id} canEdit={canEdit} onRestored={() => window.location.reload()} />}
-            {panel === 'translate' && <TranslatePanel siteId={siteId} page={meta} locales={locales} onDone={(id) => router.push(`/sites/${siteId}/pages/${id}`)} beforeTranslate={save} />}
-            {canPublish && panel === 'page' && <SchedulePanel siteId={siteId} page={meta} onChange={setMeta} />}
-          </div>
-        </aside>
-      </div>
+            <div className="p-4">
+              {panel === 'block' &&
+                (selected && selected.id !== draft.content.root.id ? (
+                  <Inspector node={selected} siteId={siteId} pageId={initial.id} readOnly={!canEdit} facts={facts} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">Select a block on the canvas or in Layers. Drag blocks in from the palette, or generate the page with AI.</p>
+                ))}
+              {panel === 'page' && <PagePanel readOnly={!canEdit} siteId={siteId} pageId={initial.id} isHome={meta.fullPath === '/'} />}
+              {panel === 'versions' && <VersionsPanel siteId={siteId} pageId={initial.id} canEdit={canEdit} onRestored={() => window.location.reload()} />}
+              {panel === 'translate' && <TranslatePanel siteId={siteId} page={meta} locales={site.locales} onDone={(id) => router.push(`/sites/${siteId}/pages/${id}`)} beforeTranslate={save} />}
+              {canPublish && panel === 'page' && <SchedulePanel siteId={siteId} page={meta} onChange={setMeta} />}
+            </div>
+          </>
+        }
+      />
+      {generating && <GeneratePageDialog siteId={siteId} pageId={initial.id} locale={meta.locale} onClose={() => setGenerating(false)} />}
     </div>
   );
 }
 
-function PagePanel({ draft, edit, readOnly, siteId, pageId, isHome }: { draft: Draft; edit: (fn: (d: Draft) => Draft) => void; readOnly: boolean; siteId: string; pageId: string; isHome: boolean }) {
+function PagePanel({ readOnly, siteId, pageId, isHome }: { readOnly: boolean; siteId: string; pageId: string; isHome: boolean }) {
+  const draft = useBuilder((s) => s.draft);
+  const setMeta = useBuilder((s) => s.setMeta);
   const suggest = useMutation({
     mutationFn: () => api<{ suggestion: { title: string; description: string; keywords: string[] }; costUsd: number; model: string }>(`/sites/${siteId}/pages/${pageId}/ai-seo`, { method: 'POST', body: {} }),
     onError: (err) => toast.error(errorMessage(err)),
@@ -309,12 +300,12 @@ function PagePanel({ draft, edit, readOnly, siteId, pageId, isHome }: { draft: D
     <div className="space-y-4">
       <div className="space-y-1.5">
         <Label htmlFor="pg-slug">Slug</Label>
-        <Input id="pg-slug" value={draft.slug} disabled={readOnly || isHome} onChange={(e) => edit((d) => ({ ...d, slug: e.target.value.toLowerCase() }))} />
+        <Input id="pg-slug" value={draft.slug} disabled={readOnly || isHome} onChange={(e) => setMeta({ slug: e.target.value.toLowerCase() }, 'slug')} />
         {isHome && <p className="text-[11px] text-muted-foreground">The home page always lives at /.</p>}
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="pg-desc">Description</Label>
-        <textarea id="pg-desc" rows={2} disabled={readOnly} value={draft.description} onChange={(e) => edit((d) => ({ ...d, description: e.target.value }))} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+        <textarea id="pg-desc" rows={2} disabled={readOnly} value={draft.description} onChange={(e) => setMeta({ description: e.target.value }, 'description')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
       </div>
       <hr />
       <div className="flex items-center justify-between">
@@ -333,7 +324,7 @@ function PagePanel({ draft, edit, readOnly, siteId, pageId, isHome }: { draft: D
             <span className="text-[10px] text-muted-foreground">
               {suggest.data.model} · {formatUsd(suggest.data.costUsd)}
             </span>
-            <Button size="sm" onClick={() => (edit((d) => ({ ...d, seo: { ...d.seo, title: suggest.data!.suggestion.title, description: suggest.data!.suggestion.description } })), suggest.reset())}>
+            <Button size="sm" onClick={() => (setMeta({ seo: { ...draft.seo, title: suggest.data!.suggestion.title, description: suggest.data!.suggestion.description } }), suggest.reset())}>
               Apply
             </Button>
           </div>
@@ -341,16 +332,16 @@ function PagePanel({ draft, edit, readOnly, siteId, pageId, isHome }: { draft: D
       )}
       <div className="space-y-1.5">
         <Label htmlFor="seo-title">SEO title</Label>
-        <Input id="seo-title" maxLength={120} disabled={readOnly} value={draft.seo.title ?? ''} onChange={(e) => edit((d) => ({ ...d, seo: { ...d.seo, title: e.target.value } }))} />
+        <Input id="seo-title" maxLength={120} disabled={readOnly} value={draft.seo.title ?? ''} onChange={(e) => setMeta({ seo: { ...draft.seo, title: e.target.value } }, 'seo.title')} />
         <p className="text-right text-[11px] text-muted-foreground">{(draft.seo.title ?? '').length}/60</p>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="seo-desc">Meta description</Label>
-        <textarea id="seo-desc" rows={3} maxLength={320} disabled={readOnly} value={draft.seo.description ?? ''} onChange={(e) => edit((d) => ({ ...d, seo: { ...d.seo, description: e.target.value } }))} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+        <textarea id="seo-desc" rows={3} maxLength={320} disabled={readOnly} value={draft.seo.description ?? ''} onChange={(e) => setMeta({ seo: { ...draft.seo, description: e.target.value } }, 'seo.description')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
         <p className="text-right text-[11px] text-muted-foreground">{(draft.seo.description ?? '').length}/155</p>
       </div>
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" disabled={readOnly} checked={Boolean(draft.seo.noindex)} onChange={(e) => edit((d) => ({ ...d, seo: { ...d.seo, noindex: e.target.checked } }))} /> Hide from search engines
+        <input type="checkbox" disabled={readOnly} checked={Boolean(draft.seo.noindex)} onChange={(e) => setMeta({ seo: { ...draft.seo, noindex: e.target.checked } })} /> Hide from search engines
       </label>
     </div>
   );
@@ -471,19 +462,9 @@ function TranslatePanel({ siteId, page, locales, onDone, beforeTranslate }: { si
   );
 }
 
-function IconBtn({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+function ToolBtn({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      className="rounded p-1 hover:bg-muted disabled:opacity-30"
-    >
+    <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick} className="rounded p-1.5 hover:bg-muted disabled:opacity-30">
       {children}
     </button>
   );
@@ -491,11 +472,4 @@ function IconBtn({ label, onClick, disabled, children }: { label: string; onClic
 
 function toDraft(p: PageDetail): Draft {
   return { title: p.title, slug: p.slug, description: p.description ?? '', seo: p.seo ?? {}, content: p.content };
-}
-
-function blockSummary(props: Record<string, unknown>): string {
-  for (const k of ['title', 'text', 'label', 'caption', 'alt']) if (typeof props[k] === 'string' && props[k]) return props[k] as string;
-  const doc = props.doc as { content?: { content?: { text?: string }[] }[] } | undefined;
-  const t = doc?.content?.[0]?.content?.map((n) => n.text ?? '…').join('');
-  return t || '—';
 }

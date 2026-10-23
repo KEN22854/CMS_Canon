@@ -1,11 +1,14 @@
 import type { Config } from 'tailwindcss';
+import sitePreset from '@canon/ui-blocks/tailwind-preset.cjs';
 
 /** Colours are CSS variables (globals.css) so themes and per-site tokens swap without a rebuild. */
 const token = (name: string) => `hsl(var(--${name}) / <alpha-value>)`;
 
 export default {
   darkMode: ['class', '[data-theme="dark"]'],
-  content: ['./src/**/*.{ts,tsx}'],
+  // The builder canvas renders real site blocks (site-* tokens, container queries).
+  presets: [sitePreset],
+  content: ['./src/**/*.{ts,tsx}', '../../packages/ui-blocks/src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {

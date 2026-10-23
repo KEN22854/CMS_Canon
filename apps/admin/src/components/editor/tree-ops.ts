@@ -2,9 +2,81 @@ import { getBlock, FACT_KEY_RE, type BlockNode, type InlineNode, type PageConten
 
 /** Immutable tree edits — every operation returns a new tree, so React state and undo stay simple. */
 
+export const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+
+/** A fresh block with defaults; Columns start with two columns so they are usable at once. */
 export function newBlock(type: string): BlockNode {
   const def = getBlock(type);
-  return { id: crypto.randomUUID().replace(/-/g, '').slice(0, 12), type, props: (def?.defaults() ?? {}) as Record<string, unknown>, children: [] };
+  const children = type === 'row' ? [newBlock('column'), newBlock('column')] : [];
+  return { id: newId(), type, props: structuredClone((def?.defaults() ?? {}) as Record<string, unknown>), children };
+}
+
+/** Deep copy with new ids (duplicate, paste, AI-generated blocks). */
+export function cloneWithIds(b: BlockNode): BlockNode {
+  return { id: newId(), type: b.type, props: structuredClone(b.props), children: b.children.map(cloneWithIds) };
+}
+
+/**
+ * Nesting rules the builder enforces before the API ever sees the tree: containers only, the
+ * definition's allowedChildren, columns only inside Columns, sections only at the top level.
+ */
+export function canContain(parent: BlockNode, childType: string, isRoot: boolean): boolean {
+  const def = getBlock(parent.type);
+  if (!isRoot && !def?.isContainer) return false;
+  if (def?.allowedChildren && !isRoot) return def.allowedChildren.includes(childType);
+  if (childType === 'column') return false;
+  if (childType === 'section') return isRoot;
+  return true;
+}
+
+export function findParent(root: BlockNode, id: string): { parent: BlockNode; index: number } | null {
+  for (let i = 0; i < root.children.length; i++) {
+    const c = root.children[i]!;
+    if (c.id === id) return { parent: root, index: i };
+    const hit = findParent(c, id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** True when `id` is `ancestorId` or inside it — a block can't be dropped into itself. */
+export function isWithin(root: BlockNode, ancestorId: string, id: string): boolean {
+  const a = findNode(root, ancestorId);
+  return Boolean(a && findNode(a, id));
+}
+
+/** Moves a block to (parentId, index) where index counts siblings *before* the move. */
+export function moveTo(content: PageContent, id: string, parentId: string, index: number): PageContent {
+  const node = findNode(content.root, id);
+  const from = findParent(content.root, id);
+  const target = findNode(content.root, parentId);
+  if (!node || !from || !target || isWithin(content.root, id, parentId)) return content;
+  if (!canContain(target, node.type, target.id === content.root.id)) return content;
+  const adjusted = from.parent.id === parentId && from.index < index ? index - 1 : index;
+  if (from.parent.id === parentId && from.index === adjusted) return content;
+  return insertBlock(removeBlock(content, id), parentId, adjusted, node);
+}
+
+/**
+ * Where a block added from the palette goes: into the selected container if it fits, else right
+ * after the selected block, else (walking up) after the nearest ancestor that accepts it, else at the end.
+ */
+export function insertNear(content: PageContent, selectedId: string | null, block: BlockNode): PageContent {
+  const root = content.root;
+  const sel = selectedId ? findNode(root, selectedId) : null;
+  if (sel && sel.id !== root.id && getBlock(sel.type)?.isContainer && canContain(sel, block.type, false)) return insertBlock(content, sel.id, sel.children.length, block);
+  let cur = sel && sel.id !== root.id ? sel.id : null;
+  while (cur) {
+    const at = findParent(root, cur);
+    if (!at) break;
+    if (canContain(at.parent, block.type, at.parent.id === root.id)) return insertBlock(content, at.parent.id, at.index + 1, block);
+    cur = at.parent.id === root.id ? null : at.parent.id;
+  }
+  return insertBlock(content, root.id, root.children.length, block);
+}
+
+export function replaceBlock(content: PageContent, id: string, block: BlockNode): PageContent {
+  return { root: mapTree(content.root, (n) => (n.id === id ? block : n)) };
 }
 
 export function findNode(root: BlockNode, id: string): BlockNode | null {
@@ -54,7 +126,7 @@ export function moveBlock(content: PageContent, id: string, delta: -1 | 1): Page
 }
 
 export function duplicateBlock(content: PageContent, id: string): PageContent {
-  const cloneIds = (b: BlockNode): BlockNode => ({ ...newBlock(b.type), props: structuredClone(b.props), children: b.children.map(cloneIds) });
+  const cloneIds = cloneWithIds;
   return {
     root: mapTree(content.root, (n) => {
       const i = n.children.findIndex((c) => c.id === id);

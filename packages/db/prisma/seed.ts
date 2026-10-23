@@ -17,6 +17,8 @@ import {
   FactChangeOrigin,
 } from '@prisma/client';
 import { AI_AGENTS, AI_MODELS, AI_PROMPTS, AI_PROVIDERS } from './seed/ai';
+import { BLOCKS } from '@canon/blocks';
+import { z } from 'zod';
 import { CORE_BLOCKS, toJsonSchema } from './seed/blocks';
 
 config({ path: resolve(__dirname, '../../../.env') });
@@ -88,7 +90,24 @@ async function seedAiRegistry(): Promise<Map<string, string>> {
 }
 
 async function seedBlocks(): Promise<void> {
-  for (const b of CORE_BLOCKS) {
+  // Blocks implemented in @canon/blocks: schema generated from the Zod definitions (single source of truth).
+  for (const b of BLOCKS) {
+    const data = {
+      name: b.name,
+      icon: CORE_BLOCKS.find((c) => c.type === b.type)?.icon ?? 'square',
+      category: b.category,
+      schema: z.toJSONSchema(b.props, { io: 'input', unrepresentable: 'any' }) as Prisma.InputJsonValue,
+      defaults: b.defaults() as Prisma.InputJsonValue,
+      isCore: true,
+      isContainer: b.isContainer,
+      allowedChildren: [...(b.allowedChildren ?? [])],
+      aiGeneratable: true,
+      rendererKey: `core/${b.type}`,
+    };
+    await prisma.block.upsert({ where: { type: b.type }, create: { type: b.type, ...data }, update: data });
+  }
+  // Remaining seeded types are registered (so stored content validates) but rendered in later phases.
+  for (const b of CORE_BLOCKS.filter((c) => !BLOCKS.some((d) => d.type === c.type))) {
     const { schema, defaults } = toJsonSchema(b);
     const data = {
       name: b.name,
@@ -104,7 +123,7 @@ async function seedBlocks(): Promise<void> {
     };
     await prisma.block.upsert({ where: { type: b.type }, create: { type: b.type, ...data }, update: data });
   }
-  log(`Blocks: ${CORE_BLOCKS.length}`);
+  log(`Blocks: ${BLOCKS.length} implemented, ${CORE_BLOCKS.filter((c) => !BLOCKS.some((d) => d.type === c.type)).length} registered for later phases`);
 }
 
 async function seedAdmin(): Promise<string> {

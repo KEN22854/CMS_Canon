@@ -196,9 +196,14 @@ export class MediaService {
   }
 
   /** Bytes of the smallest raster rendition — enough for vision models at a fraction of the tokens. */
-  async visionInput(tenantId: string, mediaId: string): Promise<{ media: Media; data: string; mediaType: 'image/webp' | 'image/png' | 'image/jpeg' | 'image/gif' }> {
+  /** Image bytes for a vision model: the small thumbnail by default; `detail` sends the original (≤ 4 MB) for layout references. */
+  async visionInput(tenantId: string, mediaId: string, opts: { detail?: boolean } = {}): Promise<{ media: Media; data: string; mediaType: 'image/webp' | 'image/png' | 'image/jpeg' | 'image/gif' }> {
     const media = await this.get(tenantId, mediaId);
-    if (!media.mimeType.startsWith('image/') || media.status !== 'READY') throw badRequest('NOT_AN_IMAGE', 'Alt text can only be generated for processed images');
+    if (!media.mimeType.startsWith('image/') || media.status !== 'READY') throw badRequest('NOT_AN_IMAGE', 'Only processed images can be sent to a vision model');
+    const visionTypes = ['image/webp', 'image/png', 'image/jpeg', 'image/gif'];
+    if (opts.detail && media.size <= 4n * 1024n * 1024n && visionTypes.includes(media.mimeType)) {
+      return { media, data: (await this.storage.get(media.storageKey)).toString('base64'), mediaType: media.mimeType as 'image/png' };
+    }
     const thumbKey = `${prefixFor(media)}thumb.webp`;
     if (await this.storage.head(thumbKey)) return { media, data: (await this.storage.get(thumbKey)).toString('base64'), mediaType: 'image/webp' };
     return { media, data: (await this.storage.get(media.storageKey)).toString('base64'), mediaType: media.mimeType as 'image/png' };

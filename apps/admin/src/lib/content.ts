@@ -69,6 +69,7 @@ export interface MediaItem {
   folder: string;
   tags: string[];
   dominantColor: string | null;
+  variants: { thumb?: { url: string }; sources: { url: string; width: number; height: number; format: 'webp' | 'avif' }[] } | null;
   createdAt: string;
 }
 

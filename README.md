@@ -186,6 +186,47 @@ canon-cms/
 - No real LLM call has been run in this environment (no provider keys). The adapters are typechecked against the installed SDKs (`@anthropic-ai/sdk` 1.x, `openai` 7.x, `@google/genai` 2.x), and the gateway logic is covered by tests with fake providers.
 - Model prices for OpenAI/Google in the seed must be re-checked against provider pricing pages before billing goes live.
 
+## What is in Phase 3
+
+The page builder: open any page in the admin (Sites → Pages → a page).
+
+- **Block registry** (`@canon/blocks`):
+  - 17 blocks: section, columns/column, hero, heading, text, image, video, button, call-to-action, features, stats, FAQ, quote, testimonial, spacer and divider;
+  - list fields (FAQ items, feature cards, stats) are AI-translatable item by item;
+  - video accepts only YouTube/Vimeo links and embeds them privacy-friendly (`youtube-nocookie`, `dnt=1`);
+  - the seed publishes every block's JSON Schema (`z.toJSONSchema`) to the `block_definitions` registry.
+- **Shared renderers** (`@canon/ui-blocks`):
+  - the public site and the builder canvas render the same React components, so what you edit is what ships;
+  - they are server-compatible (no hooks);
+  - responsiveness uses **container queries**, so the canvas previews tablet/mobile by narrowing itself instead of the window;
+  - theme → CSS variables (`site-*` Tailwind tokens) through one shared preset.
+- **Builder** (`apps/admin/src/components/builder`):
+  - Zustand store + **zundo** undo/redo: Ctrl+Z / Ctrl+Shift+Z, 200 steps; typing in one field collapses into one step, and selection never enters history;
+  - live canvas with hover/selection outlines and a block toolbar (drag, parent, ↑↓, duplicate, ✨, delete);
+  - **drag & drop** with dnd-kit from the palette, the canvas and the layers list. Drop positions come from the rendered DOM, so they work in any container at any width. Nesting rules: Columns hold only columns, sections only at the top, never into itself;
+  - layers tree, desktop/tablet/mobile widths;
+  - shortcuts: Delete, Ctrl+D, Alt+↑/↓, Esc = parent;
+  - optimistic autosave: "dirty" is a draft-reference check, edits made during a save are kept, and the version CAS still yields 409 + a banner.
+- **Inspector**: generated from field metadata, including a list editor and a **TipTap** rich-text editor. Its output is mapped back onto the closed schema, and **Canon facts** appear as chips showing the live value, inserted with a fact picker.
+- **Inline AI**, all through the gateway (quotas, ledger, fallbacks):
+  - ✨ on every text field (Phase 2);
+  - ✨ **per block** (`POST /v1/sites/:id/ai/improve-block`): one call rewrites every text in the block leaf by leaf, keeping formatting, links and fact tokens;
+  - **AI-generated block** (`/ai/generate-block`, fits the page outline, optional fixed type);
+  - **AI page from prompt** (`/ai/generate-page`, optional reference screenshot via vision, or `createPage` to create a draft directly). It follows the brief → block catalog → validation → one repair round-trip path, and drops invalid blocks with reasons. `{{fact:key}}` tokens become bound `factRef`s, and unknown facts are removed. Results land in the undoable store and are never published;
+  - new AI feature `LAYOUT` for metering, plus prompts `builder.generate_page` and `builder.generate_block`.
+- `GET /v1/facts` is a read-only fact search for the picker; the full Canon API (editing, history, agent propagation) arrives with the AI core in Phase 5.
+
+## Phase 3 checklist
+
+- [x] Block registry: 17 blocks, schemas in the DB registry, an AI catalog generated from the same definitions
+- [x] Canvas with real renderers + DnD (palette / canvas / layers), nesting rules, breakpoints (container queries)
+- [x] Inspector: fields, lists, TipTap with Canon facts
+- [x] Zustand + Zundo: undo/redo with typing coalescing; keyboard shortcuts
+- [x] Autosave + optimistic updates + version conflict; preview; publish
+- [x] AI ✨ on fields and on blocks, AI-generated block, AI page from prompt (+ screenshot)
+- [x] Tests: 129 in total, all green — blocks 16, gateway 30, API unit 18, admin 7 (tree ops, nesting, undo/coalescing), integration 58 (+8: generation, repair, 502 on garbage, createPage, screenshot from another site → 400, block type, improve-block preserving marks/facts, facts search)
+- [x] Manual browser check: DnD into containers and columns, undo/redo, Delete, autosave, publish → the new blocks render on the public site
+
 ## What is in Phase 2
 
 Run it locally:

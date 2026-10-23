@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getBlock } from './definitions';
+import { getBlock, type FieldMeta } from './definitions';
 import { collectFactKeys, mapRichText, type RichTextDoc } from './rich-text';
 
 export const MAX_DEPTH = 6;
@@ -88,8 +88,45 @@ export function emptyPageContent(): PageContent {
 export interface TextField {
   blockId: string;
   prop: string;
+  /** Set for fields inside list props (FAQ items, feature cards…). */
+  item?: { index: number; prop: string };
   kind: 'plain' | 'rich';
   value: string | RichTextDoc;
+}
+
+type FieldRef = { blockId: string; prop: string; item?: { index: number; prop: string } };
+
+/**
+ * Walks the AI-editable fields of one block's props (including fields inside list items) and
+ * rebuilds the props with the visitor's replacements. Collection and mapping share this walker,
+ * so they can never disagree about which strings are translatable.
+ */
+function mapAiFields(
+  blockId: string,
+  props: Record<string, unknown>,
+  fields: Record<string, FieldMeta>,
+  visit: (value: string | RichTextDoc, kind: 'plain' | 'rich', ref: FieldRef) => string | RichTextDoc,
+): Record<string, unknown> {
+  const out = { ...props };
+  for (const [prop, meta] of Object.entries(fields)) {
+    const v = props[prop];
+    if (meta.kind === 'list' && meta.itemFields && Array.isArray(v)) {
+      out[prop] = v.map((item, index) => {
+        if (!item || typeof item !== 'object') return item;
+        const next = { ...(item as Record<string, unknown>) };
+        for (const [ip, im] of Object.entries(meta.itemFields!)) {
+          const iv = next[ip];
+          if (im.ai && typeof iv === 'string' && iv.trim()) next[ip] = visit(iv, 'plain', { blockId, prop, item: { index, prop: ip } });
+        }
+        return next;
+      });
+      continue;
+    }
+    if (!meta.ai) continue;
+    if (meta.kind === 'richtext' && v && typeof v === 'object') out[prop] = visit(v as RichTextDoc, 'rich', { blockId, prop });
+    else if (typeof v === 'string' && v.trim()) out[prop] = visit(v, 'plain', { blockId, prop });
+  }
+  return out;
 }
 
 /** Every AI-editable text in the tree (per block definitions), in document order. */
@@ -97,14 +134,7 @@ export function collectTextFields(content: PageContent): TextField[] {
   const out: TextField[] = [];
   const walk = (n: BlockNode) => {
     const def = getBlock(n.type);
-    if (def) {
-      for (const [prop, meta] of Object.entries(def.fields)) {
-        if (!meta.ai) continue;
-        const value = n.props[prop];
-        if (meta.kind === 'richtext' && value && typeof value === 'object') out.push({ blockId: n.id, prop, kind: 'rich', value: value as RichTextDoc });
-        else if (typeof value === 'string' && value.trim()) out.push({ blockId: n.id, prop, kind: 'plain', value });
-      }
-    }
+    if (def) mapAiFields(n.id, n.props, def.fields, (value, kind, ref) => (out.push({ ...ref, kind, value }), value));
     n.children.forEach(walk);
   };
   walk(content.root);
@@ -112,22 +142,22 @@ export function collectTextFields(content: PageContent): TextField[] {
 }
 
 /** Applies string replacements to plain fields and text leaves of rich fields; structure and facts are untouched. */
-export function mapTextFields(content: PageContent, fn: (text: string, field: { blockId: string; prop: string }) => string): PageContent {
+export function mapTextFields(content: PageContent, fn: (text: string, field: FieldRef) => string): PageContent {
   const walk = (n: BlockNode): BlockNode => {
     const def = getBlock(n.type);
-    let props = n.props;
-    if (def) {
-      props = { ...n.props };
-      for (const [prop, meta] of Object.entries(def.fields)) {
-        if (!meta.ai) continue;
-        const v = props[prop];
-        if (meta.kind === 'richtext' && v && typeof v === 'object') props[prop] = mapRichText(v as RichTextDoc, (t) => fn(t, { blockId: n.id, prop }));
-        else if (typeof v === 'string' && v.trim()) props[prop] = fn(v, { blockId: n.id, prop });
-      }
-    }
+    const props = def
+      ? mapAiFields(n.id, n.props, def.fields, (value, kind, ref) => (kind === 'rich' ? mapRichText(value as RichTextDoc, (t) => fn(t, ref)) : fn(value as string, ref)))
+      : n.props;
     return { ...n, props, children: n.children.map(walk) };
   };
   return { root: walk(content.root) };
+}
+
+/** Same, for one block's props (block-level AI actions in the builder). */
+export function mapBlockText(node: BlockNode, fn: (text: string, field: FieldRef) => string): BlockNode {
+  const def = getBlock(node.type);
+  if (!def) return node;
+  return { ...node, props: mapAiFields(node.id, node.props, def.fields, (value, kind, ref) => (kind === 'rich' ? mapRichText(value as RichTextDoc, (t) => fn(t, ref)) : fn(value as string, ref))) };
 }
 
 export function collectMediaIds(content: PageContent): string[] {

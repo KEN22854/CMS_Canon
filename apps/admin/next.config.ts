@@ -5,6 +5,7 @@ const API_URL = process.env.CANON_API_URL ?? 'http://localhost:4000';
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  transpilePackages: ['@canon/ui-blocks'],
   // The browser only ever talks to this origin; /api/v1/* is proxied to the API. That keeps the
   // refresh cookie first-party and SameSite=Strict without CORS gymnastics.
   async rewrites() {

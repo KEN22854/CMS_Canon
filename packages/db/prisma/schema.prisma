@@ -129,6 +129,8 @@ enum AiFeature {
   CHAT
   EMBEDDING
   CLASSIFY
+  /// Page builder: AI-generated blocks and pages.
+  LAYOUT
   SUMMARIZE
   FACT_CHECK
   FACT_EXTRACT

@@ -17,7 +17,7 @@ import type { TextAction, TextBody } from './content-ai.dto';
 const TRANSLATE_CHUNK_STRINGS = 40;
 const TRANSLATE_CHUNK_CHARS = 6_000;
 
-const GOALS: Record<Exclude<TextAction, 'tone'>, string> = {
+export const GOALS: Record<Exclude<TextAction, 'tone'>, string> = {
   rewrite: 'improve clarity and flow while keeping the meaning and length',
   expand: 'expand it with one or two concrete sentences of supporting detail, without inventing facts',
   shorten: 'make it about half as long while keeping the key message',
@@ -26,7 +26,7 @@ const GOALS: Record<Exclude<TextAction, 'tone'>, string> = {
   fix: 'fix spelling, grammar and punctuation only; change nothing else',
 };
 
-interface SiteVoice {
+export interface SiteVoice {
   siteName: string;
   brandVoice: string;
   forbidden: string[];
@@ -215,7 +215,7 @@ export class AiContentService {
     return target.id;
   }
 
-  private async voice(tenantId: string, siteId?: string): Promise<SiteVoice> {
+  async voice(tenantId: string, siteId?: string): Promise<SiteVoice> {
     if (!siteId) return { siteName: 'this website', brandVoice: '', forbidden: [], glossary: [], defaultLocale: 'en' };
     const site: Site = await this.sites.get(tenantId, siteId);
     const ai = (site.aiSettings ?? {}) as { brandVoice?: string; forbiddenTopics?: string[]; glossary?: unknown };
@@ -237,15 +237,15 @@ export function normalizeGlossary(raw: unknown): SiteVoice['glossary'] {
   });
 }
 
-function ctx(p: TenantPrincipal, feature: AiCallContext['feature'], promptId: string, related?: AiCallContext['relatedEntity']): AiCallContext {
+export function ctx(p: TenantPrincipal, feature: AiCallContext['feature'], promptId: string, related?: AiCallContext['relatedEntity']): AiCallContext {
   return { tenantId: p.tenantId, userId: p.userId, feature, promptId, relatedEntity: related, tags: { actor: p.actorType } };
 }
 
-function withForbidden(system: string, voice: SiteVoice): string {
+export function withForbidden(system: string, voice: SiteVoice): string {
   return voice.forbidden.length ? `${system}\nNever write about: ${voice.forbidden.join(', ')}.` : system;
 }
 
-function meta(r: CompletionResult) {
+export function meta(r: CompletionResult) {
   return { generationId: r.generationId, model: r.model, status: r.status, costUsd: r.costMicroUsd / 1_000_000, cacheHit: r.cacheHit };
 }
 
