@@ -1,0 +1,439 @@
+# Canon — build log by phase
+
+What each phase delivered, with its checklist, test counts and manual browser checks. For an overview of the product see the [README](../README.md).
+
+---
+
+## What is in Phase 0
+
+### Data layer
+- **47 Prisma models and 28 enums**: identity/tenancy, sites/pages/blocks, collections, media, forms, A/B, analytics, audit, plugins, the full AI ledger (providers, models, generations, prompts, agents, runs, steps, vectors, semantic cache, feedback, guardrail events), the **Canon graph** (entities, facts, versions, mentions, relations, sources), content branches, and the outbox.
+- **Raw SQL migrations**:
+  - `partitioning`: monthly range partitions for analytics and audit, with a self-maintaining function.
+  - `search_indexes`: HNSW cosine ×4, tsvector generated columns + GIN, trigram, JSONB path ops.
+  - `partial_unique`: soft-delete-aware uniqueness.
+  - `rls`: policies on 41 tables, plus the roles and an append-only audit table.
+- **Verified on Postgres 16 + pgvector**: all migrations apply, Prisma drift is empty, RLS isolation behaves as expected, and the seed is idempotent.
+
+### AI gateway (`packages/ai-gateway`)
+- Ports & adapters: Anthropic, OpenAI, Google Gemini, Ollama. Every SDK error is normalised to a `ProviderError` (anti-corruption layer).
+- Routing: requested model → tenant default → fallbacks. The chain is filtered by the tenant allow-list, required capabilities (vision, JSON) and which providers are configured.
+- Resilience: a circuit breaker per provider (bulkhead), retries with full jitter on 429/5xx/network, a timeout and cancellation via `AbortSignal` (client disconnect stops the LLM call), and stream fallback before the first token.
+- Fallback ladder: primary → cheaper models → local model → semantic cache at a looser threshold → caller-supplied degrade text.
+- Caching: exact (Redis, tenant-scoped, keyed by model) and semantic (pgvector, tenant-scoped via RLS).
+- Guardrails: prompt-injection/jailbreak heuristics, PII redaction (email, Luhn-checked cards, IBAN, phone) before sending and always before storing, and an output check. Refusals are terminal: never re-routed.
+- Cost: integer micro-USD per call. Redis quotas give a per-minute rate limit and a monthly budget (hard/soft). Redis failure fails open.
+- Observability: `ai_generations` and `ai_guardrail_events` rows, Langfuse ingestion (batched, never blocks), and Prometheus counters/histograms without tenant labels.
+- **23 unit tests** (vitest) covering fallback, retry, refusal, degrade, cache isolation, guardrails, quota, capabilities, allow-list, streaming and pricing.
+
+### API (`apps/api`)
+- Endpoints: `POST /v1/ai/complete`, `POST /v1/ai/complete-stream` (SSE), `POST /v1/ai/embed`, `GET /v1/ai/models`, `GET /health`, `GET /health/ready`, `GET /metrics`.
+- Errors have a single shape: `{ error: { code, message, details?, requestId } }`. AI error codes map to 400/402/403/422/429/503.
+- Pino structured logs with a request id, tenant id and redacted secrets.
+
+### Known limits
+- No real LLM call has been run in this environment (no provider keys). The adapters are typechecked against the installed SDKs (`@anthropic-ai/sdk` 1.x, `openai` 7.x, `@google/genai` 2.x), and the gateway logic is covered by tests with fake providers.
+- Model prices for OpenAI/Google in the seed must be re-checked against provider pricing pages before billing goes live.
+
+## What is in Phase 7
+
+Monetization, the ecosystem and enterprise readiness: billing, plugins and webhooks, an MCP server for AI agents, SSO, audit and compliance, deployment.
+
+- **Billing** (`modules/billing`, Stripe over plain HTTPS, no SDK):
+  - Checkout for Pro/Business, customer portal for plan changes, invoices and cancellation;
+  - **the plan changes only from signature-verified webhooks** (`Stripe-Signature`, 5-minute tolerance), never from the checkout redirect;
+  - idempotent (`billing_events`) and ordered (`lastEventAt`): Stripe retries and late deliveries cannot roll a tenant back;
+  - dunning: `PAST_DUE` keeps paid features, cancellation or `unpaid` returns the tenant to Free, owners are e-mailed on a failed payment;
+  - AI overage above the plan's included budget is reported hourly to a Stripe **billing meter** as a delta with an idempotent identifier;
+  - Enterprise is contract-managed (`PATCH /v1/platform/tenants/:id/plan`, super admins only); without Stripe keys, billing is read-only.
+- **Audit and compliance** (`modules/compliance`):
+  - audit log API with filters (actor, action, entity, AI involvement, dates), cursor pagination and streaming CSV / JSON Lines export (spreadsheet-formula safe);
+  - **tamper evidence**: every finished day is sealed with SHA-256 over its rows, chained to the previous day; verification recomputes the chain, so an edited, inserted or deleted row breaks its day; the request role cannot write digests;
+  - GDPR: download my data (art. 15/20), **erase my account** (art. 17: anonymized; owners must hand over workspaces first; sessions and keys revoked), owner-only full **workspace export**;
+  - deleted workspaces are purged after 30 days; monthly partitions are kept three months ahead.
+- **SSO (SAML 2.0, Enterprise)** (`modules/sso`, `@node-saml/node-saml`):
+  - logins are routed by email domain, but **only for domains proven with a DNS TXT record**; one workspace per domain; consumer mail domains refused;
+  - responses must be signed by the configured IdP certificate, answer an AuthnRequest issued by Canon (single use, kept in Redis), match audience and ACS, and carry an email on a verified domain;
+  - just-in-time provisioning with a default role, SP metadata endpoint;
+  - **enforced SSO** blocks password login for members on those domains, owners keep a break-glass password;
+  - SSO sign-ins are audited; the IdP owns MFA.
+- **Webhooks** (`modules/webhooks`):
+  - stable public event names (`page.published`, `entry.updated`, `fact.changed`…) mapped from the outbox;
+  - signed `Canon-Signature: t=…,v1=HMAC-SHA256(secret, "t.body")`, `Idempotency-Key` stable across retries, secret shown once and rotatable;
+  - delivery log, test ping, redeliver; exponential backoff over 8 attempts; endpoints are paused after 15 consecutive dead deliveries;
+  - **SSRF guard**: HTTPS only, public addresses only, checked when saved and again before every delivery.
+- **Plugins and marketplace** (`modules/plugins`):
+  - plugins are integrations, not code executed by Canon: a validated manifest declares permissions (API-key scopes), events, settings and block presets;
+  - **install = explicit consent** to exactly the requested permissions → a scoped API key (shown once, or delivered to the plugin through a signed install callback) and a managed webhook;
+  - settings with encrypted secrets that are never returned; pause/resume; uninstall revokes the key;
+  - upgrades that ask for more permissions keep the old grant until someone re-consents;
+  - first-party marketplace: **Slack notifications** (built-in adapter), **Zapier / Make / n8n**, **Marketing blocks** (pricing tiers and a launch announcement as built-in blocks, shown in the builder palette);
+  - **private plugins** for Business and Enterprise, visible only to their workspace.
+- **MCP server** (`modules/mcp`, `@modelcontextprotocol/sdk`):
+  - stateless Streamable HTTP at `POST /v1/mcp`, authenticated with an API key;
+  - the tools follow the key's scopes: `list_sites`, `list_pages`, `get_page`, `search_content`, `ask`, `list_facts`, `lint_text` (Canon contradictions), `create_draft_page`, `propose_fact_change` (new fact value + agent-team review branch);
+  - agents can never publish; everything goes through the same services, RLS and audit as the REST API.
+- **Admin**:
+  - **Billing**: usage meters, plan cards, Checkout and portal;
+  - **Integrations**: marketplace with a consent dialog, settings, private manifests, webhooks with a delivery log;
+  - **Audit log**: filters, export, chain verification, workspace export;
+  - **Single sign-on**: SP values to copy, IdP form, DNS verification records;
+  - login with "Sign in with SSO", `SSO_REQUIRED` handling and `/sso/callback`;
+  - Security → "Your data" (export, delete account); API keys → MCP connection snippet; builder palette → "From plugins".
+- **Deployment**:
+  - `docker/Dockerfile` with four targets (`api`, `admin`, `web` as Next standalone servers, `migrate`);
+  - `deploy/docker-compose.prod.yml`, `deploy/k8s/canon.yaml` (probes, PDB, HPA, WebSocket-ready ingress), `deploy/.env.production.example`;
+  - [docs/deployment.md](./deployment.md): database roles, configuration reference, Stripe and SAML setup, scaling, backups, upgrades, security checklist.
+
+## Phase 7 checklist
+
+- [x] Billing (Stripe): checkout, portal, verified idempotent ordered webhooks, dunning, AI overage metering, manual Enterprise plans
+- [x] Plugin system and marketplace: manifests, consent, scoped keys, managed webhooks, encrypted settings, upgrades with re-consent, private plugins, block presets in the builder
+- [x] Webhooks: signing, retries, delivery log, redeliver, auto-pause, SSRF protection
+- [x] MCP server: scoped tools over stateless Streamable HTTP; drafts and review branches only
+- [x] SSO/SAML: DNS-verified domains, signed and single-use responses, JIT provisioning, enforced SSO with an owner break-glass path
+- [x] Audit and compliance: query and export, daily hash chain with verification, GDPR export and erasure, workspace export, purge after 30 days, partition upkeep
+- [x] Tests: 234 in total, all green — fields 15, blocks 16, gateway 30, edge 8, collab 6, API unit 35, admin 7, integration 117 (+19: billing, compliance, SSO, webhooks and plugins, MCP). API coverage (`pnpm --filter @canon/api test:coverage`): 81% statements, 87% lines, 83% functions, 66% branches
+- [x] Deployment: Dockerfile (API image built and smoke-tested against Postgres and Redis), production compose, Kubernetes manifests, deployment guide
+- [x] Manual browser check: "Sign in with SSO" for a domain without SSO → clear message; Billing shows usage and plans (Stripe not configured locally → read-only notice); Integrations → Marketing blocks installed → "Pricing tiers" in the builder palette inserts 18 blocks, undone with the collaborative undo; Audit log lists the install and verifies the chain as intact; Single sign-on on Free shows the Enterprise notice
+
+## What is in Phase 6
+
+Realtime collaboration, first-party analytics, A/B testing and personalization. All of it runs without AI keys: insights fall back to rules, recommendations to the statistics.
+
+- **Realtime co-editing** (`packages/collab`, `modules/collab`, builder):
+  - the page draft as a Yjs document; the unit of merge is the **block prop**, so two people editing a hero's title and its button both win;
+  - concurrent moves never break the tree (a block under two parents keeps its first place, orphans are dropped);
+  - WebSocket rooms `/v1/collab/page:<id>` speak the standard y-websocket protocol (sync + awareness);
+  - access is checked at the upgrade: access token, same tenant, `read` to join, `update` to send edits, so viewers see live changes but their edits are ignored;
+  - room state is persisted to `collab_documents` with the page version it was built from; a save outside the session (restore, Canon merge) bumps the version, and the room re-seeds instead of resurrecting stale state;
+  - rooms are shared across API instances through Redis pub/sub;
+  - **one leader per room** (lowest client id among editors) autosaves through the normal CAS endpoint, then writes a `saved` marker; the others adopt its version and mark the same draft clean, so validation, versions, Canon and the outbox stay on their single path;
+  - while connected, undo/redo is a `Y.UndoManager` scoped to **your own** edits, so undo never reverts a colleague's work;
+  - presence avatars, colleagues' selections drawn on the canvas, "Autosaved by …" status;
+  - if the room can't be reached, the builder silently stays single-user.
+- **Analytics pipeline** (`modules/analytics`):
+  - the renderer's tracker sends page views, engaged time, CTA clicks (`data-canon-event`) and custom events (`window.canon.track('signup')`) to a first-party `/api/collect`;
+  - Global Privacy Control and Do Not Track mean nothing is sent at all;
+  - the visitor id is a random httpOnly first-party cookie: no fingerprinting, and the user agent is reduced to device/browser/OS before storage;
+  - bots and foreign hosts are dropped, with a per-visitor rate limit;
+  - events go to a Redis buffer and are batch-inserted into the partitioned `analytics_events`;
+  - daily rollups (pages: views, visitors, sessions, entrances, bounces, engaged time, conversions; dimensions: referrer, UTM, country, device, browser, OS) run every 15 minutes, and today is always computed live;
+  - realtime "who is on the site now" comes from Redis only.
+- **AI insights**:
+  - the numbers are computed deterministically (period change, page change, high bounce, zero conversions, z-score anomalies, new sources);
+  - the model only explains them in plain language, and paths it invents are dropped;
+  - without a model, the same signals become rule-based findings;
+  - recommendations link straight to "set up an A/B test" or "personalize".
+- **A/B testing** (`modules/experiences`):
+  - variants are **validated block patches** over the published page (override text props or hide a block), and the control is always the published page;
+  - assignment happens **at the edge** in the renderer's proxy (FNV-1a over test id + visitor id, sticky, with separate traffic-allocation and variant hashes);
+  - each variant is its own ISR cache entry (`/s/<host>/~t.<test>.<variant>/…`): no flicker, no client script, no per-visitor rendering;
+  - the API re-validates the variant key, so a tampered URL just renders the original;
+  - exposure is a page view of the test page; a conversion is the goal event after exposure;
+  - statistics: Wilson 95% CI, two-sided z-test, Bayesian probability to beat control, and a planned sample size (10% MDE); **no winner before the plan is reached**, so peeking is safe;
+  - AI writes variants for a block (only existing text fields, each validated) and recommends the decision; a statistical guard overrides it when it calls a winner too early;
+  - completing a test can write the winner into the page draft, while publishing stays a human decision.
+- **Personalization**:
+  - segments over country, device, language, referrer, UTM, visit number, returning and path, evaluated at the edge with "try a visitor" testing in the UI;
+  - one patch per (page, segment), applied before A/B patches, at most one segment per page view, so the number of cached copies stays bounded;
+  - AI can write copy for a segment;
+  - changes go live within seconds through `ExperimentChanged` / `PersonalizationChanged` → delivery cache invalidation and a 30-second runtime config in the proxy.
+- **Admin**:
+  - site → **Analytics**: KPI tiles with change vs the previous period, daily chart, top pages, sources/campaigns/countries/devices, realtime, insights;
+  - site → **Experiments**: create (page, goal, traffic, variants, AI suggestions), results table, start/pause, recommendation, complete;
+  - site → **Audiences**: segment rule builder, page personalization with live status.
+
+## Phase 6 checklist
+
+- [x] Yjs collaboration: authenticated rooms, read-only viewers, per-prop merge, persistence with stale-room protection, Redis fan-out, presence, leader autosave, per-user undo
+- [x] Analytics pipeline: privacy-first tracker → collector → Redis buffer → partitioned events → daily rollups → reports and realtime
+- [x] AI insights over deterministic signals (+ rules fallback)
+- [x] A/B testing: edge assignment, per-variant ISR, exposures and conversions, Wilson/z-test/Bayes/sample size, AI variants and recommendations with a statistical guard
+- [x] Personalization engine: edge-evaluated segments, page patches, AI copy per segment
+- [x] Tests: 215 in total, all green — fields 15, blocks 16, gateway 30, edge 8, collab 6, API unit 35, admin 7, integration 98 (+8: analytics, insights, A/B, personalization, collaboration over WebSocket)
+- [x] Manual browser check: tracker → analytics dashboard (UTM source recognised) → rules insights; A/B test created in the UI → 12 new visitors split 7/5, one visitor always sees the same variant, bots get the original → exposure and conversion counted; segment "Newsletter readers" → `?utm_source=newsletter` sees its own hero, everyone else the original; one page in two editor tabs → title change synced live, only the leader saved, both show the same version, the colleague's selection is outlined
+
+## What is in Phase 5
+
+The AI core and the Canon killer feature: **change a fact once, and the site rewrites itself.** Everything works without any AI keys too. The model-free path is the deterministic linter, the literal-substitution fallback, full-text search and template answers built from facts.
+
+- **RAG** (`modules/knowledge`):
+  - **ingestion of published content only** (page and entry snapshots) via outbox → the `ai-index` queue;
+  - chunking by block or field with the heading kept in each chunk, sentence-boundary cuts with overlap, short blocks merged;
+  - BOUND facts are rendered with their current values;
+  - `FactChanged` triggers re-indexing of the pages that bind the fact;
+  - embeddings are batched, and an unchanged document is skipped by hash.
+- **Hybrid search** `GET /v1/sites/:id/search`:
+  - Postgres full-text (a generated `tsvector`, OR query with prefixes, `ts_headline`) plus pgvector HNSW, fused with RRF;
+  - lexical search works without an embedding model, and vectors are added when a 1536-dim model is present.
+- **Grounded answers** `POST /v1/sites/:id/ask` and `/ask/stream` (SSE: `sources` → `delta` → `done`):
+  - sources plus Canon facts named in the question (trigram) or present on the retrieved pages;
+  - **a fact always outranks page text**;
+  - citations `[1]` / `[F1]`;
+  - cache is `exact`, not `semantic`, so a neighbouring site's answer can't leak;
+  - without a provider, the answer is a template built from the best-matching fact.
+- **Canon** (`modules/canon`, design in [docs/canon.md](./canon.md)):
+  - **facts**: typed values (money, number, percent, date, text…), display formatting, an append-only version history with a reason, and impact analysis by page, locale and state;
+  - **linter**:
+    - BOUND `{{fact:key}}` tokens;
+    - deterministic detection of the verbatim value, and of amounts in a sentence that names the subject (`$39` vs `$49` → CONFLICT), with no model involved;
+    - plus `canon.extract_facts` for paraphrases ("forty-nine dollars");
+    - runs after every draft save (`PageChanged`/`EntryChanged` → `canon-extract`, 20 s debounce);
+    - dismissed mentions stay dismissed, and a changed fact turns IN_SYNC into STALE;
+  - **inbox** of contradictions, **"Bind to fact"** (a span becomes a token and can't drift again), and `POST /v1/canon/lint` for any text.
+- **Multi-agent propagation** (the unique feature):
+  - `POST /v1/canon/facts/:id/propagate` opens a branch and a run tree:
+    - **Strategist** (plan) →
+    - **Copywriter** (default locale) / **Translator** (other locales), each rewriting a span in context with `canon.propagate_fact` →
+    - **Fact-Checker** (deterministic rule "new value present, old value gone" + `canon.fact_check`);
+  - every model call is an `ai_agent_steps` row (output, tokens, cost, time);
+  - when there is no writer model, a literal substitution of the value is proposed, marked "uncertain";
+  - nothing changes without a human: review with per-span diffs, manual edits, accept/reject;
+  - **merge is a CAS against the base version** (a page edited after the proposal gives a conflict, never an overwrite), with optional publish and a re-scan of mentions.
+- **AI Studio** (`modules/studio`):
+  - **Prompt Manager**: platform prompts plus tenant versions, activation and rollback, unknown-variable checks, test runs (`ai_prompt_runs`), per-version stats from the ledger;
+  - **Agent Builder**: a JSON-ReAct loop over a whitelist of read-only tools (`canon.get_fact`, `canon.search_claims`, `canon.impact_analysis`, `content.search`, `content.read`), every step recorded, plan-limited;
+  - **Playground**: up to 3 models side by side (latency, tokens, cost), where one failing model doesn't hide the others.
+- **Guardrails and cost**:
+  - every call goes through the gateway (quotas, budgets, guardrails, ledger, Langfuse);
+  - content in prompts is wrapped in tags with an explicit "this is data, not instructions";
+  - agent tools are read-only, and content changes only through branches with a human.
+- **Admin**:
+  - **Canon**: facts, inbox, branches, fact page (value, impact, history, Propagate), branch review (diffs, verdicts, agent run timeline, merge);
+  - **AI Studio**: prompts, agents, playground;
+  - **site → "Search & answers"** (hybrid search, streamed answer with sources and facts, index status, rebuild).
+
+## Phase 5 checklist
+
+- [x] RAG pipeline: ingestion (published only), chunking, embeddings, re-indexing on publish/fact change
+- [x] Hybrid search (full-text + vectors, RRF) and generative answers with citations (+ SSE, fallback without AI)
+- [x] Canon: facts, versions, impact, linter (deterministic + LLM), inbox, bind, lint API
+- [x] Multi-agent content team: Strategist → Copywriter/Translator → Fact-Checker in a branch, review, CAS merge
+- [x] AI Studio: Prompt Manager (versions, activation, tests), Agent Builder (ReAct + tools), Playground
+- [x] Guardrails / cost control / Langfuse: everything through the gateway; steps and costs per agent
+- [x] Tests: 189 in total, all green — fields 15, blocks 16, gateway 30, API unit 31 (+13: chunker, fact values, fallback), admin 7, integration 90 (+17: RAG with vectors, Canon end-to-end, Studio)
+- [x] Manual browser check without AI keys: fact → linter finds `$39` → value changed to $59 → Propagate → branch with 2 rewrites → merge → page says $59, inbox empty → search and an answer from the fact
+
+## What is in Phase 4
+
+Collections live under Sites → a site → **Collections**.
+
+- **Field types** (`@canon/fields`, shared by the API and the admin):
+  - 14 types: text, long text, rich text, number, yes/no, date, date & time, choice (single or multiple), email, URL, image/file (single or multiple), reference, colour, JSON;
+  - each field can be required, unique, min/max and "use for AI";
+  - a collection's schema is data checked by a meta-schema: reserved names, choice fields need options, references need a target collection;
+  - entries are validated from the definitions; drafts may be incomplete and `required` applies on publish. An empty rich-text document counts as empty;
+  - presets: blog, products, team, FAQ, blank.
+- **Collections API**:
+  - CRUD; a schema change is compared against the data, so a lossy type change on a field with values gives 409 `SCHEMA_CONFLICT` with the number of affected entries (or `force`);
+  - delete is refused while other collections reference this one.
+- **Entries API**:
+  - CAS on `version` (409 `VERSION_CONFLICT`), publish snapshots (`entry_versions` stores slug/title/tags/summary too), versions with restore, duplicate;
+  - slugs are generated from the title with a suffix on collision; the placeholder slug of an empty entry follows the title until first publish;
+  - unique fields are checked per locale;
+  - search with full-text (`tsvector`) + ILIKE, tag filter with counts, sorting including quality, plan limits on collections/entries.
+- **Relations**: ids live in `data`, and the reverse index `entry_relations` (with RLS) gives "used by". Target existence is checked; deleting a referenced entry gives 409 `ENTRY_IN_USE` (or `force`).
+- **Import/export**:
+  - CSV (RFC 4180, BOM for Excel, formula-injection guard) and lossless JSON;
+  - import has a dry run, upsert by slug + locale as a partial update, per-line errors that never stop the rest, references by slug, and publish on import.
+- **Headless read API** `GET /v1/content/sites/:id/collections/:slug/entries[/:entrySlug]`:
+  - only publish snapshots, so draft edits and draft summaries never leak;
+  - `expand=true` resolves references (unpublished ones become null);
+  - works with `content:read` API keys; Redis cache keyed by tenant and site version, invalidated through the outbox.
+- **AI enrichment** (BullMQ, ~15 s debounce after saving, skipped when the text hasn't changed, never bumps `version`):
+  - **tags + summary + quality score in one model call**; tags are normalised and filtered by the vocabulary;
+  - **quality** = 40% measured completeness + 60% AI judgement, with concrete hints; without AI, the measured score with no hints;
+  - **duplicate detection** combines trigram, full-text and word shingles in Postgres and works without any AI key; vector similarity is added when an embedding model is available;
+  - plus "describe your content → field schema" (invalid fields are dropped).
+- **Admin**:
+  - collection list and creation from a preset or AI description;
+  - entries table (search, tags, status, locale, sorting, pagination, quality);
+  - CSV import with a preview of the dry-run report, CSV/JSON export;
+  - field & AI settings editor with a warning about lossy changes;
+  - **dynamic entry form generated from the schema** (rich text with Canon facts, references with search, media, multiple choice), autosave, inline publish errors, live duplicate warning, AI panel, "used by", versions.
+- Not in this phase: the public form builder (`forms`/`form_submissions` models already exist), and entries inside page blocks (a "collection list" block).
+
+## Phase 4 checklist
+
+- [x] Collections: CRUD, field meta-schema, schema-change guard, presets, plan limits
+- [x] Entries: CRUD, versions/snapshots, publish/unpublish, CAS, unique fields, slugs, search, tags
+- [x] Dynamic forms in the admin generated from the schema (14 field types)
+- [x] Relations with a reverse index, "used by", delete protection, expand in delivery
+- [x] Import/export CSV + JSON (dry run, upsert, per-line errors)
+- [x] AI: auto-tag, summary, quality score, duplicate detection (+ AI schema suggestion)
+- [x] Headless read API for published content (API keys)
+- [x] Tests: 159 in total, all green — fields 15, blocks 16, gateway 30, API unit 18, admin 7, integration 73 (+15)
+- [x] Manual browser check: collection from a preset → new entry → publish blocked by a required field → publish → AI panel without keys (fallback) → live duplicate warning
+
+## What is in Phase 3
+
+The page builder: open any page in the admin (Sites → Pages → a page).
+
+- **Block registry** (`@canon/blocks`):
+  - 17 blocks: section, columns/column, hero, heading, text, image, video, button, call-to-action, features, stats, FAQ, quote, testimonial, spacer and divider;
+  - list fields (FAQ items, feature cards, stats) are AI-translatable item by item;
+  - video accepts only YouTube/Vimeo links and embeds them privacy-friendly (`youtube-nocookie`, `dnt=1`);
+  - the seed publishes every block's JSON Schema (`z.toJSONSchema`) to the `block_definitions` registry.
+- **Shared renderers** (`@canon/ui-blocks`):
+  - the public site and the builder canvas render the same React components, so what you edit is what ships;
+  - they are server-compatible (no hooks);
+  - responsiveness uses **container queries**, so the canvas previews tablet/mobile by narrowing itself instead of the window;
+  - theme → CSS variables (`site-*` Tailwind tokens) through one shared preset.
+- **Builder** (`apps/admin/src/components/builder`):
+  - Zustand store + **zundo** undo/redo: Ctrl+Z / Ctrl+Shift+Z, 200 steps; typing in one field collapses into one step, and selection never enters history;
+  - live canvas with hover/selection outlines and a block toolbar (drag, parent, ↑↓, duplicate, ✨, delete);
+  - **drag & drop** with dnd-kit from the palette, the canvas and the layers list. Drop positions come from the rendered DOM, so they work in any container at any width. Nesting rules: Columns hold only columns, sections only at the top, never into itself;
+  - layers tree, desktop/tablet/mobile widths;
+  - shortcuts: Delete, Ctrl+D, Alt+↑/↓, Esc = parent;
+  - optimistic autosave: "dirty" is a draft-reference check, edits made during a save are kept, and the version CAS still yields 409 + a banner.
+- **Inspector**: generated from field metadata, including a list editor and a **TipTap** rich-text editor. Its output is mapped back onto the closed schema, and **Canon facts** appear as chips showing the live value, inserted with a fact picker.
+- **Inline AI**, all through the gateway (quotas, ledger, fallbacks):
+  - ✨ on every text field (Phase 2);
+  - ✨ **per block** (`POST /v1/sites/:id/ai/improve-block`): one call rewrites every text in the block leaf by leaf, keeping formatting, links and fact tokens;
+  - **AI-generated block** (`/ai/generate-block`, fits the page outline, optional fixed type);
+  - **AI page from prompt** (`/ai/generate-page`, optional reference screenshot via vision, or `createPage` to create a draft directly). It follows the brief → block catalog → validation → one repair round-trip path, and drops invalid blocks with reasons. `{{fact:key}}` tokens become bound `factRef`s, and unknown facts are removed. Results land in the undoable store and are never published;
+  - new AI feature `LAYOUT` for metering, plus prompts `builder.generate_page` and `builder.generate_block`.
+- `GET /v1/facts` is a read-only fact search for the picker; the full Canon API (editing, history, agent propagation) arrives with the AI core in Phase 5.
+
+## Phase 3 checklist
+
+- [x] Block registry: 17 blocks, schemas in the DB registry, an AI catalog generated from the same definitions
+- [x] Canvas with real renderers + DnD (palette / canvas / layers), nesting rules, breakpoints (container queries)
+- [x] Inspector: fields, lists, TipTap with Canon facts
+- [x] Zustand + Zundo: undo/redo with typing coalescing; keyboard shortcuts
+- [x] Autosave + optimistic updates + version conflict; preview; publish
+- [x] AI ✨ on fields and on blocks, AI-generated block, AI page from prompt (+ screenshot)
+- [x] Tests: 129 in total, all green — blocks 16, gateway 30, API unit 18, admin 7 (tree ops, nesting, undo/coalescing), integration 58 (+8: generation, repair, 502 on garbage, createPage, screenshot from another site → 400, block type, improve-block preserving marks/facts, facts search)
+- [x] Manual browser check: DnD into containers and columns, undo/redo, Delete, autosave, publish → the new blocks render on the public site
+
+## What is in Phase 2
+
+Run it locally:
+
+```bash
+pnpm infra:up
+```
+
+```bash
+pnpm db:migrate && pnpm db:seed
+```
+
+```bash
+pnpm dev
+```
+
+Then open the admin at <http://localhost:3000> and the demo site at <http://acme-cloud.canon.localhost:3001>. `*.localhost` resolves to 127.0.0.1 in browsers, so no hosts-file entry is needed.
+
+- **Sites**:
+  - plan-limited creation with starter content (landing/blog/docs/blank) and an automatic `<site>-<tenant>.canon.localhost` address;
+  - custom domain, locales, theme tokens, AI voice/glossary/forbidden topics;
+  - admins configure sites, editors work inside them.
+- **Pages**:
+  - tree with materialised paths; moving or renaming a parent rewrites the subtree, and cycles are rejected;
+  - reserved slugs and locale prefixes are protected;
+  - every save is a compare-and-swap on `version` (409 `VERSION_CONFLICT`), with 5 s autosave and Ctrl+S in the editor;
+  - **publishing snapshots the draft** into `page_versions`, and delivery only ever serves `publishedVersion`, so drafts can't leak;
+  - restore copies a version into the draft; duplicate; soft delete with sub-pages;
+  - scheduled publish via BullMQ, with the DB row as source of truth and pending jobs re-armed on boot;
+  - signed preview links.
+- **Blocks** (`@canon/blocks`):
+  - Zod schemas for section, hero, heading, text, image and button;
+  - closed rich-text schema with no raw HTML and safe links only;
+  - Canon `factRef` nodes;
+  - tree validation (types, nesting, depth ≤ 6, ≤ 500 nodes, unique ids);
+  - text helpers used by translation.
+- **Media**:
+  - type detected from magic bytes, never the client MIME; HTML posing as `.jpg` is rejected and SVG is deferred;
+  - sharp: EXIF orientation, metadata/GPS stripped, WebP + AVIF at 5 widths, thumbnail, dominant colour, decompression-bomb guard;
+  - SHA-256 dedupe per site, presigned uploads for large files, storage quota;
+  - usage lookup (`jsonb_path_exists`) and 409 `MEDIA_IN_USE` on delete.
+- **Delivery & renderer**:
+  - token-protected delivery API: resolve host, published page (with Canon facts, media, hreflang alternates, nav), list, preview;
+  - Redis cache invalidated O(1) by a per-site version counter;
+  - **transactional outbox** (`FOR UPDATE SKIP LOCKED`, backoff, dead letters) → `revalidateTag` on the renderer, so a publish is live in about a second;
+  - renderer: Next 16 `proxy.ts` host routing, ISR, locale prefixes, metadata/OG/hreflang, `<picture>` AVIF/WebP, sitemap.xml with alternates, robots.txt, draft mode.
+- **Basic AI**, all through the gateway with versioned prompts:
+  - rewrite / shorten / expand / simplify / formalize / fix with the site brand voice;
+  - glossary-aware batch translation;
+  - **page translation into a new-locale draft** that keeps structure, links, media and Canon facts;
+  - SEO suggestions;
+  - vision alt text.
+  - `preferModel` uses a prompt's tuned model when the plan allows it and falls back otherwise.
+- **Admin**:
+  - sites list and creation, page list with statuses and "changes" badges;
+  - structured page editor: outline, generated inspector, ✨ AI on text fields, media picker, page/SEO, versions, schedule, translate, preview;
+  - media library with drag & drop and AI alt text; site settings.
+- **Infra**: MinIO replaced by SeaweedFS, because MinIO stopped publishing images in 2025; any S3 works via `S3_*`.
+
+## Phase 2 checklist
+
+- [x] Sites CRUD + theme + AI settings, plan limits
+- [x] Pages: CRUD, tree/paths, versions, publish/unpublish/schedule, preview, optimistic locking
+- [x] Media: upload/presign, S3, sharp variants, dedupe, usage, quotas
+- [x] Admin: dashboard → sites → pages list → editor, media library, settings
+- [x] Public renderer MVP (6 blocks), ISR + on-demand revalidation via outbox
+- [x] AI: text actions, translate (texts + whole page), SEO, alt text
+- [x] Tests: 108 total. 50 are integration tests on Postgres + Redis + SeaweedFS containers; Phase 2 alone adds 16, covering paths, conflicts, drafts vs live, preview, facts, ABAC, scheduling, cascade delete, media variants/dedupe/in-use, and AI translate/SEO/alt.
+
+## What is in Phase 1
+
+Details and threat model: [docs/auth.md](./auth.md).
+
+- **Identity**:
+  - registration with enumeration-safe responses and email verification (the link signs you in);
+  - password login with per-email lockout and per-IP sliding-window limits;
+  - 15-min JWT plus rotating refresh tokens (httpOnly SameSite=Strict cookie) with reuse detection that revokes the whole session family;
+  - instant revocation via a Redis deny-list;
+  - TOTP 2FA (RFC 6238, encrypted secret, replay guard, single-use backup codes);
+  - forgot/reset/change password (signs out other sessions);
+  - session list and revoke.
+- **Tenancy**:
+  - FREE workspace on signup, more via `POST /tenants`, `switch-tenant`;
+  - invitations bound to the invited email, which a new user can redeem at registration;
+  - roles OWNER/ADMIN/EDITOR/AUTHOR/VIEWER with last-owner protection;
+  - plan limits with per-tenant overrides.
+- **RBAC**: CASL abilities in the API (route and instance level, every rule tenant-scoped). The same packed rules are sent to the admin UI for gating.
+- **API keys**: scoped (`content:*`, `ai:invoke`, `canon:*`…), hashed, per-key rate limit, agent keys flagged in the audit log.
+- **AI quotas**:
+  - model tiers per plan;
+  - per-workspace and per-user requests/min;
+  - concurrency slots (released on stream abort);
+  - monthly token allowance and USD budget (hard/soft);
+  - 50/80/100% alerts as notifications and email;
+  - Redis counters re-seeded from the ledger;
+  - `/ai/usage` with breakdowns and a forecast.
+- **Admin** (Next.js 16, Tailwind, TanStack Query, react-hook-form + Zod):
+  - sign-in, 2FA step, sign-up, invite acceptance, verify/reset flows;
+  - workspace switcher and creation;
+  - members and invitations, security (2FA enrollment with a locally rendered QR, password, devices), AI usage, API keys.
+  - The access token is held in memory only; the browser talks to the API through the same-origin `/api/v1` proxy.
+- **Tests: 79, all green.**
+  - 28 gateway unit tests (quotas, tiers, slots).
+  - 17 API unit tests (RFC 6238 vectors, AES-GCM tamper, password policy, RBAC matrix, plans, alert thresholds).
+  - 34 integration tests against real Postgres + Redis: signup/verify, lockout, IP rate limit, rotation and reuse detection, logout and device revocation, untrusted Origin, reset, 2FA with replay rejection and backup codes, invitations, role escalation attempts, forced refresh on demotion, last owner, seat limits, tenant isolation, RLS fail-closed, API key scopes and revocation, AI tier/rate/concurrency/token caps, VIEWER cannot invoke AI.
+- Also verified by hand in the browser: signup → Mailpit → verification → dashboard, session restored after reload, invitation, 2FA enrollment, sign-in with a TOTP code.
+
+## Phase 1 checklist
+
+- [x] Auth module: register, login, refresh with rotation and reuse detection, logout, verify email, forgot/reset/change password, 2FA (TOTP + backup codes), sessions
+- [x] Users, tenants, invitations, members with role rules and plan seat limits
+- [x] RBAC via CASL (route and instance checks) + scoped API keys for AI agents
+- [x] AI quota system: plan tiers, rate/user rate, concurrency, tokens, budget, alerts, usage report
+- [x] Admin frontend: login/2FA, register, verify, reset, invite, workspace switcher, members, security, AI usage, API keys
+- [x] Migration `20261023000000_auth` (zero drift)
+- [x] Unit + integration tests; CI job for integration tests
+
+Deferred on purpose: OAuth social login, WebAuthn/passkeys and SAML/OIDC SSO move to Phase 7 (Enterprise), as do Stripe-driven plan changes.
+
+## Phase 0 checklist
+
+- [x] Architecture diagrams: C4 context/container/component, ERD, AI flow, event flow
+- [x] Full `schema.prisma` with AI and Canon models, enums, relations, indexes
+- [x] Raw SQL: RLS, partitioning, pgvector HNSW, tsvector/trigram, partial uniques
+- [x] Monorepo structure, `turbo.json`, root `package.json`, `pnpm-workspace.yaml`
+- [x] `docker-compose.yml`: Postgres+pgvector, Redis, MinIO, Mailpit, Meilisearch, plus Langfuse v3, Ollama and Qdrant profiles
+- [x] `apps/api`: `main.ts`, `AppModule`, Zod config
+- [x] `packages/db`: Prisma client, RLS tenant extension, seed (admin, tenant, site, blocks, pages, AI prompts, agents, Canon demo)
+- [x] AI gateway: adapters (Anthropic, OpenAI, Google, Ollama), fallback, caching, Langfuse integration
+- [x] README: from zero to the first AI request
