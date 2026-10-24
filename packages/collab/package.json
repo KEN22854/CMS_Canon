@@ -1,0 +1,26 @@
+{
+  "name": "@canon/collab",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Yjs representation of a page draft shared by the collaboration server and the builder: draft <-> Y.Doc conversion and minimal diffs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "yjs": "^13.6.33"
+  }
+}

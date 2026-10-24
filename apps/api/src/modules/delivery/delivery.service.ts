@@ -1,4 +1,5 @@
 import { collectMediaIds, collectPageFactKeys, type PageContent } from '@canon/blocks';
+import { applyBlockPatch, decodeVariantKey, mergePatches, type BlockPatch, type RuntimeConfig } from '@canon/edge';
 import type { Page, Site } from '@canon/db';
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import type { Redis } from 'ioredis';
@@ -13,7 +14,7 @@ import { PagesService } from '../pages/pages.service';
 import { DEFAULT_THEME } from '../sites/sites.service';
 
 const CACHE_TTL_SEC = 300;
-const INVALIDATING_EVENTS = ['PagePublished', 'PageUnpublished', 'PageMoved', 'SiteUpdated', 'SiteDeleted', 'EntryPublished', 'EntryUnpublished', 'CollectionUpdated', 'CollectionDeleted', 'FactChanged'];
+const INVALIDATING_EVENTS = ['PagePublished', 'PageUnpublished', 'PageMoved', 'SiteUpdated', 'SiteDeleted', 'EntryPublished', 'EntryUnpublished', 'CollectionUpdated', 'CollectionDeleted', 'FactChanged', 'ExperimentChanged', 'PersonalizationChanged'];
 
 /**
  * Read model for the public renderer. Runs on the system role because the visitor has no tenant
@@ -45,11 +46,17 @@ export class DeliveryService implements OnModuleInit {
     return presentSite(site);
   }
 
-  async page(siteId: string, rawPath: string, locale?: string) {
+  /**
+   * @param variantKey the proxy's rewrite key ("~t.<test>.<variant>~s.<segment>"). It is
+   * re-validated here — only running tests and active personalizations of *this* page apply, so a
+   * forged key renders the original page.
+   */
+  async page(siteId: string, rawPath: string, locale?: string, variantKey?: string) {
     const path = normalizePath(rawPath);
     const site = await this.site(siteId);
     const loc = locale && site.locales.includes(locale) ? locale : site.defaultLocale;
-    const cacheKey = `dlv:${siteId}:${await this.siteVersion(siteId)}:${loc}:${path}`;
+    const selection = decodeVariantKey(variantKey);
+    const cacheKey = `dlv:${siteId}:${await this.siteVersion(siteId)}:${loc}:${path}${selection ? `:${variantKey}` : ''}`;
     const cached = await this.redis.get(cacheKey).catch(() => null);
     if (cached) return JSON.parse(cached) as unknown;
 
@@ -58,9 +65,62 @@ export class DeliveryService implements OnModuleInit {
     const snapshot = await this.system.pageVersion.findUnique({ where: { pageId_version: { pageId: page.id, version: page.publishedVersion } } });
     if (!snapshot) throw notFound('Page');
 
-    const payload = await this.assemble(site, page, snapshot.content as unknown as PageContent, snapshot.seo as Record<string, unknown>, false);
+    let content = snapshot.content as unknown as PageContent;
+    const applied: { experiments: { testId: string; variantId: string }[]; segmentId: string | null } = { experiments: [], segmentId: null };
+    if (selection) {
+      const [tests, personalization] = await Promise.all([
+        selection.experiments.length ? this.system.abTest.findMany({ where: { id: { in: selection.experiments.map((e) => e.testId) }, pageId: page.id, status: 'RUNNING' } }) : [],
+        selection.segmentId ? this.system.personalization.findFirst({ where: { pageId: page.id, segmentId: selection.segmentId, status: 'ACTIVE', segment: { deletedAt: null } } }) : null,
+      ]);
+      const testPatches = selection.experiments.flatMap((e) => {
+        const t = tests.find((x) => x.id === e.testId);
+        const v = (t?.variants as { id: string; patch: BlockPatch }[] | undefined)?.find((x) => x.id === e.variantId);
+        if (!v) return [];
+        applied.experiments.push(e);
+        return [v.patch];
+      });
+      if (personalization) applied.segmentId = selection.segmentId;
+      // Experiment patches go last: a running test must measure exactly what it claims to.
+      content = applyBlockPatch(content, mergePatches(personalization?.patch as BlockPatch | undefined, ...testPatches));
+    }
+    const payload = { ...(await this.assemble(site, page, content, snapshot.seo as Record<string, unknown>, false)), applied };
     await this.redis.set(cacheKey, JSON.stringify(payload), 'EX', CACHE_TTL_SEC).catch(() => undefined);
     return payload;
+  }
+
+  /**
+   * What the renderer's proxy needs to choose variants for a request: running tests and active
+   * personalizations with their public paths, plus the segment rules. Small and cached per site
+   * version, so the proxy can refresh it every few seconds without touching the database.
+   */
+  async runtime(siteId: string): Promise<RuntimeConfig> {
+    const site = await this.site(siteId);
+    const version = await this.siteVersion(siteId);
+    const cacheKey = `dlv:rt:${siteId}:${version}`;
+    const cached = await this.redis.get(cacheKey).catch(() => null);
+    if (cached) return JSON.parse(cached) as RuntimeConfig;
+    const publicPath = (p: { fullPath: string; locale: string }) => (p.locale === site.defaultLocale ? p.fullPath : `/${p.locale}${p.fullPath === '/' ? '' : p.fullPath}`);
+    const [tests, personalizations] = await Promise.all([
+      this.system.abTest.findMany({ where: { status: 'RUNNING', page: { siteId, deletedAt: null, publishedVersion: { not: null } } }, include: { page: { select: { fullPath: true, locale: true } } } }),
+      this.system.personalization.findMany({ where: { siteId, status: 'ACTIVE', segment: { deletedAt: null }, page: { deletedAt: null, publishedVersion: { not: null } } }, include: { page: { select: { fullPath: true, locale: true } } }, orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }] }),
+    ]);
+    const segmentIds = [...new Set(personalizations.map((p) => p.segmentId))];
+    const segments = segmentIds.length ? await this.system.segment.findMany({ where: { id: { in: segmentIds } }, select: { id: true, rules: true } }) : [];
+    const byPage = new Map<string, RuntimeConfig['personalization'][number]>();
+    for (const p of personalizations) {
+      const entry = byPage.get(p.pageId) ?? { pageId: p.pageId, path: publicPath(p.page), locale: p.page.locale, segmentIds: [] };
+      entry.segmentIds.push(p.segmentId);
+      byPage.set(p.pageId, entry);
+    }
+    const config: RuntimeConfig = {
+      siteId,
+      version,
+      experiments: tests.map((t) => ({ id: t.id, pageId: t.pageId, path: publicPath(t.page), locale: t.page.locale, trafficAllocation: t.trafficAllocation, variants: (t.variants as { id: string; weight: number }[]).map((v) => ({ id: v.id, weight: v.weight })) })),
+      personalization: [...byPage.values()],
+      segments: segments.map((s) => ({ id: s.id, rules: s.rules as RuntimeConfig['segments'][number]['rules'] })),
+    };
+    await this.redis.set(cacheKey, JSON.stringify(config), 'EX', CACHE_TTL_SEC).catch(() => undefined);
+    return config;
   }
 
   /** Draft content for a signed preview link; never cached anywhere. */

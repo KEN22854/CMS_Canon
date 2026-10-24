@@ -8,14 +8,17 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { useCollab } from '@/components/builder/collab';
 import { GeneratePageDialog } from '@/components/builder/generate-page';
 import { Inspector } from '@/components/builder/inspector';
+import { Presence } from '@/components/builder/presence';
 import { useFacts } from '@/components/builder/rich-text-editor';
 import { BuilderContext, createBuilderStore, selectedNode, useBuilder, useBuilderStore, useHistory, type Breakpoint, type Draft } from '@/components/builder/store';
 import { Workspace } from '@/components/builder/workspace';
 import { Alert, Badge, Button, Input, Label, Select } from '@/components/ui';
 import { useAbility } from '@/lib/ability';
 import { ApiError, api, errorMessage } from '@/lib/api';
+import { useAuth } from '@/lib/auth-store';
 import { STATUS_STYLE, useMedia, usePage, useSite, type PageDetail, type Site } from '@/lib/content';
 import { useTenantId } from '@/lib/queries';
 import { cn, formatUsd, relativeTime } from '@/lib/utils';
@@ -79,6 +82,11 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
   const canEdit = ability.can('update', own);
   const canPublish = ability.can('publish', own);
   const canAi = ability.can('invoke', 'Ai');
+  const me = useAuth((s) => s.user);
+  const collab = useCollab({ store, pageId: initial.id, canEdit, onVersion: (v) => setVersion((cur) => Math.max(cur, v)) });
+  // Presence changes often; reading the session through a ref keeps save() (and the autosave timer) stable.
+  const live = useRef(collab);
+  live.current = collab;
 
   const mediaQ = useMedia(siteId);
   const media = useMemo(() => Object.fromEntries((mediaQ.data ?? []).map((m) => [m.id, m as RenderMedia])), [mediaQ.data]);
@@ -95,14 +103,27 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
     if (saving.current || conflict) return false;
     const sending = s.draft;
     saving.current = true;
-    try {
-      const res = await api<PageDetail>(`/sites/${siteId}/pages/${initial.id}`, {
+    const patch = (expectedVersion: number) =>
+      api<PageDetail>(`/sites/${siteId}/pages/${initial.id}`, {
         method: 'PATCH',
-        body: { expectedVersion: version, title: sending.title, slug: sending.slug, description: sending.description || null, seo: sending.seo, content: sending.content },
+        body: { expectedVersion, title: sending.title, slug: sending.slug, description: sending.description || null, seo: sending.seo, content: sending.content },
       });
+    try {
+      let res: PageDetail;
+      try {
+        res = await patch(version);
+      } catch (err) {
+        // In a live session the usual cause is a collaborator's save: the room already holds their
+        // changes, so saving on top of their version loses nothing. Anyone else's write is a conflict.
+        if (!(err instanceof ApiError && err.code === 'VERSION_CONFLICT') || live.current.status !== 'connected') throw err;
+        const fresh = await api<PageDetail>(`/sites/${siteId}/pages/${initial.id}`);
+        if (!fresh.updatedById || !live.current.peers.some((p) => p.canEdit && p.userId === fresh.updatedById)) throw err;
+        res = await patch(fresh.version);
+      }
       setVersion(res.version);
       setMeta(res);
       store.getState().markSaved(sending);
+      live.current.announceSaved(res.version, sending);
       void qc.invalidateQueries({ queryKey: ['pages', tid, siteId] });
       return true;
     } catch (err) {
@@ -114,12 +135,30 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
     }
   }, [store, conflict, siteId, initial.id, version, qc, tid]);
 
-  // Debounced autosave after the last edit.
+  /** Takes the server's latest draft — into the whole room when the session is live. */
+  const loadLatest = useCallback(async () => {
+    if (live.current.status !== 'connected') return window.location.reload();
+    try {
+      const fresh = await api<PageDetail>(`/sites/${siteId}/pages/${initial.id}`);
+      live.current.replaceAll(toDraft(fresh));
+      setVersion(fresh.version);
+      setMeta(fresh);
+      const s = store.getState();
+      s.markSaved(s.draft);
+      live.current.announceSaved(fresh.version, s.draft);
+      setConflict(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }, [siteId, initial.id, store]);
+
+  // Debounced autosave after the last edit. In a shared session only the leader autosaves; the
+  // others follow its saved marker.
   useEffect(() => {
-    if (!dirty || !canEdit) return;
+    if (!dirty || !canEdit || !collab.isLeader) return;
     const t = setTimeout(() => void save(), AUTOSAVE_MS);
     return () => clearTimeout(t);
-  }, [dirty, draft, save, canEdit]);
+  }, [dirty, draft, save, canEdit, collab.isLeader]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -190,9 +229,10 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
                 {meta.schedule.action.toLowerCase()} {new Date(meta.schedule.at).toLocaleString()}
               </Badge>
             )}
-            <span aria-live="polite">{dirty ? 'Unsaved…' : `Saved · v${version}`}</span>
+            <span aria-live="polite">{dirty ? (collab.leaderName ? `Autosaved by ${collab.leaderName}…` : 'Unsaved…') : `Saved · v${version}`}</span>
           </div>
         </div>
+        <Presence collab={collab} selfId={me?.id} />
         {canEdit && (
           <div className="flex items-center gap-0.5">
             <ToolBtn label="Undo (Ctrl+Z)" disabled={!history.canUndo} onClick={history.undo}>
@@ -238,7 +278,7 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
       {conflict && (
         <Alert tone="error" className="mx-4 mt-3">
           Someone else changed this page. Your edits are kept here but can&apos;t be saved over theirs.{' '}
-          <button type="button" className="font-medium underline" onClick={() => window.location.reload()}>
+          <button type="button" className="font-medium underline" onClick={() => void loadLatest()}>
             Reload the latest version
           </button>
         </Alert>
@@ -277,7 +317,7 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
                   <p className="text-sm text-muted-foreground">Select a block on the canvas or in Layers. Drag blocks in from the palette, or generate the page with AI.</p>
                 ))}
               {panel === 'page' && <PagePanel readOnly={!canEdit} siteId={siteId} pageId={initial.id} isHome={meta.fullPath === '/'} />}
-              {panel === 'versions' && <VersionsPanel siteId={siteId} pageId={initial.id} canEdit={canEdit} onRestored={() => window.location.reload()} />}
+              {panel === 'versions' && <VersionsPanel siteId={siteId} pageId={initial.id} canEdit={canEdit} onRestored={() => void loadLatest()} />}
               {panel === 'translate' && <TranslatePanel siteId={siteId} page={meta} locales={site.locales} onDone={(id) => router.push(`/sites/${siteId}/pages/${id}`)} beforeTranslate={save} />}
               {canPublish && panel === 'page' && <SchedulePanel siteId={siteId} page={meta} onChange={setMeta} />}
             </div>

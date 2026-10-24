@@ -42,6 +42,7 @@ export interface PageSummary {
   publishedAt: string | null;
   scheduledAt: string | null;
   createdById: string | null;
+  updatedById: string | null;
 }
 
 export interface PageDetail extends PageSummary {

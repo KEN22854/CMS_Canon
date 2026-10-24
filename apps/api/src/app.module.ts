@@ -23,6 +23,9 @@ import { CollectionsModule } from './modules/collections/collections.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { CanonModule } from './modules/canon/canon.module';
 import { StudioModule } from './modules/studio/studio.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { ExperiencesModule } from './modules/experiences/experiences.module';
+import { CollabModule } from './modules/collab/collab.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { HealthModule } from './modules/health/health.module';
 import { IdentityModule } from './modules/identity/identity.module';
@@ -83,6 +86,9 @@ const REQUEST_ID_HEADER = 'x-request-id';
     KnowledgeModule,
     CanonModule,
     StudioModule,
+    AnalyticsModule,
+    ExperiencesModule,
+    CollabModule,
     DeliveryModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],

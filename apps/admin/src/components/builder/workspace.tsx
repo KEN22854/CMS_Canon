@@ -10,7 +10,7 @@ import { Canvas } from './canvas';
 import { resolveCanvasDrop, resolveLayerDrop, type DragItem, type DropTarget } from './drop';
 import { Layers } from './layers';
 import { Palette } from './palette';
-import { useBuilderStore } from './store';
+import { historyOf, useBuilderStore } from './store';
 
 type Zone = 'canvas' | 'layers';
 
@@ -110,7 +110,7 @@ function useShortcuts(readOnly: boolean) {
       const k = e.key.toLowerCase();
       if (mod && !inRich && (k === 'z' || k === 'y')) {
         e.preventDefault();
-        const t = store.temporal.getState();
+        const t = historyOf(store);
         if (k === 'y' || e.shiftKey) t.redo();
         else t.undo();
         return;

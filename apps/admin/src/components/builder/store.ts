@@ -24,6 +24,10 @@ export interface BuilderState {
   selectedId: string | null;
   hoverId: string | null;
   breakpoint: Breakpoint;
+  /** Set while a collaboration session owns undo/redo (Y.UndoManager: only your own edits). */
+  collabHistory: CollabHistory | null;
+  /** Blocks collaborators have selected (drawn as coloured outlines on the canvas). */
+  remoteSelections: RemoteSelection[];
 
   setMeta: (patch: Partial<Omit<Draft, 'content'>>, coalesceKey?: string) => void;
   updateProps: (id: string, patch: Record<string, unknown>, coalesceKey?: string) => void;
@@ -37,9 +41,26 @@ export interface BuilderState {
   /** Server-side changes (restore, reload) that must not be undoable into. */
   reset: (draft: Draft) => void;
   markSaved: (draft: Draft) => void;
+  /** A collaborator's change: replaces the draft without an undo step of its own. */
+  applyRemote: (draft: Draft) => void;
+  setCollabHistory: (h: CollabHistory | null) => void;
+  setRemoteSelections: (r: RemoteSelection[]) => void;
   select: (id: string | null) => void;
   hover: (id: string | null) => void;
   setBreakpoint: (b: Breakpoint) => void;
+}
+
+export interface RemoteSelection {
+  blockId: string;
+  name: string;
+  color: string;
+}
+
+export interface CollabHistory {
+  canUndo: boolean;
+  canRedo: boolean;
+  undo: () => void;
+  redo: () => void;
 }
 
 /** Consecutive edits of the same field within this window collapse into one undo step (typing). */
@@ -66,6 +87,8 @@ export function createBuilderStore(initial: Draft) {
           selectedId: initial.content.root.children[0]?.id ?? null,
           hoverId: null,
           breakpoint: 'desktop',
+          collabHistory: null,
+          remoteSelections: [],
 
           setMeta: (patch, key) => {
             pendingKey = key ?? null;
@@ -104,6 +127,16 @@ export function createBuilderStore(initial: Draft) {
             store.temporal.getState().clear();
           },
           markSaved: (draft) => set({ saved: draft }),
+          applyRemote: (draft) => {
+            const t = store.temporal.getState();
+            t.pause();
+            const sel = get().selectedId;
+            // A collaborator may delete the block you have selected.
+            set({ draft, selectedId: sel && findNode(draft.content.root, sel) ? sel : null });
+            t.resume();
+          },
+          setCollabHistory: (collabHistory) => set({ collabHistory }),
+          setRemoteSelections: (remoteSelections) => set({ remoteSelections }),
           select: (id) => set({ selectedId: id }),
           hover: (id) => (get().hoverId === id ? undefined : set({ hoverId: id })),
           setBreakpoint: (breakpoint) => set({ breakpoint }),
@@ -156,7 +189,14 @@ export function useHistory() {
   const t = s.temporal as StoreApi<ReturnType<BuilderStore['temporal']['getState']>>;
   const canUndo = useStore(t, (x) => x.pastStates.length > 0);
   const canRedo = useStore(t, (x) => x.futureStates.length > 0);
+  const collab = useStore(s, (x) => x.collabHistory);
+  if (collab) return collab;
   return { canUndo, canRedo, undo: () => t.getState().undo(), redo: () => t.getState().redo() };
+}
+
+/** Undo/redo outside React (shortcuts): the collaboration history wins while a session is live. */
+export function historyOf(s: BuilderStore): { undo: () => void; redo: () => void } {
+  return s.getState().collabHistory ?? s.temporal.getState();
 }
 
 export function selectedNode(s: BuilderState): BlockNode | null {

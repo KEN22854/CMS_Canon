@@ -481,6 +481,7 @@ model Site {
   forms       Form[]
   webhooks    Webhook[]
   branches    ContentBranch[]
+  segments    Segment[]
   kgEntities  KgEntity[]
   facts       Fact[]
 
@@ -527,15 +528,16 @@ model Page {
   /// GENERATED ALWAYS (title A, description B, content strings C) — see search_indexes migration.
   searchVector       Unsupported("tsvector")? @default(dbgenerated())
 
-  site      Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  parent    Page?         @relation("PageTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children  Page[]        @relation("PageTree")
-  template  Page?         @relation("PageTemplate", fields: [templateId], references: [id], onDelete: SetNull)
-  usedBy    Page[]        @relation("PageTemplate")
-  createdBy User?         @relation("PageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy User?         @relation("PageUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  versions  PageVersion[]
-  abTests   AbTest[]
+  site             Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  parent           Page?             @relation("PageTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children         Page[]            @relation("PageTree")
+  template         Page?             @relation("PageTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  usedBy           Page[]            @relation("PageTemplate")
+  createdBy        User?             @relation("PageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy        User?             @relation("PageUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  versions         PageVersion[]
+  abTests          AbTest[]
+  personalizations Personalization[]
 
   // Uniqueness (siteId, fullPath, locale) WHERE deletedAt IS NULL lives in raw SQL.
   @@index([siteId, fullPath, locale])
@@ -1577,4 +1579,108 @@ model OutboxEvent {
   @@index([publishedAt, occurredAt])
   @@index([aggregateType, aggregateId])
   @@map("outbox_events")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 6: personalization, analytics rollups, realtime collaboration
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum PersonalizationStatus {
+  ACTIVE
+  PAUSED
+}
+
+/// Audience defined by request-time rules (country, device, UTM, returning…), evaluated at the edge.
+model Segment {
+  id          String    @id @default(cuid())
+  tenantId    String
+  siteId      String
+  name        String
+  description String?
+  /// {match: "all"|"any", conditions: [{attr, op, value}]} — validated by @canon/edge.
+  rules       Json
+  aiGenerated Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  site             Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  personalizations Personalization[]
+
+  @@index([tenantId])
+  @@index([siteId])
+  @@map("segments")
+}
+
+/// A block patch shown to one segment on one page; the first matching segment by priority wins.
+model Personalization {
+  id        String                @id @default(cuid())
+  tenantId  String
+  siteId    String
+  pageId    String
+  segmentId String
+  priority  Int                   @default(100)
+  /// {blockId: {prop: value, "__hidden"?: true}}
+  patch     Json
+  status    PersonalizationStatus @default(ACTIVE)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  page    Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  segment Segment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, segmentId])
+  @@index([tenantId])
+  @@index([siteId, status])
+  @@map("personalizations")
+}
+
+/// Daily per-path rollup of analytics_events (raw events stay partitioned and age out).
+model AnalyticsDailyPage {
+  tenantId    String
+  siteId      String
+  day         DateTime @db.Date
+  path        String
+  pageId      String?
+  views       Int      @default(0)
+  visitors    Int      @default(0)
+  sessions    Int      @default(0)
+  entrances   Int      @default(0)
+  bounces     Int      @default(0)
+  engagedMs   BigInt   @default(0)
+  conversions Int      @default(0)
+
+  @@id([siteId, day, path])
+  @@index([tenantId])
+  @@map("analytics_daily_pages")
+}
+
+/// Daily rollup by one dimension (referrer, country, device, browser, utm_source…).
+model AnalyticsDailyDim {
+  tenantId    String
+  siteId      String
+  day         DateTime @db.Date
+  dim         String
+  value       String
+  views       Int      @default(0)
+  visitors    Int      @default(0)
+  conversions Int      @default(0)
+
+  @@id([siteId, day, dim, value])
+  @@index([tenantId])
+  @@map("analytics_daily_dims")
+}
+
+/// Persisted Yjs document of a collaborative editing session ("page:<id>").
+model CollabDocument {
+  name       String            @id
+  tenantId   String
+  entityType ContentEntityType
+  entityId   String
+  state      Bytes
+  version    Int               @default(0)
+  updatedAt  DateTime          @updatedAt
+
+  @@index([tenantId])
+  @@map("collab_documents")
 }

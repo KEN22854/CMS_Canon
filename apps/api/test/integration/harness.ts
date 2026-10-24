@@ -67,7 +67,7 @@ export async function startFakeOllama(): Promise<{ url: string; close: () => Pro
  * can see what was translated), an SEO object, a vision description, else an echo.
  */
 function fakeReply(user: string, json: boolean, hasImage: boolean, transcript = user): string {
-  const builder = builderReply(user, hasImage, transcript) ?? collectionsReply(user) ?? canonReply(user, transcript);
+  const builder = builderReply(user, hasImage, transcript) ?? collectionsReply(user) ?? canonReply(user, transcript) ?? experiencesReply(user);
   if (builder) return builder;
   if (hasImage) return 'A purple square with a yellow circle in the middle';
   if (json) {
@@ -84,6 +84,37 @@ function fakeReply(user: string, json: boolean, hasImage: boolean, transcript = 
     return JSON.stringify({ title: 'Simple, fair pricing', description: 'Plans for every team size.', keywords: ['pricing', 'plans'] });
   }
   return `echo: ${user.slice(0, 40)}`;
+}
+
+/**
+ * Phase 6 prompts, each with a built-in temptation the server must resist: insights cite a path
+ * that isn't in the data, the recommender declares a winner too early, and one suggested variant
+ * is too long for its block.
+ */
+function experiencesReply(user: string): string | null {
+  if (user.startsWith('<data>')) {
+    return JSON.stringify({
+      summary: 'Traffic grew and the pricing page converts.',
+      insights: [
+        { title: 'Pricing converts', detail: 'Most conversions start on /pricing.', severity: 'positive', path: '/pricing' },
+        { title: 'Ghost page', detail: 'Invented.', severity: 'info', path: '/does-not-exist' },
+      ],
+      recommendations: [{ title: 'Test the hero', detail: 'Try a benefit-led headline.', action: 'ab_test', path: '/pricing' }],
+    });
+  }
+  if (user.includes('<stats>')) return JSON.stringify({ decision: 'declare_winner', winnerVariantId: 'b', reasoning: 'B looks better already.', nextSteps: ['Ship B'] });
+  const texts = user.match(/<texts>\n([\s\S]*?)\n<\/texts>/);
+  if (texts) {
+    const orig = JSON.parse(texts[1]!) as Record<string, string>;
+    const map = (f: (v: string) => string) => Object.fromEntries(Object.entries(orig).map(([k, v]) => [k, f(v)]));
+    return JSON.stringify({
+      variants: [
+        { name: 'Benefit-led', hypothesis: 'Outcomes beat features', texts: map((v) => `Benefit: ${v}`) },
+        { name: 'Too long', hypothesis: 'More words', texts: map(() => 'x'.repeat(600)) },
+      ],
+    });
+  }
+  return null;
 }
 
 export function fakeEmbedding(text: string): number[] {

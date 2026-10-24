@@ -426,6 +426,7 @@ const summarySelect = {
   updatedAt: true,
   createdAt: true,
   createdById: true,
+  updatedById: true,
   tenantId: true,
 } satisfies Prisma.PageSelect;
 
@@ -452,6 +453,7 @@ function presentSummary(p: Prisma.PageGetPayload<{ select: typeof summarySelect 
     updatedAt: p.updatedAt,
     createdAt: p.createdAt,
     createdById: p.createdById,
+    updatedById: p.updatedById,
   };
 }
 

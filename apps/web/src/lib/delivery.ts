@@ -48,6 +48,8 @@ export interface DeliveryPage {
   nav: { title: string; path: string }[];
   media: Record<string, DeliveryMedia>;
   facts: Record<string, string>;
+  /** Which experiment variants / segment the API actually applied (re-validated server-side). */
+  applied?: { experiments: { testId: string; variantId: string }[]; segmentId: string | null };
 }
 
 export interface DeliveryList {
@@ -74,8 +76,9 @@ export function resolveSite(host: string): Promise<DeliverySite | null> {
   return get<DeliverySite>(`/resolve?host=${encodeURIComponent(host)}`, [`host:${host}`]);
 }
 
-export function getPage(site: DeliverySite, path: string, locale: string): Promise<DeliveryPage | null> {
-  return get<DeliveryPage>(`/sites/${site.id}/page?path=${encodeURIComponent(path)}&locale=${locale}`, [`site:${site.id}`, `host:${site.host}`]);
+export function getPage(site: DeliverySite, path: string, locale: string, variant?: string): Promise<DeliveryPage | null> {
+  const v = variant ? `&variant=${encodeURIComponent(variant)}` : '';
+  return get<DeliveryPage>(`/sites/${site.id}/page?path=${encodeURIComponent(path)}&locale=${locale}${v}`, [`site:${site.id}`, `host:${site.host}`]);
 }
 
 export function getPreview(token: string): Promise<DeliveryPage | null> {

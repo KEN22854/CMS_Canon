@@ -297,7 +297,7 @@ function CtaLink({ href, label, variant }: { href: string; label: string; varian
           ? 'rounded-site bg-white px-6 py-3 font-semibold text-site-primary shadow hover:opacity-90'
           : 'rounded-site bg-site-primary px-6 py-3 font-semibold text-white shadow hover:opacity-90';
   return (
-    <a href={href} className={`inline-block ${cls}`} {...(external ? { rel: 'noopener noreferrer' } : {})}>
+    <a href={href} data-canon-event="cta_click" className={`inline-block ${cls}`} {...(external ? { rel: 'noopener noreferrer' } : {})}>
       {label}
     </a>
   );

@@ -35,8 +35,13 @@ export class DeliveryController {
   }
 
   @Get('sites/:siteId/page')
-  page(@Param('siteId') siteId: string, @Query('path') path = '/', @Query('locale') locale?: string) {
-    return this.delivery.page(siteId, path, locale);
+  page(@Param('siteId') siteId: string, @Query('path') path = '/', @Query('locale') locale?: string, @Query('variant') variant?: string) {
+    return this.delivery.page(siteId, path, locale, variant);
+  }
+
+  @Get('sites/:siteId/runtime')
+  runtime(@Param('siteId') siteId: string) {
+    return this.delivery.runtime(siteId);
   }
 
   @Get('sites/:siteId/pages')

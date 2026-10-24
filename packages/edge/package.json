@@ -1,0 +1,26 @@
+{
+  "name": "@canon/edge",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Edge-safe experimentation and personalization logic shared by the API and the renderer proxy: segment rules, deterministic assignment, variant keys, block patches",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2",
+    "vitest": "^5.0.5"
+  }
+}

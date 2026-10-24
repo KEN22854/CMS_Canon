@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { findParent } from '../editor/tree-ops';
 import { BlockAiMenu } from './block-ai';
 import type { DropTarget } from './drop';
-import { useBuilder, type Breakpoint } from './store';
+import { useBuilder, type Breakpoint, type RemoteSelection } from './store';
 
 const WIDTH: Record<Breakpoint, string> = { desktop: '100%', tablet: '768px', mobile: '390px' };
 
@@ -50,10 +50,11 @@ export function Canvas({
   const root = useBuilder((s) => s.draft.content.root);
   const selectedId = useBuilder((s) => s.selectedId);
   const hoverId = useBuilder((s) => s.hoverId);
+  const remote = useBuilder((s) => s.remoteSelections);
   const breakpoint = useBuilder((s) => s.breakpoint);
   const select = useBuilder((s) => s.select);
   const hover = useBuilder((s) => s.hover);
-  const [rects, setRects] = useState<{ sel: Rect | null; hov: Rect | null }>({ sel: null, hov: null });
+  const [rects, setRects] = useState<{ sel: Rect | null; hov: Rect | null; remote: (RemoteSelection & { rect: Rect })[] }>({ sel: null, hov: null, remote: [] });
 
   const measure = useCallback(() => {
     const host = hostRef.current;
@@ -66,8 +67,15 @@ export function Canvas({
       const r = el.getBoundingClientRect();
       return { x: r.left - hr.left, y: r.top - hr.top, w: r.width, h: r.height };
     };
-    setRects({ sel: rectOf(selectedId), hov: hoverId !== selectedId ? rectOf(hoverId) : null });
-  }, [hostRef, root, selectedId, hoverId]);
+    setRects({
+      sel: rectOf(selectedId),
+      hov: hoverId !== selectedId ? rectOf(hoverId) : null,
+      remote: remote.flatMap((r) => {
+        const rect = rectOf(r.blockId);
+        return rect ? [{ ...r, rect }] : [];
+      }),
+    });
+  }, [hostRef, root, selectedId, hoverId, remote]);
 
   useLayoutEffect(() => {
     measure();
@@ -104,6 +112,13 @@ export function Canvas({
 
           {/* Overlay: never intercepts the pointer except for the toolbar itself. */}
           <div className="pointer-events-none absolute inset-0">
+            {rects.remote.map((r) => (
+              <div key={r.name + r.blockId} className="absolute rounded-sm border-2" style={{ left: r.rect.x, top: r.rect.y, width: r.rect.w, height: r.rect.h, borderColor: r.color }}>
+                <span className="absolute -bottom-5 right-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium text-white" style={{ background: r.color }}>
+                  {r.name}
+                </span>
+              </div>
+            ))}
             {rects.hov && !dragging && <Outline rect={rects.hov} className="border border-primary/50" />}
             {rects.sel && <Outline rect={rects.sel} className="border-2 border-primary" />}
             {rects.sel && selectedId && !dragging && !readOnly && <Toolbar rect={rects.sel} id={selectedId} siteId={siteId} pageId={pageId} />}

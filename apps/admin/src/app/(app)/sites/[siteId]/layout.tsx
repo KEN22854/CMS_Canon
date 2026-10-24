@@ -21,6 +21,9 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
     { href: `/sites/${siteId}/collections`, label: 'Collections' },
     { href: `/sites/${siteId}/media`, label: 'Media' },
     { href: `/sites/${siteId}/search`, label: 'Search & answers' },
+    ...(ability.can('read', 'Analytics') ? [{ href: `/sites/${siteId}/analytics`, label: 'Analytics' }] : []),
+    ...(ability.can('read', 'AbTest') ? [{ href: `/sites/${siteId}/experiments`, label: 'Experiments' }] : []),
+    { href: `/sites/${siteId}/audiences`, label: 'Audiences' },
     ...(ability.can('update', 'Site') ? [{ href: `/sites/${siteId}/settings`, label: 'Settings' }] : []),
   ];
   return (

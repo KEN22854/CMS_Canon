@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { cookies, draftMode } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { BlockRenderer } from '@canon/ui-blocks';
+import { Tracker } from '@/components/tracker';
 import { PREVIEW_COOKIE } from '@/lib/preview';
 import { getPage, getPreview, localizedHref, resolveSite, splitLocale, type DeliveryPage, type DeliverySite } from '@/lib/delivery';
 
@@ -13,19 +14,24 @@ export function generateStaticParams() {
 }
 
 type Params = Promise<{ host: string; slug?: string[] }>;
+const NO_EXPERIMENTS: { testId: string; variantId: string }[] = [];
 
 async function load(params: Params): Promise<{ site: DeliverySite; data: DeliveryPage } | null> {
-  const { host, slug = [] } = await params;
+  const { host, slug: raw = [] } = await params;
   const site = await resolveSite(decodeURIComponent(host));
   if (!site) return null;
-  const { locale, path } = splitLocale(site, slug.map(decodeURIComponent));
+  // The proxy prefixes the variant key (~t.<test>.<variant>~s.<segment>); the API re-validates it.
+  const first = raw[0] ? decodeURIComponent(raw[0]) : undefined;
+  const variant = first?.startsWith('~') ? first : undefined;
+  const slug = (variant ? raw.slice(1) : raw).map(decodeURIComponent);
+  const { locale, path } = splitLocale(site, slug);
   // Cookies are read only in draft mode, so published pages stay statically cacheable.
   if ((await draftMode()).isEnabled) {
     const token = (await cookies()).get(PREVIEW_COOKIE)?.value;
     const preview = token ? await getPreview(token) : null;
     if (preview && preview.site.id === site.id && preview.page.path === path && preview.page.locale === locale) return { site, data: preview };
   }
-  const data = await getPage(site, path, locale);
+  const data = await getPage(site, path, locale, variant);
   return data ? { site, data } : null;
 }
 
@@ -93,6 +99,7 @@ export default async function SitePage({ params }: { params: Params }) {
       <main>
         <BlockRenderer node={page.content.root} ctx={{ media: data.media, facts: data.facts, draft: data.draft }} isRoot />
       </main>
+      {!data.draft && <Tracker siteId={site.id} path={page.path} title={page.title} experiments={data.applied?.experiments ?? NO_EXPERIMENTS} />}
       <footer className="border-t border-site-fg/10 py-8 text-center text-sm opacity-60">
         © {new Date().getFullYear()} {site.name}
       </footer>

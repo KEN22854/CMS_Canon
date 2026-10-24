@@ -131,6 +131,8 @@ canon-cms/
 │   ├── db/                       Prisma schema (47 models), raw SQL migrations, RLS helper, seed
 │   ├── ai-gateway/               Provider-agnostic LLM gateway (ports & adapters) + tests
 │   ├── blocks/                   Block schemas, rich text, tree validation & text helpers (Phase 2 ✔; full set: 3)
+│   ├── edge/                     Visitor context, segments, sticky variant assignment, block patches (Phase 6)
+│   ├── collab/                   Page draft ⇄ Yjs document, minimal diffs, draft hash (Phase 6)
 │   ├── canon/                    Fact graph domain: extract, lint, propagate (Phase 5)
 │   ├── agents/                   LangGraph agent runtime + tool registry  (Phase 5)
 │   ├── sdk/                      Typed client (ts-rest/orval)            (Phase 2)
@@ -185,6 +187,63 @@ canon-cms/
 ### Known limits
 - No real LLM call has been run in this environment (no provider keys). The adapters are typechecked against the installed SDKs (`@anthropic-ai/sdk` 1.x, `openai` 7.x, `@google/genai` 2.x), and the gateway logic is covered by tests with fake providers.
 - Model prices for OpenAI/Google in the seed must be re-checked against provider pricing pages before billing goes live.
+
+## What is in Phase 6
+
+Realtime collaboration, first-party analytics, A/B testing and personalization. All of it runs without AI keys: insights fall back to rules, recommendations to the statistics.
+
+- **Realtime co-editing** (`packages/collab`, `modules/collab`, builder):
+  - the page draft as a Yjs document; the unit of merge is the **block prop**, so two people editing a hero's title and its button both win;
+  - concurrent moves never break the tree (a block under two parents keeps its first place, orphans are dropped);
+  - WebSocket rooms `/v1/collab/page:<id>` speak the standard y-websocket protocol (sync + awareness);
+  - access is checked at the upgrade: access token, same tenant, `read` to join, `update` to send edits, so viewers see live changes but their edits are ignored;
+  - room state is persisted to `collab_documents` with the page version it was built from; a save outside the session (restore, Canon merge) bumps the version, and the room re-seeds instead of resurrecting stale state;
+  - rooms are shared across API instances through Redis pub/sub;
+  - **one leader per room** (lowest client id among editors) autosaves through the normal CAS endpoint, then writes a `saved` marker; the others adopt its version and mark the same draft clean, so validation, versions, Canon and the outbox stay on their single path;
+  - while connected, undo/redo is a `Y.UndoManager` scoped to **your own** edits, so undo never reverts a colleague's work;
+  - presence avatars, colleagues' selections drawn on the canvas, "Autosaved by …" status;
+  - if the room can't be reached, the builder silently stays single-user.
+- **Analytics pipeline** (`modules/analytics`):
+  - the renderer's tracker sends page views, engaged time, CTA clicks (`data-canon-event`) and custom events (`window.canon.track('signup')`) to a first-party `/api/collect`;
+  - Global Privacy Control and Do Not Track mean nothing is sent at all;
+  - the visitor id is a random httpOnly first-party cookie: no fingerprinting, and the user agent is reduced to device/browser/OS before storage;
+  - bots and foreign hosts are dropped, with a per-visitor rate limit;
+  - events go to a Redis buffer and are batch-inserted into the partitioned `analytics_events`;
+  - daily rollups (pages: views, visitors, sessions, entrances, bounces, engaged time, conversions; dimensions: referrer, UTM, country, device, browser, OS) run every 15 minutes, and today is always computed live;
+  - realtime "who is on the site now" comes from Redis only.
+- **AI insights**:
+  - the numbers are computed deterministically (period change, page change, high bounce, zero conversions, z-score anomalies, new sources);
+  - the model only explains them in plain language, and paths it invents are dropped;
+  - without a model, the same signals become rule-based findings;
+  - recommendations link straight to "set up an A/B test" or "personalize".
+- **A/B testing** (`modules/experiences`):
+  - variants are **validated block patches** over the published page (override text props or hide a block), and the control is always the published page;
+  - assignment happens **at the edge** in the renderer's proxy (FNV-1a over test id + visitor id, sticky, with separate traffic-allocation and variant hashes);
+  - each variant is its own ISR cache entry (`/s/<host>/~t.<test>.<variant>/…`): no flicker, no client script, no per-visitor rendering;
+  - the API re-validates the variant key, so a tampered URL just renders the original;
+  - exposure is a page view of the test page; a conversion is the goal event after exposure;
+  - statistics: Wilson 95% CI, two-sided z-test, Bayesian probability to beat control, and a planned sample size (10% MDE); **no winner before the plan is reached**, so peeking is safe;
+  - AI writes variants for a block (only existing text fields, each validated) and recommends the decision; a statistical guard overrides it when it calls a winner too early;
+  - completing a test can write the winner into the page draft, while publishing stays a human decision.
+- **Personalization**:
+  - segments over country, device, language, referrer, UTM, visit number, returning and path, evaluated at the edge with "try a visitor" testing in the UI;
+  - one patch per (page, segment), applied before A/B patches, at most one segment per page view, so the number of cached copies stays bounded;
+  - AI can write copy for a segment;
+  - changes go live within seconds through `ExperimentChanged` / `PersonalizationChanged` → delivery cache invalidation and a 30-second runtime config in the proxy.
+- **Admin**:
+  - site → **Analytics**: KPI tiles with change vs the previous period, daily chart, top pages, sources/campaigns/countries/devices, realtime, insights;
+  - site → **Experiments**: create (page, goal, traffic, variants, AI suggestions), results table, start/pause, recommendation, complete;
+  - site → **Audiences**: segment rule builder, page personalization with live status.
+
+## Phase 6 checklist
+
+- [x] Yjs collaboration: authenticated rooms, read-only viewers, per-prop merge, persistence with stale-room protection, Redis fan-out, presence, leader autosave, per-user undo
+- [x] Analytics pipeline: privacy-first tracker → collector → Redis buffer → partitioned events → daily rollups → reports and realtime
+- [x] AI insights over deterministic signals (+ rules fallback)
+- [x] A/B testing: edge assignment, per-variant ISR, exposures and conversions, Wilson/z-test/Bayes/sample size, AI variants and recommendations with a statistical guard
+- [x] Personalization engine: edge-evaluated segments, page patches, AI copy per segment
+- [x] Tests: 215 in total, all green — fields 15, blocks 16, gateway 30, edge 8, collab 6, API unit 35, admin 7, integration 98 (+8: analytics, insights, A/B, personalization, collaboration over WebSocket)
+- [x] Manual browser check: tracker → analytics dashboard (UTM source recognised) → rules insights; A/B test created in the UI → 12 new visitors split 7/5, one visitor always sees the same variant, bots get the original → exposure and conversion counted; segment "Newsletter readers" → `?utm_source=newsletter` sees its own hero, everyone else the original; one page in two editor tabs → title change synced live, only the leader saved, both show the same version, the colleague's selection is outlined
 
 ## What is in Phase 5
 

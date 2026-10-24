@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@canon/blocks": "workspace:^",
+    "@canon/collab": "workspace:^",
+    "@canon/edge": "workspace:^",
     "@canon/fields": "workspace:^",
     "@canon/ui-blocks": "workspace:^",
     "@casl/ability": "^7.0.2",
@@ -34,6 +36,9 @@
     "react-hook-form": "^7.90.0",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
+    "y-protocols": "^1.0.7",
+    "y-websocket": "^3.1.0",
+    "yjs": "^13.6.33",
     "zod": "^4.6.7",
     "zundo": "^2.3.0",
     "zustand": "^5.0.16"
