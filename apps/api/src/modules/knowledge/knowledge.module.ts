@@ -102,6 +102,6 @@ export class KnowledgeController {
   imports: [SitesModule, IntelligenceModule, ContentAiModule],
   controllers: [KnowledgeController],
   providers: [KnowledgeIndexer, KnowledgeSearch, KnowledgeAnswers],
-  exports: [KnowledgeSearch, KnowledgeIndexer],
+  exports: [KnowledgeSearch, KnowledgeIndexer, KnowledgeAnswers],
 })
 export class KnowledgeModule {}

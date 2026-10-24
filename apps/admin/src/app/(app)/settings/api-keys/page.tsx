@@ -133,6 +133,30 @@ export default function ApiKeysPage() {
           {keys.data?.length === 0 && <li className="px-5 py-4 text-sm text-muted-foreground">No API keys yet.</li>}
         </ul>
       </Card>
+
+      <McpCard />
     </>
+  );
+}
+
+/** How to connect an AI agent (Claude, Cursor, internal bots) through the Model Context Protocol. */
+function McpCard() {
+  const endpoint = typeof window === 'undefined' ? '/api/v1/mcp' : `${window.location.origin}/api/v1/mcp`;
+  const config = JSON.stringify({ mcpServers: { canon: { type: 'http', url: endpoint, headers: { Authorization: 'Bearer ck_…' } } } }, null, 2);
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle>Connect an AI agent (MCP)</CardTitle>
+        <CardDescription>
+          Canon is a Model Context Protocol server. An agent with a key sees only the tools its scopes allow — search, read pages, check text against Canon facts, create drafts, propose fact changes — and can never publish.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
+          <code>{config}</code>
+        </pre>
+        <p className="text-xs text-muted-foreground">Use an agent key: its actions are flagged as AI in the audit log and rate-limited separately.</p>
+      </CardContent>
+    </Card>
   );
 }

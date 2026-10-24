@@ -12,3 +12,6 @@ coverage/
 .vscode/*
 !.vscode/extensions.json
 next-env.d.ts
+
+# Production secrets for deploy/docker-compose.prod.yml
+deploy/.env.production

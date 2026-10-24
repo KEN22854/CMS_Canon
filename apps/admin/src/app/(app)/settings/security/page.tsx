@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { PageHeader } from '@/components/app-shell';
 import { Field } from '@/components/auth-form';
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from '@/components/ui';
-import { api, errorMessage } from '@/lib/api';
+import { ApiError, api, download, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
 import { relativeTime } from '@/lib/utils';
 
@@ -27,11 +27,12 @@ interface SessionRow {
 export default function SecurityPage() {
   return (
     <>
-      <PageHeader title="Security" description="Password, two-factor authentication and signed-in devices." />
+      <PageHeader title="Security" description="Password, two-factor authentication, signed-in devices and your personal data." />
       <div className="space-y-6">
         <TwoFactorCard />
         <PasswordCard />
         <SessionsCard />
+        <YourDataCard />
       </div>
     </>
   );
@@ -251,4 +252,52 @@ function describeAgent(ua: string | null): string {
   const browser = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
   const os = /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Linux/.test(ua) ? 'Linux' : '';
   return os ? `${browser} on ${os}` : browser;
+}
+
+/** GDPR: a copy of everything about you, and erasure (anonymization) of the account. */
+function YourDataCard() {
+  const clear = useAuth((s) => s.clear);
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [blocked, setBlocked] = useState<{ id: string; name: string }[] | null>(null);
+  const erase = useMutation({
+    mutationFn: () => api('/me/delete', { body: { password: password || undefined, confirm: 'DELETE' } }),
+    onSuccess: () => {
+      clear();
+      window.location.assign('/login');
+    },
+    onError: (err) => {
+      if (err instanceof ApiError && err.status === 409) setBlocked((err.details as { workspaces?: { id: string; name: string }[] })?.workspaces ?? []);
+      else toast.error(errorMessage(err));
+    },
+  });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Your data</CardTitle>
+        <CardDescription>Download a copy of your profile, memberships, sessions, activity and AI requests — or delete your account.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <Button variant="outline" onClick={() => void download('/me/export', 'canon-my-data.json').catch((err) => toast.error(errorMessage(err)))}>
+          Download my data
+        </Button>
+        <div className="space-y-2 border-t pt-4">
+          <p className="text-sm font-medium text-destructive">Delete account</p>
+          <p className="text-xs text-muted-foreground">Your name and email are erased and you are removed from every workspace. Content you created stays with its workspace, attributed to “Deleted user”. This cannot be undone.</p>
+          {blocked && (
+            <Alert tone="error">
+              You own {blocked.map((w) => w.name).join(', ')}. Transfer ownership to someone else or delete {blocked.length === 1 ? 'that workspace' : 'those workspaces'} first.
+            </Alert>
+          )}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Input type="password" aria-label="Current password" placeholder="Current password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Input aria-label="Type DELETE to confirm" placeholder="Type DELETE to confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          </div>
+          <Button variant="outline" className="border-destructive/40 text-destructive" disabled={confirm !== 'DELETE'} loading={erase.isPending} onClick={() => erase.mutate()}>
+            Delete my account
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }

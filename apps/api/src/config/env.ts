@@ -86,6 +86,19 @@ export const envSchema = z.object({
   LANGFUSE_SECRET_KEY: optionalSecret,
   OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional().or(z.literal('').transform(() => undefined)),
   OTEL_SERVICE_NAME: z.string().default('canon-api'),
+
+  /** Billing is off until a Stripe secret key is configured; plans can still be set by super admins. */
+  STRIPE_SECRET_KEY: optionalSecret,
+  STRIPE_WEBHOOK_SECRET: optionalSecret,
+  /** Overridable for tests (a local fake) and Stripe's mock server. */
+  STRIPE_API_BASE: z.url().default('https://api.stripe.com'),
+  STRIPE_PRICE_PRO: z.string().optional().or(z.literal('').transform(() => undefined)),
+  STRIPE_PRICE_BUSINESS: z.string().optional().or(z.literal('').transform(() => undefined)),
+  /** Billing meter event name for AI overage (cents above the plan's included budget). */
+  STRIPE_AI_METER_EVENT: z.string().default('canon_ai_overage_cents'),
+
+  /** SSO domains are proven with a DNS TXT record; 'off' (dev/test only) trusts the claim. */
+  SSO_DOMAIN_VERIFICATION: z.enum(['dns', 'off']).default('dns'),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
@@ -99,6 +112,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (parsed.data.NODE_ENV === 'production') {
     if (parsed.data.JWT_ACCESS_SECRET.startsWith('dev-')) throw new Error('Refusing to start in production with development JWT secrets');
     if (parsed.data.MAIL_TRANSPORT === 'memory') throw new Error('MAIL_TRANSPORT=memory is test-only');
+    if (parsed.data.SSO_DOMAIN_VERIFICATION === 'off') throw new Error('SSO_DOMAIN_VERIFICATION=off is for development only');
     for (const k of ['REVALIDATE_SECRET', 'DELIVERY_TOKEN'] as const) if (parsed.data[k].startsWith('dev-')) throw new Error(`Refusing to start in production with the development ${k}`);
   }
   return parsed.data;

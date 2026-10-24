@@ -1,0 +1,77 @@
+# Single-host production:
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d
+# Put a TLS-terminating proxy (Caddy, Traefik, nginx) in front of admin (:3000) and web (:3001).
+# The browser reaches the API only through the admin's /api proxy; the renderer talks to it
+# on the internal network.
+name: canon
+
+x-app: &app
+  env_file: .env.production
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: canon
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      # Creates canon_app / canon_system — change their passwords right after the first start.
+      - ../docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d canon"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Queues must never lose jobs to eviction.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  migrate:
+    <<: *app
+    image: ${REGISTRY:-canon}/canon-migrate:${TAG:-latest}
+    restart: "no"
+    # The owner (migrator) role — never canon_app.
+    environment:
+      DATABASE_URL: ${MIGRATE_DATABASE_URL:?set MIGRATE_DATABASE_URL}
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  api:
+    <<: *app
+    image: ${REGISTRY:-canon}/canon-api:${TAG:-latest}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+
+  admin:
+    image: ${REGISTRY:-canon}/canon-admin:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      CANON_API_URL: http://api:4000
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on: [api]
+
+  web:
+    image: ${REGISTRY:-canon}/canon-web:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      CANON_API_URL: http://api:4000
+      DELIVERY_TOKEN: ${DELIVERY_TOKEN:?set DELIVERY_TOKEN}
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:?set REVALIDATE_SECRET}
+    ports: ["127.0.0.1:3001:3001"]
+    depends_on: [api]
+
+volumes:
+  pg-data:
+  redis-data:

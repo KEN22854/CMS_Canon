@@ -229,7 +229,7 @@ export interface TestApp {
 export async function createTestApp(extraEnv: Record<string, string> = {}): Promise<TestApp> {
   Object.assign(process.env, inject('testEnv'), extraEnv);
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
+  const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false, rawBody: true });
   const config = app.get<AppConfig>(APP_CONFIG);
   configureApp(app, config);
   await app.init();
@@ -306,4 +306,68 @@ export async function drainOutbox(t: TestApp, tenantId: string): Promise<void> {
   }
   const stuck = await t.system.outboxEvent.findMany({ where: { tenantId, publishedAt: null }, select: { type: true, attempts: true } });
   throw new Error(`outbox for tenant ${tenantId} did not drain: ${JSON.stringify(stuck)}`);
+}
+
+/** Minimal Stripe stand-in: records calls; subscriptions are whatever the test puts in the map. */
+export async function startFakeStripe() {
+  const state = {
+    calls: [] as { method: string; path: string; form: Record<string, string> }[],
+    subscriptions: new Map<string, Record<string, unknown>>(),
+  };
+  const server: Server = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c: Buffer) => (raw += c.toString()));
+    req.on('end', () => {
+      const path = req.url ?? '';
+      const form = Object.fromEntries(new URLSearchParams(raw));
+      state.calls.push({ method: req.method ?? '', path, form });
+      const json = (status: number, body: unknown) => (res.writeHead(status, { 'content-type': 'application/json' }), res.end(JSON.stringify(body)));
+      if (req.headers.authorization !== 'Bearer sk_test_fake') return json(401, { error: { message: 'bad key' } });
+      if (path === '/v1/customers') return json(200, { id: `cus_${randomBytes(4).toString('hex')}` });
+      if (path === '/v1/checkout/sessions') return json(200, { id: 'cs_test', url: `https://checkout.stripe.test/${form.client_reference_id}` });
+      if (path === '/v1/billing_portal/sessions') return json(200, { url: `https://billing.stripe.test/${form.customer}` });
+      if (path === '/v1/billing/meter_events') return json(200, { identifier: form.identifier });
+      const sub = /^\/v1\/subscriptions\/(.+)$/.exec(path);
+      if (sub) return state.subscriptions.has(sub[1]!) ? json(200, state.subscriptions.get(sub[1]!)) : json(404, { error: { message: 'no such subscription' } });
+      json(404, { error: { message: `unhandled ${path}` } });
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, state, close: () => new Promise<void>((r) => server.close(() => r())) };
+}
+
+/** Invites `role` into the owner's tenant and registers the invitee. */
+export async function invited(t: TestApp, owner: SignedIn, role: string): Promise<SignedIn> {
+  const email = uniqueEmail(role.toLowerCase());
+  await t.http.post(`/v1/tenants/${owner.tenantId}/members/invite`).set(bearer(owner.accessToken)).send({ email, role }).expect(201);
+  const token = tokenFromMail(t.mailer, email, /invite\/([\w-]+)/);
+  const r = await t.http.post('/v1/auth/register').set('x-forwarded-for', ip()).send({ email, password: PASSWORD, name: role, inviteToken: token }).expect(201);
+  return { email, accessToken: r.body.accessToken, cookie: refreshCookie(r), userId: r.body.user.id, tenantId: r.body.tenant.id };
+}
+
+/** HTTP receiver for outbound webhooks: records every request; `status` sets the reply code. */
+export async function startReceiver() {
+  const state = { status: 200, requests: [] as { path: string; headers: Record<string, string | string[] | undefined>; body: string }[] };
+  const server: Server = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c: Buffer) => (raw += c.toString()));
+    req.on('end', () => {
+      state.requests.push({ path: req.url ?? '', headers: req.headers, body: raw });
+      res.writeHead(state.status, { 'content-type': 'application/json' });
+      res.end('{"ok":true}');
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return { url, state, close: () => new Promise<void>((r) => server.close(() => r())) };
+}
+
+export async function waitFor<T>(fn: () => T | undefined | Promise<T | undefined>, ms = 10_000): Promise<T> {
+  const end = Date.now() + ms;
+  for (;;) {
+    const v = await fn();
+    if (v) return v;
+    if (Date.now() > end) throw new Error('waitFor: timed out');
+    await new Promise((r) => setTimeout(r, 50));
+  }
 }

@@ -16,6 +16,8 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
   // SSE must not be compressed: gzip buffers chunks and destroys token-by-token streaming.
   app.use(compression({ filter: (req, res) => !String(res.getHeader('Content-Type') ?? '').startsWith('text/event-stream') && compression.filter(req, res) }));
   app.useBodyParser('json', { limit: '10mb' });
+  // SAML responses arrive as an HTML form POST from the identity provider.
+  app.useBodyParser('urlencoded', { extended: false, limit: '2mb' });
   app.use(cookieParser());
   app.enableCors({
     // Per-tenant custom-domain origins are added in Phase 2 via a dynamic origin callback.

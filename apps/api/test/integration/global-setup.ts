@@ -88,6 +88,9 @@ export default async function setup(project: TestProject): Promise<() => Promise
     JWT_ACCESS_SECRET: randomBytes(32).toString('hex'),
     ENCRYPTION_KEY: randomBytes(32).toString('base64'),
     MAIL_TRANSPORT: 'memory',
+    // Platform-wide recurring jobs would act on every test's tenants in the shared database.
+    BILLING_JOBS: 'off',
+    COMPLIANCE_JOBS: 'off',
     AI_DEFAULT_MODEL: 'ollama/llama3.1:8b',
     // Text calls land on llama (default); vision calls (alt text) need the VL model.
     AI_FALLBACK_MODELS: 'ollama/qwen2.5vl:7b',

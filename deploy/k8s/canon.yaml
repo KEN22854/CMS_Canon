@@ -1,0 +1,191 @@
+# Reference manifests: fill the Secret (or use External Secrets), then
+#   kubectl apply -f deploy/k8s/canon.yaml
+# Postgres 16 with pgvector, Redis 7 and S3 are expected as managed services.
+apiVersion: v1
+kind: Namespace
+metadata: { name: canon }
+---
+apiVersion: v1
+kind: Secret
+metadata: { name: canon-secrets, namespace: canon }
+type: Opaque
+stringData:
+  APP_DATABASE_URL: "postgresql://canon_app:CHANGE_ME@postgres:5432/canon"
+  SYSTEM_DATABASE_URL: "postgresql://canon_system:CHANGE_ME@postgres:5432/canon"
+  MIGRATE_DATABASE_URL: "postgresql://canon:CHANGE_ME@postgres:5432/canon"
+  REDIS_URL: "rediss://default:CHANGE_ME@redis:6380"
+  JWT_ACCESS_SECRET: "CHANGE_ME_AT_LEAST_32_RANDOM_CHARS"
+  ENCRYPTION_KEY: "CHANGE_ME_32_BYTES_BASE64"
+  DELIVERY_TOKEN: "CHANGE_ME"
+  REVALIDATE_SECRET: "CHANGE_ME"
+  S3_ACCESS_KEY: "CHANGE_ME"
+  S3_SECRET_KEY: "CHANGE_ME"
+  SMTP_URL: "smtps://user:CHANGE_ME@smtp.example.com:465"
+  ANTHROPIC_API_KEY: ""
+  OPENAI_API_KEY: ""
+  STRIPE_SECRET_KEY: ""
+  STRIPE_WEBHOOK_SECRET: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: canon-config, namespace: canon }
+data:
+  NODE_ENV: "production"
+  API_PUBLIC_URL: "https://app.example.com/api"
+  ADMIN_PUBLIC_URL: "https://app.example.com"
+  PUBLIC_SITES_DOMAIN: "sites.example.com"
+  WEB_REVALIDATE_URL: "http://canon-web:3001/api/revalidate"
+  TRUST_PROXY: "loopback,linklocal,uniquelocal"
+  S3_ENDPOINT: "https://s3.eu-central-1.amazonaws.com"
+  S3_BUCKET: "canon-media"
+  S3_PUBLIC_URL: "https://media.example.com"
+  MAIL_FROM: "Canon <no-reply@example.com>"
+  AI_DEFAULT_MODEL: "anthropic/claude-sonnet-5-5"
+  STRIPE_PRICE_PRO: "price_xxx"
+  STRIPE_PRICE_BUSINESS: "price_yyy"
+  SSO_DOMAIN_VERIFICATION: "dns"
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: canon-migrate, namespace: canon }
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: registry.example.com/canon-migrate:TAG
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: canon-secrets, key: MIGRATE_DATABASE_URL } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: canon-api, namespace: canon }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: canon-api } }
+  strategy: { rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  template:
+    metadata: { labels: { app: canon-api } }
+    spec:
+      terminationGracePeriodSeconds: 40
+      securityContext: { runAsNonRoot: true, runAsUser: 1000 }
+      containers:
+        - name: api
+          image: registry.example.com/canon-api:TAG
+          ports: [{ containerPort: 4000 }]
+          envFrom: [{ configMapRef: { name: canon-config } }, { secretRef: { name: canon-secrets } }]
+          readinessProbe: { httpGet: { path: /health/ready, port: 4000 }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /health, port: 4000 }, periodSeconds: 15 }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 1Gi }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: canon-api, namespace: canon }
+spec: { selector: { app: canon-api }, ports: [{ port: 4000, targetPort: 4000 }] }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: canon-api, namespace: canon }
+spec: { minAvailable: 2, selector: { matchLabels: { app: canon-api } } }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: canon-api, namespace: canon }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: canon-api }
+  minReplicas: 3
+  maxReplicas: 20
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 65 } } }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: canon-admin, namespace: canon }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: canon-admin } }
+  template:
+    metadata: { labels: { app: canon-admin } }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 1000 }
+      containers:
+        - name: admin
+          image: registry.example.com/canon-admin:TAG
+          ports: [{ containerPort: 3000 }]
+          env: [{ name: CANON_API_URL, value: "http://canon-api:4000" }]
+          readinessProbe: { httpGet: { path: /login, port: 3000 } }
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 512Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: canon-admin, namespace: canon }
+spec: { selector: { app: canon-admin }, ports: [{ port: 3000, targetPort: 3000 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: canon-web, namespace: canon }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: canon-web } }
+  template:
+    metadata: { labels: { app: canon-web } }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 1000 }
+      containers:
+        - name: web
+          image: registry.example.com/canon-web:TAG
+          ports: [{ containerPort: 3001 }]
+          env:
+            - { name: CANON_API_URL, value: "http://canon-api:4000" }
+            - name: DELIVERY_TOKEN
+              valueFrom: { secretKeyRef: { name: canon-secrets, key: DELIVERY_TOKEN } }
+            - name: REVALIDATE_SECRET
+              valueFrom: { secretKeyRef: { name: canon-secrets, key: REVALIDATE_SECRET } }
+          resources: { requests: { cpu: 250m, memory: 384Mi }, limits: { memory: 768Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: canon-web, namespace: canon }
+spec: { selector: { app: canon-web }, ports: [{ port: 3001, targetPort: 3001 }] }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: canon-web, namespace: canon }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: canon-web }
+  minReplicas: 3
+  maxReplicas: 30
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } } }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: canon
+  namespace: canon
+  annotations:
+    # Collaboration WebSockets stay open for the whole editing session.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "30m"
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [app.example.com, "*.sites.example.com"]
+      secretName: canon-tls
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: canon-admin, port: { number: 3000 } } } }
+    - host: "*.sites.example.com"
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: canon-web, port: { number: 3001 } } } }

@@ -191,6 +191,6 @@ export class BranchesController {
   imports: [PagesModule, CollectionsModule, IntelligenceModule, ContentAiModule],
   controllers: [CanonController, BranchesController],
   providers: [ContentTargets, MentionsService, FactsService, PropagationService, BranchesService],
-  exports: [FactsService, MentionsService],
+  exports: [FactsService, MentionsService, PropagationService],
 })
 export class CanonModule {}

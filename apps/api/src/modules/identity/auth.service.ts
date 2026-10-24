@@ -17,6 +17,7 @@ import { InvitationsService } from '../tenancy/invitations.service';
 import { TenantsService, type TenantSummary } from '../tenancy/tenants.service';
 import type { LoginBody, RegisterBody } from './auth.dto';
 import { LoginThrottleService } from './login-throttle.service';
+import { SsoPolicy } from './sso-policy';
 import { SessionService, type ClientMeta, type IssuedSession } from './session.service';
 import { TwoFactorService } from './two-factor.service';
 
@@ -50,6 +51,7 @@ export class AuthService {
     private readonly invitations: InvitationsService,
     private readonly twoFactor: TwoFactorService,
     private readonly throttle: LoginThrottleService,
+    private readonly sso: SsoPolicy,
     private readonly mailer: Mailer,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly logger: PinoLogger,
@@ -135,6 +137,7 @@ export class AuthService {
     if (user.status === 'SUSPENDED' || user.status === 'DISABLED') throw forbidden('This account is disabled', { reason: 'ACCOUNT_DISABLED' });
     if (!user.emailVerified) throw new ApiError('EMAIL_NOT_VERIFIED', 'Confirm your email first — we can resend the link', HttpStatus.FORBIDDEN);
     await this.throttle.reset(body.email);
+    await this.sso.assertPasswordAllowed(user);
 
     const tenantId = body.tenantSlug ? (await this.tenants.listForUser(user.id)).find((t) => t.slug === body.tenantSlug)?.id : undefined;
     if (user.twoFactorEnabled) {
@@ -231,6 +234,11 @@ export class AuthService {
       },
     });
     await this.mailer.send(passwordChangedMail(user.email));
+  }
+
+  /** Session for an identity proven elsewhere (SAML): no password, no Canon 2FA (the IdP owns MFA). */
+  async startFederatedSession(user: User, tenantId: string, meta: ClientMeta): Promise<AuthSuccess> {
+    return this.startSession(user, tenantId, meta);
   }
 
   private async startSession(user: User, preferredTenantId: string | undefined, meta: ClientMeta): Promise<AuthSuccess> {

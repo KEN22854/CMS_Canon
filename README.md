@@ -188,6 +188,68 @@ canon-cms/
 - No real LLM call has been run in this environment (no provider keys). The adapters are typechecked against the installed SDKs (`@anthropic-ai/sdk` 1.x, `openai` 7.x, `@google/genai` 2.x), and the gateway logic is covered by tests with fake providers.
 - Model prices for OpenAI/Google in the seed must be re-checked against provider pricing pages before billing goes live.
 
+## What is in Phase 7
+
+Monetization, the ecosystem and enterprise readiness: billing, plugins and webhooks, an MCP server for AI agents, SSO, audit and compliance, deployment.
+
+- **Billing** (`modules/billing`, Stripe over plain HTTPS, no SDK):
+  - Checkout for Pro/Business, customer portal for plan changes, invoices and cancellation;
+  - **the plan changes only from signature-verified webhooks** (`Stripe-Signature`, 5-minute tolerance), never from the checkout redirect;
+  - idempotent (`billing_events`) and ordered (`lastEventAt`): Stripe retries and late deliveries cannot roll a tenant back;
+  - dunning: `PAST_DUE` keeps paid features, cancellation or `unpaid` returns the tenant to Free, owners are e-mailed on a failed payment;
+  - AI overage above the plan's included budget is reported hourly to a Stripe **billing meter** as a delta with an idempotent identifier;
+  - Enterprise is contract-managed (`PATCH /v1/platform/tenants/:id/plan`, super admins only); without Stripe keys, billing is read-only.
+- **Audit and compliance** (`modules/compliance`):
+  - audit log API with filters (actor, action, entity, AI involvement, dates), cursor pagination and streaming CSV / JSON Lines export (spreadsheet-formula safe);
+  - **tamper evidence**: every finished day is sealed with SHA-256 over its rows, chained to the previous day; verification recomputes the chain, so an edited, inserted or deleted row breaks its day; the request role cannot write digests;
+  - GDPR: download my data (art. 15/20), **erase my account** (art. 17: anonymized; owners must hand over workspaces first; sessions and keys revoked), owner-only full **workspace export**;
+  - deleted workspaces are purged after 30 days; monthly partitions are kept three months ahead.
+- **SSO (SAML 2.0, Enterprise)** (`modules/sso`, `@node-saml/node-saml`):
+  - logins are routed by email domain, but **only for domains proven with a DNS TXT record**; one workspace per domain; consumer mail domains refused;
+  - responses must be signed by the configured IdP certificate, answer an AuthnRequest issued by Canon (single use, kept in Redis), match audience and ACS, and carry an email on a verified domain;
+  - just-in-time provisioning with a default role, SP metadata endpoint;
+  - **enforced SSO** blocks password login for members on those domains, owners keep a break-glass password;
+  - SSO sign-ins are audited; the IdP owns MFA.
+- **Webhooks** (`modules/webhooks`):
+  - stable public event names (`page.published`, `entry.updated`, `fact.changed`…) mapped from the outbox;
+  - signed `Canon-Signature: t=…,v1=HMAC-SHA256(secret, "t.body")`, `Idempotency-Key` stable across retries, secret shown once and rotatable;
+  - delivery log, test ping, redeliver; exponential backoff over 8 attempts; endpoints are paused after 15 consecutive dead deliveries;
+  - **SSRF guard**: HTTPS only, public addresses only, checked when saved and again before every delivery.
+- **Plugins and marketplace** (`modules/plugins`):
+  - plugins are integrations, not code executed by Canon: a validated manifest declares permissions (API-key scopes), events, settings and block presets;
+  - **install = explicit consent** to exactly the requested permissions → a scoped API key (shown once, or delivered to the plugin through a signed install callback) and a managed webhook;
+  - settings with encrypted secrets that are never returned; pause/resume; uninstall revokes the key;
+  - upgrades that ask for more permissions keep the old grant until someone re-consents;
+  - first-party marketplace: **Slack notifications** (built-in adapter), **Zapier / Make / n8n**, **Marketing blocks** (pricing tiers and a launch announcement as built-in blocks, shown in the builder palette);
+  - **private plugins** for Business and Enterprise, visible only to their workspace.
+- **MCP server** (`modules/mcp`, `@modelcontextprotocol/sdk`):
+  - stateless Streamable HTTP at `POST /v1/mcp`, authenticated with an API key;
+  - the tools follow the key's scopes: `list_sites`, `list_pages`, `get_page`, `search_content`, `ask`, `list_facts`, `lint_text` (Canon contradictions), `create_draft_page`, `propose_fact_change` (new fact value + agent-team review branch);
+  - agents can never publish; everything goes through the same services, RLS and audit as the REST API.
+- **Admin**:
+  - **Billing**: usage meters, plan cards, Checkout and portal;
+  - **Integrations**: marketplace with a consent dialog, settings, private manifests, webhooks with a delivery log;
+  - **Audit log**: filters, export, chain verification, workspace export;
+  - **Single sign-on**: SP values to copy, IdP form, DNS verification records;
+  - login with "Sign in with SSO", `SSO_REQUIRED` handling and `/sso/callback`;
+  - Security → "Your data" (export, delete account); API keys → MCP connection snippet; builder palette → "From plugins".
+- **Deployment**:
+  - `docker/Dockerfile` with four targets (`api`, `admin`, `web` as Next standalone servers, `migrate`);
+  - `deploy/docker-compose.prod.yml`, `deploy/k8s/canon.yaml` (probes, PDB, HPA, WebSocket-ready ingress), `deploy/.env.production.example`;
+  - [docs/deployment.md](docs/deployment.md): database roles, configuration reference, Stripe and SAML setup, scaling, backups, upgrades, security checklist.
+
+## Phase 7 checklist
+
+- [x] Billing (Stripe): checkout, portal, verified idempotent ordered webhooks, dunning, AI overage metering, manual Enterprise plans
+- [x] Plugin system and marketplace: manifests, consent, scoped keys, managed webhooks, encrypted settings, upgrades with re-consent, private plugins, block presets in the builder
+- [x] Webhooks: signing, retries, delivery log, redeliver, auto-pause, SSRF protection
+- [x] MCP server: scoped tools over stateless Streamable HTTP; drafts and review branches only
+- [x] SSO/SAML: DNS-verified domains, signed and single-use responses, JIT provisioning, enforced SSO with an owner break-glass path
+- [x] Audit and compliance: query and export, daily hash chain with verification, GDPR export and erasure, workspace export, purge after 30 days, partition upkeep
+- [x] Tests: 234 in total, all green — fields 15, blocks 16, gateway 30, edge 8, collab 6, API unit 35, admin 7, integration 117 (+19: billing, compliance, SSO, webhooks and plugins, MCP). API coverage (`pnpm --filter @canon/api test:coverage`): 81% statements, 87% lines, 83% functions, 66% branches
+- [x] Deployment: Dockerfile (API image built and smoke-tested against Postgres and Redis), production compose, Kubernetes manifests, deployment guide
+- [x] Manual browser check: "Sign in with SSO" for a domain without SSO → clear message; Billing shows usage and plans (Stripe not configured locally → read-only notice); Integrations → Marketing blocks installed → "Pricing tiers" in the builder palette inserts 18 blocks, undone with the collaborative undo; Audit log lists the install and verifies the chain as intact; Single sign-on on Free shows the Enterprise notice
+
 ## What is in Phase 6
 
 Realtime collaboration, first-party analytics, A/B testing and personalization. All of it runs without AI keys: insights fall back to rules, recommendations to the statistics.

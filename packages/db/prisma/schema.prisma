@@ -368,6 +368,8 @@ model Tenant {
   webhooks          Webhook[]
   invitations       Invitation[]
   pluginInstances   PluginInstance[]
+  subscription      Subscription?
+  ssoConnection     SsoConnection?
   aiGenerations     AiGeneration[]
   aiPrompts         AiPrompt[]
   aiAgents          AiAgent[]
@@ -770,23 +772,28 @@ model Media {
 // ───────────────────────────────────────────────────────────────────────────
 
 model Webhook {
-  id              String    @id @default(cuid())
-  tenantId        String
-  siteId          String?
-  name            String
-  url             String
-  events          String[]
+  id               String    @id @default(cuid())
+  tenantId         String
+  siteId           String?
+  name             String
+  url              String
+  events           String[]
   /// HMAC signing secret, encrypted at application level.
-  secret          String
-  isActive        Boolean   @default(true)
-  lastTriggeredAt DateTime?
-  failureCount    Int       @default(0)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  secret           String
+  isActive         Boolean   @default(true)
+  lastTriggeredAt  DateTime?
+  failureCount     Int       @default(0)
+  /// Set when the webhook carries a plugin's event subscription (managed by the plugin, not editable).
+  pluginInstanceId String?   @unique
+  /// Auto-disabled after repeated failures; the reason is shown in the admin.
+  disabledReason   String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  site       Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  deliveries WebhookDelivery[]
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site           Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  pluginInstance PluginInstance?   @relation(fields: [pluginInstanceId], references: [id], onDelete: Cascade)
+  deliveries     WebhookDelivery[]
 
   @@index([tenantId, isActive])
   @@map("webhooks")
@@ -805,6 +812,9 @@ model WebhookDelivery {
   attempts       Int                   @default(0)
   nextRetryAt    DateTime?
   status         WebhookDeliveryStatus @default(PENDING)
+  /// Wall time of the last attempt, for the delivery log.
+  durationMs     Int?
+  error          String?
   createdAt      DateTime              @default(now())
 
   webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
@@ -995,32 +1005,139 @@ model Plugin {
   version     String
   description String?
   author      String?
-  /// {blocks[], adminPages[], apiRoutes[], hooks[], settingsSchema, migrations[], aiTools[]}
+  /// Validated PluginManifest (see apps/api plugins/manifest.ts): permissions, events, settings, blocks.
   manifest    Json
   isActive    Boolean  @default(true)
   installedAt DateTime @default(now())
+  /// Null = marketplace (platform-reviewed); set = a private plugin only that tenant can see.
+  tenantId    String?
+  category    String   @default("integration")
+  /// Marketplace listing shown to every tenant (only for platform plugins).
+  isPublic    Boolean  @default(false)
+  updatedAt   DateTime @default(now()) @updatedAt
 
   blocks    Block[]
   instances PluginInstance[]
 
+  @@index([tenantId])
   @@map("plugins")
 }
 
 model PluginInstance {
-  id            String   @id @default(cuid())
-  pluginId      String
-  tenantId      String
-  settings      Json     @default("{}")
-  isActive      Boolean  @default(true)
-  installedById String?
-  createdAt     DateTime @default(now())
+  id                 String   @id @default(cuid())
+  pluginId           String
+  tenantId           String
+  settings           Json     @default("{}")
+  isActive           Boolean  @default(true)
+  installedById      String?
+  createdAt          DateTime @default(now())
+  /// Permissions the installer granted (a subset of the manifest's, re-consented on upgrade).
+  grantedPermissions String[] @default([])
+  /// The scoped API key the plugin acts with; revoked on uninstall.
+  apiKeyId           String?  @unique
+  /// Version the tenant consented to; a newer manifest needs a new consent if permissions grew.
+  version            String   @default("0.0.0")
+  updatedAt          DateTime @default(now()) @updatedAt
 
   plugin      Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
   tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   installedBy User?  @relation(fields: [installedById], references: [id], onDelete: SetNull)
 
+  webhook Webhook?
+
   @@unique([pluginId, tenantId])
+  @@index([tenantId])
   @@map("plugin_instances")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  UNPAID
+  CANCELED
+  INCOMPLETE
+}
+
+/// The tenant's Stripe subscription, mirrored from webhooks (Stripe is the source of truth).
+model Subscription {
+  id                   String             @id @default(cuid())
+  tenantId             String             @unique
+  stripeSubscriptionId String             @unique
+  stripePriceId        String
+  plan                 TenantPlan
+  status               SubscriptionStatus
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  /// Last Stripe event applied (created timestamp): out-of-order webhooks never roll state back.
+  lastEventAt          DateTime
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+/// Processed Stripe webhook events (idempotency + an audit of what billing did).
+model BillingEvent {
+  id        String   @id
+  type      String
+  tenantId  String?
+  outcome   String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@map("billing_events")
+}
+
+/// Tamper evidence for the audit trail: one SHA-256 per tenant-day over that day's rows, chained
+/// to the previous day's digest. Recomputing and comparing detects edited or deleted rows.
+model AuditDigest {
+  tenantId  String
+  day       DateTime @db.Date
+  count     Int
+  hash      String
+  prevHash  String
+  createdAt DateTime @default(now())
+
+  @@id([tenantId, day])
+  @@map("audit_digests")
+}
+
+enum SsoProtocol {
+  SAML
+}
+
+/// Enterprise single sign-on: one SAML IdP per tenant, matched by verified email domains.
+model SsoConnection {
+  id              String      @id @default(cuid())
+  tenantId        String      @unique
+  protocol        SsoProtocol @default(SAML)
+  name            String
+  /// Lower-case email domains the tenant claims for this IdP.
+  domains         String[]
+  /// The subset proven via a DNS TXT record; only these route logins and enforce SSO. A domain is
+  /// verified by at most one tenant (enforced in the service).
+  verifiedDomains String[]    @default([])
+  idpEntityId     String
+  idpSsoUrl       String
+  /// PEM (or bare base64) X.509 signing certificate of the IdP.
+  idpCertificate  String
+  /// Password login is refused for members with these domains (owners keep a break-glass path).
+  enforced        Boolean     @default(false)
+  /// Just-in-time provisioning: unknown users from the domains become members with defaultRole.
+  jitProvisioning Boolean     @default(true)
+  defaultRole     MemberRole  @default(VIEWER)
+  isActive        Boolean     @default(true)
+  lastLoginAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("sso_connections")
 }
 
 // ───────────────────────────────────────────────────────────────────────────

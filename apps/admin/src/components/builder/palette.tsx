@@ -2,10 +2,12 @@
 
 import { BLOCKS, getBlock, richTextToPlain, type BlockNode, type RichTextDoc } from '@canon/blocks';
 import { useDraggable } from '@dnd-kit/core';
+import { useQuery } from '@tanstack/react-query';
 import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { api, errorMessage } from '@/lib/api';
+import { useTenantId } from '@/lib/queries';
 import { cn, formatUsd } from '@/lib/utils';
 import { Button, Select } from '../ui';
 import { cloneWithIds, newBlock } from '../editor/tree-ops';
@@ -39,6 +41,27 @@ export function Palette({ siteId, pageId, locale }: { siteId: string; pageId: st
           </div>
         );
       })}
+      <PluginBlocks />
+    </div>
+  );
+}
+
+/** Presets from installed plugins: subtrees of built-in blocks, inserted with fresh ids. */
+function PluginBlocks() {
+  const tid = useTenantId();
+  const insert = useBuilder((s) => s.insert);
+  const presets = useQuery({ queryKey: ['plugin-blocks', tid], queryFn: () => api<{ key: string; name: string; description: string; plugin: string; pluginName: string; tree: BlockNode }[]>('/plugins/blocks'), enabled: Boolean(tid), staleTime: 60_000 });
+  if (!presets.data?.length) return null;
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">From plugins</p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {presets.data.map((p) => (
+          <button key={`${p.pluginName}:${p.key}`} type="button" title={`${p.description} — ${p.plugin}`} onClick={() => insert(cloneWithIds(p.tree))} className="rounded-md border border-dashed bg-card px-2 py-2 text-left text-xs font-medium hover:border-primary hover:text-primary">
+            {p.name}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

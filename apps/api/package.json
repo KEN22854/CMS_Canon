@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
     "clean": "rimraf dist",
-    "test:integration": "vitest run -c vitest.integration.config.mts"
+    "test:integration": "vitest run -c vitest.integration.config.mts",
+    "test:coverage": "vitest run -c vitest.coverage.config.mts --coverage"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1156.0",
@@ -21,12 +22,14 @@
     "@canon/edge": "workspace:^",
     "@canon/fields": "workspace:^",
     "@casl/ability": "^7.0.2",
+    "@modelcontextprotocol/sdk": "^1",
     "@nestjs/common": "^11.2.7",
     "@nestjs/core": "^11.2.7",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.2.7",
     "@nestjs/swagger": "^11.4.7",
     "@node-rs/argon2": "^2.0.2",
+    "@node-saml/node-saml": "^5",
     "@opentelemetry/auto-instrumentations-node": "^0.82.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.300.0",
     "@opentelemetry/sdk-node": "^0.300.0",
@@ -68,14 +71,17 @@
     "@types/nodemailer": "^8.0.2",
     "@types/supertest": "^7.2.1",
     "@types/ws": "^8.18.2",
+    "@vitest/coverage-v8": "5.0.5",
     "dotenv-cli": "^11.0.0",
     "pino-pretty": "^13.2.0",
     "rimraf": "^6.0.1",
+    "selfsigned": "^2",
     "supertest": "^7.3.1",
     "testcontainers": "^12.2.1",
     "typescript": "^5.7.2",
     "unplugin-swc": "^2.0.0",
     "vitest": "^5.0.5",
+    "xml-crypto": "^6",
     "y-websocket": "^3.1.0"
   }
 }

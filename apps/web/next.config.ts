@@ -1,8 +1,12 @@
+import path from 'node:path';
 import type { NextConfig } from 'next';
 
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Self-contained server bundle for the Docker image (docker/Dockerfile); dev is unaffected.
+  output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname, '../..'),
   // Shared block renderers are consumed as TS source.
   transpilePackages: ['@canon/ui-blocks'],
   async headers() {

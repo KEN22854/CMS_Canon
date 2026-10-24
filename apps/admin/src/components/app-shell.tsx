@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { Bot, Braces, Building2, Globe, Check, ChevronsUpDown, KeyRound, LayoutDashboard, Loader2, LogOut, Plus, Shield, Sparkles, Users } from 'lucide-react';
+import { Bot, Braces, Building2, Globe, Check, ChevronsUpDown, CreditCard, Fingerprint, KeyRound, LayoutDashboard, Loader2, LogOut, Plug, Plus, ScrollText, Shield, Sparkles, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -41,6 +41,10 @@ const NAV = [
   { href: '/settings/members', label: 'Members', icon: Users, can: ['read', 'Member'] },
   { href: '/settings/ai-usage', label: 'AI usage', icon: Sparkles, can: ['read', 'AiUsage'] },
   { href: '/settings/api-keys', label: 'API keys', icon: KeyRound, can: ['read', 'ApiKey'] },
+  { href: '/settings/integrations', label: 'Integrations', icon: Plug, can: ['manage', 'Plugin'] },
+  { href: '/settings/billing', label: 'Billing', icon: CreditCard, can: ['read', 'Tenant'] },
+  { href: '/settings/audit', label: 'Audit log', icon: ScrollText, can: ['read', 'AuditLog'] },
+  { href: '/settings/sso', label: 'Single sign-on', icon: Fingerprint, can: ['update', 'Tenant'] },
   { href: '/settings/security', label: 'Security', icon: Shield, can: null },
 ] as const;
 

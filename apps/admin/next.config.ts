@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { NextConfig } from 'next';
 
 const API_URL = process.env.CANON_API_URL ?? 'http://localhost:4000';
@@ -5,6 +6,9 @@ const API_URL = process.env.CANON_API_URL ?? 'http://localhost:4000';
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Self-contained server bundle for the Docker image (docker/Dockerfile); dev is unaffected.
+  output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname, '../..'),
   transpilePackages: ['@canon/ui-blocks'],
   // The browser only ever talks to this origin; /api/v1/* is proxied to the API. That keeps the
   // refresh cookie first-party and SameSite=Strict without CORS gymnastics.
