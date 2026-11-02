@@ -9,6 +9,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -34,6 +37,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @canon/db exec prisma validate
       - run: pnpm build
+      - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       # Migrations must apply cleanly and leave zero drift against schema.prisma
@@ -53,6 +57,71 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @canon/db prisma:generate
-      - run: pnpm --filter @canon/db --filter @canon/ai-gateway build
-      - run: pnpm --filter @canon/api test:integration
+      # turbo builds every workspace package the API imports (db, ai-gateway, blocks, fields, edge, collab…) first.
+      - run: pnpm turbo run test:integration --filter=@canon/api
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+  e2e:
+    # The real stack in the runner: compose services, migrated DB, built API/admin/renderer, Playwright.
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Environment
+        run: |
+          cp .env.example .env
+          {
+            echo "ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
+            echo "SEED_ADMIN_PASSWORD=$(node -e "console.log(require('crypto').randomBytes(18).toString('base64url'))")"
+          } >> .env
+      - run: pnpm infra:up
+      - run: pnpm db:migrate
+      - run: pnpm db:seed
+      - run: pnpm build
+      - name: Start API, admin and renderer
+        run: |
+          (cd apps/api && pnpm exec dotenv -e ../../.env -- node dist/main.js > ../../api.log 2>&1 &)
+          (cd apps/admin && pnpm start > ../../admin.log 2>&1 &)
+          (cd apps/web && pnpm start > ../../web.log 2>&1 &)
+          for url in http://localhost:4000/health/ready http://localhost:3000/login http://localhost:3001/; do
+            for i in $(seq 1 60); do curl -s -o /dev/null "$url" && break; sleep 2; done
+          done
+      - run: pnpm --filter @canon/admin exec playwright install --with-deps chromium
+      - run: pnpm --filter @canon/admin e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            apps/admin/playwright-report
+            apps/admin/test-results
+            *.log
+          retention-days: 7
+
+  images:
+    # Proves the production images build; pushing is left to the release pipeline.
+    runs-on: ubuntu-latest
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [api, admin, web, migrate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: ${{ matrix.target }}
+          push: false
+          tags: canon-${{ matrix.target }}:ci
+          cache-from: type=gha,scope=canon-${{ matrix.target }}
+          cache-to: type=gha,scope=canon-${{ matrix.target }},mode=max

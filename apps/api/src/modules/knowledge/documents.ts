@@ -20,7 +20,10 @@ export function pageSections(title: string, content: PageContent, facts: Readonl
   for (const f of collectTextFields(content)) {
     const text = f.kind === 'rich' ? richTextToPlain(f.value as RichTextDoc, facts) : (f.value as string);
     if (!text.trim()) continue;
-    if (!byBlock.has(f.blockId)) (byBlock.set(f.blockId, []), order.push(f.blockId));
+    if (!byBlock.has(f.blockId)) {
+      byBlock.set(f.blockId, []);
+      order.push(f.blockId);
+    }
     byBlock.get(f.blockId)!.push(text.trim());
   }
 

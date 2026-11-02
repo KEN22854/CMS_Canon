@@ -33,6 +33,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+const SOURCE_URL = process.env.NEXT_PUBLIC_SOURCE_URL || 'https://github.com/KEN22854/CMS_Canon';
+
 const NAV = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard, can: null },
   { href: '/sites', label: 'Sites', icon: Globe, can: ['read', 'Site'] },
@@ -79,6 +81,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+        {/* AGPL-3.0 §13: users of a network deployment get a way to the corresponding source. */}
+        <a href={SOURCE_URL} target="_blank" rel="noreferrer" className="px-4 pb-2 text-[11px] text-muted-foreground hover:text-foreground">
+          Source code · AGPL-3.0
+        </a>
         <UserMenu />
       </aside>
       <main className="min-w-0 flex-1">

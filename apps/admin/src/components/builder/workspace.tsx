@@ -119,10 +119,14 @@ function useShortcuts(readOnly: boolean) {
       const s = store.getState();
       const id = s.selectedId;
       if (!id) return;
-      if (e.key === 'Delete' || e.key === 'Backspace') (e.preventDefault(), s.remove(id));
-      else if (mod && k === 'd') (e.preventDefault(), s.duplicate(id));
-      else if (e.altKey && e.key === 'ArrowUp') (e.preventDefault(), s.nudge(id, -1));
-      else if (e.altKey && e.key === 'ArrowDown') (e.preventDefault(), s.nudge(id, 1));
+      const act = (fn: () => void) => {
+        e.preventDefault();
+        fn();
+      };
+      if (e.key === 'Delete' || e.key === 'Backspace') act(() => s.remove(id));
+      else if (mod && k === 'd') act(() => s.duplicate(id));
+      else if (e.altKey && e.key === 'ArrowUp') act(() => s.nudge(id, -1));
+      else if (e.altKey && e.key === 'ArrowDown') act(() => s.nudge(id, 1));
       else if (e.key === 'Escape') {
         const at = findParent(s.draft.content.root, id);
         s.select(at && at.parent.id !== s.draft.content.root.id ? at.parent.id : null);

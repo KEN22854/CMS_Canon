@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { assertDeliverableUrl } from '../../src/modules/webhooks/events';
+import { assertDeliverableUrl, pinnedFetch } from '../../src/modules/webhooks/events';
 import { WebhooksService } from '../../src/modules/webhooks/webhooks.service';
 import { bearer, createTestApp, drainOutbox, signUp, startReceiver, waitFor, type SignedIn, type TestApp } from './harness';
 
@@ -90,7 +90,16 @@ describe('webhooks', () => {
     await expect(assertDeliverableUrl('https://169.254.169.254/latest/meta-data', false)).rejects.toThrow('public address');
     await expect(assertDeliverableUrl('https://[::1]/x', false)).rejects.toThrow('public address');
     await expect(assertDeliverableUrl('https://user:pw@93.184.216.34/x', false)).rejects.toThrow('Credentials');
-    await expect(assertDeliverableUrl('https://93.184.216.34/x', false)).resolves.toBeUndefined();
+    await expect(assertDeliverableUrl('https://93.184.216.34/x', false)).resolves.toEqual({ address: '93.184.216.34', family: 4 });
+  });
+
+  it('connects to the vetted address, not to a fresh DNS answer (no rebinding window)', async () => {
+    // The hostname does not resolve at all: the request can only arrive if the pinned IP is used.
+    const port = new URL(rx.url).port;
+    const res = await pinnedFetch(`http://rebind.example.invalid:${port}/pinned`, { address: '127.0.0.1', family: 4 }, { method: 'POST', body: '{}', headers: { 'content-type': 'application/json' } });
+    expect(res.status).toBe(200);
+    const req = rx.state.requests.find((r) => r.path === '/pinned')!;
+    expect(req.headers.host).toBe(`rebind.example.invalid:${port}`);
   });
 });
 

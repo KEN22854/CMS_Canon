@@ -1,6 +1,7 @@
 {
   "name": "@canon/ui-blocks",
   "version": "0.0.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "React renderers for @canon/blocks, shared by the public renderer and the builder canvas (consumed as source via transpilePackages)",
   "main": "src/index.tsx",

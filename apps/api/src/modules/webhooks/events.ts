@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { ApiError } from '../../common/http/api-error';
 
 /** Public webhook event names (stable API) → internal outbox event types. */
@@ -37,12 +38,19 @@ function isPrivateAddress(ip: string): boolean {
   return v6 === '::1' || v6 === '::' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe80');
 }
 
+export interface VettedTarget {
+  /** The address the connection must use; null when private targets are allowed (development). */
+  address: string | null;
+  family: 4 | 6;
+}
+
 /**
  * SSRF guard for outbound deliveries: HTTPS only, and the host must resolve to public addresses
- * (checked at save time and again before every delivery, against DNS rebinding). Development
- * may target private hosts so local receivers work.
+ * only. Returns the vetted address so the caller connects to exactly that IP (see pinnedFetch):
+ * resolving again at connect time would reopen a DNS-rebinding window. Development may target
+ * private hosts so local receivers work.
  */
-export async function assertDeliverableUrl(raw: string, allowPrivate: boolean): Promise<void> {
+export async function assertDeliverableUrl(raw: string, allowPrivate: boolean): Promise<VettedTarget> {
   let url: URL;
   try {
     url = new URL(raw);
@@ -51,9 +59,32 @@ export async function assertDeliverableUrl(raw: string, allowPrivate: boolean): 
   }
   if (url.username || url.password) throw new ApiError('INVALID_WEBHOOK_URL', 'Credentials in the URL are not allowed — use the signing secret', 400);
   if (url.protocol !== 'https:' && !(allowPrivate && url.protocol === 'http:')) throw new ApiError('INVALID_WEBHOOK_URL', 'Webhook URLs must use HTTPS', 400);
-  if (allowPrivate) return;
+  if (allowPrivate) return { address: null, family: 4 };
   const host = url.hostname.replace(/^\[|\]$/g, '');
-  const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true }).catch(() => []);
+  const addrs = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true }).catch(() => []);
   if (!addrs.length) throw new ApiError('INVALID_WEBHOOK_URL', `Cannot resolve ${host}`, 400);
   if (addrs.some((a) => isPrivateAddress(a.address))) throw new ApiError('INVALID_WEBHOOK_URL', 'Webhook URLs must point to a public address', 400);
+  return { address: addrs[0]!.address, family: addrs[0]!.family === 6 ? 6 : 4 };
+}
+
+/**
+ * fetch() that connects to the vetted IP while keeping the URL's host for TLS (SNI, certificate
+ * check) and the Host header. With no vetted address it is a plain fetch.
+ */
+export async function pinnedFetch(url: string, target: VettedTarget, init: RequestInit): Promise<Response> {
+  if (!target.address) return fetch(url, init);
+  const agent = new Agent({
+    connect: {
+      lookup: (_host, _opts, cb) => cb(null, [{ address: target.address!, family: target.family }]),
+    },
+  });
+  try {
+    // undici's fetch is the implementation behind global fetch; it accepts the pinned dispatcher.
+    const res = await undiciFetch(url, { ...(init as Parameters<typeof undiciFetch>[1]), dispatcher: agent });
+    // Buffer the body so the agent can close; webhook responses are read capped anyway.
+    const body = await res.arrayBuffer();
+    return new Response(body, { status: res.status, statusText: res.statusText, headers: Object.fromEntries(res.headers.entries()) });
+  } finally {
+    await agent.close();
+  }
 }

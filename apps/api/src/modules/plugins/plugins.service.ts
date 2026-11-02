@@ -9,7 +9,7 @@ import { ApiError, badRequest, conflict, forbidden, notFound } from '../../commo
 import { APP_CONFIG, type AppConfig } from '../../config/env';
 import { AuditService } from '../../infrastructure/audit/audit.service';
 import { SystemPrismaService } from '../../infrastructure/prisma/prisma.service';
-import { assertDeliverableUrl, signWebhook } from '../webhooks/events';
+import { assertDeliverableUrl, pinnedFetch, signWebhook } from '../webhooks/events';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { FIRST_PARTY_PLUGINS } from './catalog';
 import { pluginManifest, publicSettings, settingsSchema, type BlockPreset, type PluginManifest, type StoredSettings } from './manifest';
@@ -153,8 +153,8 @@ export class PluginsService implements OnApplicationBootstrap {
     if (m.install && key) {
       const payload = JSON.stringify({ event: 'plugin.installed', tenantId: actor.tenantId, instanceId: inst.id, apiBaseUrl: this.config.API_PUBLIC_URL, apiKey: key.key, signingSecret });
       try {
-        await assertDeliverableUrl(m.install.url, this.config.NODE_ENV !== 'production');
-        const res = await fetch(m.install.url, { method: 'POST', headers: { 'content-type': 'application/json', 'canon-signature': signWebhook(payload, signingSecret) }, body: payload, signal: AbortSignal.timeout(10_000) });
+        const vetted = await assertDeliverableUrl(m.install.url, this.config.NODE_ENV !== 'production');
+        const res = await pinnedFetch(m.install.url, vetted, { method: 'POST', headers: { 'content-type': 'application/json', 'canon-signature': signWebhook(payload, signingSecret) }, body: payload, signal: AbortSignal.timeout(10_000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         showKey = null;
       } catch (err) {

@@ -42,7 +42,10 @@ export function Tracker({ siteId, path, title, experiments }: { siteId: string; 
         engaged += performance.now() - visibleSince;
         visibleSince = null;
       }
-      if (final && engaged >= 1_000) queue.push({ type: 'engagement', path, durationMs: Math.round(engaged) }), (engaged = 0);
+      if (final && engaged >= 1_000) {
+        queue.push({ type: 'engagement', path, durationMs: Math.round(engaged) });
+        engaged = 0;
+      }
       if (!queue.length) return;
       const body = JSON.stringify({ siteId, events: queue.slice(0, 50), referrer: document.referrer || undefined, experiments: experiments.length ? experiments : undefined });
       queue = queue.slice(50);

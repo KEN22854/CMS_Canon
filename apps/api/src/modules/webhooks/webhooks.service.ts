@@ -12,7 +12,7 @@ import { AuditService } from '../../infrastructure/audit/audit.service';
 import { EventBus, type StoredEvent } from '../../infrastructure/events/outbox';
 import { PrismaService, SystemPrismaService } from '../../infrastructure/prisma/prisma.service';
 import { Queues } from '../../infrastructure/queue/queue.module';
-import { EVENT_BY_TYPE, WEBHOOK_EVENTS, WEBHOOK_EVENT_NAMES, assertDeliverableUrl, signWebhook } from './events';
+import { EVENT_BY_TYPE, WEBHOOK_EVENTS, WEBHOOK_EVENT_NAMES, assertDeliverableUrl, pinnedFetch, signWebhook } from './events';
 import { pluginTarget } from './plugin-targets';
 
 export const webhookBody = z.object({
@@ -199,8 +199,9 @@ export class WebhooksService implements OnApplicationBootstrap {
         await this.system.webhookDelivery.update({ where: { id: d.id }, data: { status: 'SUCCEEDED', error: 'Skipped by plugin (not relevant)' } });
         return;
       }
-      await assertDeliverableUrl(target.url, this.allowPrivate);
-      const res = await fetch(target.url, {
+      // Connect to the address that was just vetted, not whatever DNS answers a moment later.
+      const vetted = await assertDeliverableUrl(target.url, this.allowPrivate);
+      const res = await pinnedFetch(target.url, vetted, {
         method: 'POST',
         redirect: 'manual',
         headers: {

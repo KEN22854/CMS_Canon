@@ -103,6 +103,8 @@ API refuses to start on invalid values, and in production also on development se
 | `AI_DEFAULT_MODEL`, `AI_FALLBACK_MODELS`, `AI_EMBEDDING_MODEL` | `provider/model` keys |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS`, `STRIPE_AI_METER_EVENT` | billing (§5) |
 | `SSO_DOMAIN_VERIFICATION` | `dns` in production (§6) |
+| `ANALYTICS_RAW_RETENTION_MONTHS` | months of raw analytics events to keep (2–120, default 13) |
+| `NEXT_PUBLIC_SOURCE_URL` | admin footer link to the source code (AGPL-3.0 §13); point it at your fork if you modify Canon |
 | `LANGFUSE_*`, `OTEL_EXPORTER_OTLP_ENDPOINT` | LLM tracing and OpenTelemetry |
 
 ## 5. Billing (Stripe)
@@ -152,7 +154,9 @@ and are written to the audit log.
 - **Webhooks** are delivered by the API workers with exponential backoff (8 attempts over ~40
   minutes), signed `Canon-Signature: t=…,v1=HMAC-SHA256(secret, "t.body")`, with an
   `Idempotency-Key` stable across retries. In production, targets must be HTTPS and resolve to
-  public addresses (checked when saved and before each delivery). Endpoints with 15 consecutive
+  public addresses. The address is checked when the endpoint is saved and again before each delivery,
+  and the connection goes to exactly the vetted IP (TLS still verifies the hostname), so DNS
+  rebinding cannot redirect a delivery to an internal service. Endpoints with 15 consecutive
   dead deliveries are paused. Allow egress from the API to the internet for this.
 - **Plugins** are integrations, not code executed by Canon: they receive events (signed webhooks or
   a built-in adapter such as Slack), act through a scoped API key the tenant consented to, and
@@ -183,9 +187,10 @@ plus customer custom domains routed to the renderer.
 - **Tracing / metrics**: OpenTelemetry (`OTEL_EXPORTER_OTLP_ENDPOINT`); LLM calls in Langfuse.
 - **Backups**: Postgres PITR (WAL archiving) is the source of truth; S3 versioning for media. Redis
   holds only queues and caches — after a loss, jobs are re-created by the outbox and schedulers.
-- **Retention**: partitions for `audit_logs` and `analytics_events` are created
-  three months ahead by the hourly compliance job; drop old analytics partitions per your policy (daily rollups keep history). Audit
-  partitions should be kept for your compliance period (the daily hash chain lets auditors verify
+- **Retention**: the hourly compliance job keeps monthly partitions of `audit_logs` and
+  `analytics_events` three months ahead, and drops raw analytics months older than
+  `ANALYTICS_RAW_RETENTION_MONTHS` (default 13). Reports keep working from the daily rollups. Audit
+  partitions are never dropped automatically; keep them for your compliance period (the daily hash chain lets auditors verify
   them: Settings → Audit log → Verify).
 - **Tenant deletion**: deleted workspaces are purged 30 days later (`COMPLIANCE_JOBS`).
 - **Upgrades**: build images → run `canon-migrate` → roll API, then admin and renderer. Roll back by

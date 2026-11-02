@@ -15,3 +15,10 @@ next-env.d.ts
 
 # Production secrets for deploy/docker-compose.prod.yml
 deploy/.env.production
+
+# Playwright
+playwright-report/
+test-results/
+
+# Prompt evaluation reports (may contain model output)
+apps/api/evals/reports/

@@ -1,6 +1,7 @@
 {
   "name": "@canon/web",
   "version": "0.0.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "scripts": {
     "dev": "dotenv -e ../../.env -- next dev -p 3001",

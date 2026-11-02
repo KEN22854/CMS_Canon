@@ -26,11 +26,11 @@ export default function SiteSettings() {
   );
 }
 
-function useSaver(siteId: string) {
+/** One PATCH mutation per settings form (a hook per call site, so hook order never depends on data). */
+function useSaver(siteId: string, path: string) {
   const qc = useQueryClient();
   const tid = useTenantId();
-  return (path: string) =>
-    useMutation({
+  return useMutation({
       mutationFn: (body: object) => api(`/sites/${siteId}${path}`, { method: 'PATCH', body }),
       onSuccess: () => {
         toast.success('Saved — the live site refreshes within seconds');
@@ -42,7 +42,7 @@ function useSaver(siteId: string) {
 }
 
 function General({ site }: { site: Site }) {
-  const save = useSaver(site.id)('');
+  const save = useSaver(site.id, '');
   const [name, setName] = useState(site.name);
   const [description, setDescription] = useState(site.description ?? '');
   const [locales, setLocales] = useState(site.locales.join(', '));
@@ -111,7 +111,7 @@ function General({ site }: { site: Site }) {
 }
 
 function Theme({ site }: { site: Site }) {
-  const save = useSaver(site.id)('/theme');
+  const save = useSaver(site.id, '/theme');
   const c = site.theme.colors ?? {};
   const [primary, setPrimary] = useState(c.primary ?? '#4f46e5');
   const [background, setBackground] = useState(c.background ?? '#ffffff');
@@ -170,7 +170,7 @@ function Theme({ site }: { site: Site }) {
 }
 
 function AiSettings({ site }: { site: Site }) {
-  const save = useSaver(site.id)('/ai-settings');
+  const save = useSaver(site.id, '/ai-settings');
   const [brandVoice, setBrandVoice] = useState(site.aiSettings.brandVoice ?? '');
   const [forbidden, setForbidden] = useState((site.aiSettings.forbiddenTopics ?? []).join(', '));
   const [glossary, setGlossary] = useState(

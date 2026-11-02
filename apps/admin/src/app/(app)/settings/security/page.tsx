@@ -264,6 +264,8 @@ function YourDataCard() {
     mutationFn: () => api('/me/delete', { body: { password: password || undefined, confirm: 'DELETE' } }),
     onSuccess: () => {
       clear();
+      // A full reload drops every cached query of the erased account, not just the route.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign('/login');
     },
     onError: (err) => {

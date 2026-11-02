@@ -99,7 +99,10 @@ export function useCollab({ store, pageId, canEdit, onVersion }: { store: Builde
       });
 
     provider.on('status', ({ status: st }: { status: string }) => {
-      if (st === 'connected') (failures = 0), setStatus('connected');
+      if (st === 'connected') {
+        failures = 0;
+        setStatus('connected');
+      }
       else if (st === 'disconnected') setStatus(synced ? 'offline' : 'connecting');
     });
     provider.on('connection-close', () => {

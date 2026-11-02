@@ -1,6 +1,7 @@
 {
   "name": "@canon/collab",
   "version": "0.0.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "Yjs representation of a page draft shared by the collaboration server and the builder: draft <-> Y.Doc conversion and minimal diffs",
   "main": "dist/index.js",

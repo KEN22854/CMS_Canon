@@ -1,6 +1,7 @@
 {
   "name": "@canon/fields",
   "version": "0.0.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "Collection field types: field definitions, entry validation, display/AI text, CSV codec and schema diffs — shared by API and admin",
   "main": "dist/index.js",

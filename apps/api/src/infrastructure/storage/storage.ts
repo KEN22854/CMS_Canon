@@ -33,6 +33,10 @@ export class S3Storage extends Storage {
       // MinIO and most self-hosted S3s don't do virtual-host buckets.
       forcePathStyle: Boolean(config.S3_ENDPOINT),
       credentials: config.S3_ACCESS_KEY ? { accessKeyId: config.S3_ACCESS_KEY, secretAccessKey: config.S3_SECRET_KEY } : undefined,
+      // SDK defaults add a CRC32 of the body to every PUT — including presigned URLs, where the
+      // browser uploads a body the signer never saw, so the signature can never match.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
     this.publicBase = (config.S3_PUBLIC_URL ?? `${config.S3_ENDPOINT ?? `https://${this.bucket}.s3.${config.S3_REGION}.amazonaws.com`}/${this.bucket}`).replace(/\/$/, '');
   }

@@ -62,7 +62,7 @@ export class EntriesIoService {
       return { filename: `${c.row.slug}-${stamp}.json`, contentType: 'application/json; charset=utf-8', body };
     }
     // BOM so Excel opens UTF-8 (Cyrillic, accents) correctly.
-    return { filename: `${c.row.slug}-${stamp}.csv`, contentType: 'text/csv; charset=utf-8', body: `﻿${toCsv(c.fields, rows)}` };
+    return { filename: `${c.row.slug}-${stamp}.csv`, contentType: 'text/csv; charset=utf-8', body: `\uFEFF${toCsv(c.fields, rows)}` };
   }
 
   async import(actor: TenantPrincipal, ability: AppAbility, siteId: string, collectionId: string, file: { buffer: Buffer; originalname: string; mimetype: string }, q: ImportQuery): Promise<ImportReport> {

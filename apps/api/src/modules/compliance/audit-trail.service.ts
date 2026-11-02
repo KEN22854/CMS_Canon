@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { Injectable, type OnApplicationBootstrap } from '@nestjs/common';
+import { Inject, Injectable, type OnApplicationBootstrap } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 import { z } from 'zod';
+import { APP_CONFIG, type AppConfig } from '../../config/env';
 import { PrismaService, SystemPrismaService } from '../../infrastructure/prisma/prisma.service';
 import { Queues } from '../../infrastructure/queue/queue.module';
 
@@ -56,6 +57,7 @@ function stable(v: unknown): string {
 @Injectable()
 export class AuditTrailService implements OnApplicationBootstrap {
   constructor(
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly prisma: PrismaService,
     private readonly system: SystemPrismaService,
     private readonly queues: Queues,
@@ -68,6 +70,7 @@ export class AuditTrailService implements OnApplicationBootstrap {
     if (process.env.COMPLIANCE_JOBS === 'off') return;
     this.queues.worker(SEAL_QUEUE, async () => {
       await this.ensurePartitions();
+      await this.applyRetention();
       await this.sealDays();
     }, 1);
     await this.queues.queue(SEAL_QUEUE).upsertJobScheduler('audit-seal', { every: SEAL_EVERY_MS }, { name: 'seal', data: {}, opts: { removeOnComplete: true, removeOnFail: 50 } });
@@ -156,6 +159,19 @@ export class AuditTrailService implements OnApplicationBootstrap {
   /** Keeps three months of partitions ahead for the partitioned tables (idempotent, cheap). */
   async ensurePartitions(): Promise<void> {
     for (const table of ['"audit_logs"', '"analytics_events"']) await this.system.$executeRawUnsafe(`SELECT canon_ensure_monthly_partitions('${table}'::regclass, 3)`);
+  }
+
+  /**
+   * Drops raw analytics partitions older than ANALYTICS_RAW_RETENTION_MONTHS (whole months only).
+   * Reports keep working from the daily rollups; the audit trail is never touched.
+   */
+  async applyRetention(now = new Date()): Promise<{ dropped: number; before: string }> {
+    const months = this.config.ANALYTICS_RAW_RETENTION_MONTHS;
+    const before = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1)).toISOString().slice(0, 10);
+    const [row] = await this.system.$queryRaw<{ dropped: number }[]>`SELECT canon_drop_analytics_partitions_before(${before}::date) AS dropped`;
+    const dropped = Number(row?.dropped ?? 0);
+    if (dropped) this.logger.info({ dropped, before }, 'analytics.retention_dropped');
+    return { dropped, before };
   }
 
   /** Recomputes the chain over a range: every sealed day must match, and link to its predecessor. */

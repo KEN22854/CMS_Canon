@@ -175,20 +175,26 @@ canon-cms/
 | `pnpm build` / `typecheck` / `test` | Turborepo pipelines (unit tests) |
 | `pnpm test:integration` | API integration tests on throwaway Postgres + Redis containers (needs Docker) |
 | `pnpm --filter @canon/api test:coverage` | unit + integration tests with V8 coverage |
+| `pnpm lint` | ESLint 9 over the whole monorepo (zero warnings allowed) |
+| `pnpm --filter @canon/admin e2e` | Playwright end-to-end tests against a running stack |
+| `pnpm --filter @canon/api eval` | prompt evaluations on real models (`EVAL_MODELS=…`; skipped without provider keys) |
 
 ## Tests
 
-234 tests, all green:
+270 tests, all green:
 
 | Package | Tests |
 |---|---|
 | fields · blocks · ai-gateway | 15 · 16 · 30 |
 | edge · collab | 8 · 6 |
-| admin | 7 |
-| API unit | 35 |
-| API integration (real Postgres + Redis, fake LLM, Stripe and IdP) | 117 |
+| admin (unit) | 7 |
+| API unit | 53 |
+| API integration (real Postgres + Redis + S3, fake LLM, Stripe and IdP) | 126 |
+| End-to-end (Playwright: sign-up, builder, publishing, co-editing, plugins, audit, billing, SSO) | 9 |
 
-API coverage: 81% statements, 87% lines, 83% functions, 66% branches.
+API coverage: 83% statements, 89% lines, 85% functions, 68% branches.
+
+CI (`.github/workflows/ci.yml`) runs build, lint, typecheck, unit tests and migration drift, then integration tests, E2E against the real stack, and the four production image builds.
 
 ## Deployment
 
@@ -210,6 +216,7 @@ Stripe and SAML, scaling, backups, upgrades and a security checklist.
 | [docs/auth.md](docs/auth.md) | authentication, tenancy, RBAC, AI quotas, threat model |
 | [docs/deployment.md](docs/deployment.md) | production deployment and operations |
 | [docs/phases.md](docs/phases.md) | build log: what each phase delivered, checklists, manual checks |
+| [docs/roadmap.md](docs/roadmap.md) | what comes next and how Canon differs from other CMSs |
 
 ## Build history
 
@@ -223,11 +230,22 @@ Stripe and SAML, scaling, backups, upgrades and a security checklist.
 | [5](docs/phases.md#what-is-in-phase-5) | RAG, Canon agent team, AI Studio |
 | [6](docs/phases.md#what-is-in-phase-6) | Realtime collaboration, analytics, A/B testing, personalization |
 | [7](docs/phases.md#what-is-in-phase-7) | Billing, plugins, webhooks, MCP, SSO, compliance, deployment |
+| [8](docs/roadmap.md#phase-8--foundation-) | CI, linting, E2E, prompt evals, slim images, AGPL, fixes |
+
+Next: essentials (forms, notifications, custom domains, review workflow, RU/EN admin, SDK, SCIM), then features no other CMS has — AI search visibility, living facts, brand and legal guard, site time machine, growth autopilot, one-click migration from Tilda — and the Russian market (YooKassa, GigaChat, YandexGPT, Yandex Metrica, 152-FZ). See the [roadmap](docs/roadmap.md).
 
 ## Known limitations
 
 - Real LLM providers, Stripe and SAML identity providers have not been called from this
   environment. The adapters are typechecked against the official SDKs and APIs, and the flows are
   covered by integration tests with fakes: a fake Ollama, a fake Stripe server, and SAML responses
-  signed with test certificates.
+  signed with test certificates. The prompt evaluation suite is ready to run against real models
+  once provider keys are configured.
 - Model prices in the seed should be checked against the providers' pricing pages before billing goes live.
+
+## License
+
+Canon is licensed under the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`).
+You may use, modify and self-host it, including commercially. If you run a modified version as a
+network service, you must make your changes available to its users under the same license. For a
+commercial license without these obligations, contact the author.

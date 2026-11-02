@@ -14,15 +14,21 @@ export function parseCsv(text: string): string[][] {
   let row: string[] = [];
   let cell = '';
   let quoted = false;
-  const s = text.replace(/^﻿/, '');
+  const s = text.replace(/^\uFEFF/, '');
   for (let i = 0; i < s.length; i++) {
     const c = s[i]!;
     if (quoted) {
-      if (c === '"' && s[i + 1] === '"') (cell += '"'), i++;
+      if (c === '"' && s[i + 1] === '"') {
+        cell += '"';
+        i++;
+      }
       else if (c === '"') quoted = false;
       else cell += c;
     } else if (c === '"' && cell === '') quoted = true;
-    else if (c === ',') row.push(cell), (cell = '');
+    else if (c === ',') {
+      row.push(cell);
+      cell = '';
+    }
     else if (c === '\n' || c === '\r') {
       if (c === '\r' && s[i + 1] === '\n') i++;
       row.push(cell);

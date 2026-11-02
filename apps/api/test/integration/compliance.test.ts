@@ -1,3 +1,4 @@
+import { PrismaClient } from '@canon/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AuditTrailService } from '../../src/modules/compliance/audit-trail.service';
 import { PrivacyService } from '../../src/modules/compliance/privacy.service';
@@ -54,6 +55,37 @@ describe('audit trail', () => {
     const bad = await t.http.get('/v1/audit/integrity').set(h).expect(200);
     expect(bad.body.ok).toBe(false);
     expect(bad.body.days[0]).toMatchObject({ status: 'modified' });
+  });
+});
+
+describe('partition maintenance', () => {
+  const partitions = () =>
+    t.system.$queryRaw<{ name: string }[]>`SELECT c.relname AS name FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid WHERE i.inhparent = '"analytics_events"'::regclass`.then((r) => r.map((x) => x.name));
+  const month = (d: Date) => `analytics_events_${d.toISOString().slice(0, 7).replace('-', '_')}`;
+
+  it('the worker role creates future partitions and drops raw analytics past retention, never audit', async () => {
+    // canon_system does not own the tables: this only works because the function runs as the owner.
+    await t.system.$executeRaw`SELECT canon_ensure_monthly_partitions('"analytics_events"'::regclass, 8)`;
+    const now = new Date();
+    expect(await partitions()).toContain(month(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 8, 1))));
+
+    // An old month, created by the owner as if the installation had been running since 2020.
+    const owner = new PrismaClient({ datasourceUrl: process.env.DATABASE_URL });
+    try {
+      await owner.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS partitions.analytics_events_2020_01 PARTITION OF "analytics_events" FOR VALUES FROM ('2020-01-01') TO ('2020-02-01')`);
+    } finally {
+      await owner.$disconnect();
+    }
+    expect(await partitions()).toContain('analytics_events_2020_01');
+
+    const res = await t.app.get(AuditTrailService).applyRetention();
+    expect(res.dropped).toBeGreaterThanOrEqual(1);
+    const after = await partitions();
+    expect(after).not.toContain('analytics_events_2020_01');
+    expect(after).toContain(month(now)); // the live month stays
+    // Audit partitions are out of the function's reach.
+    const audit = await t.system.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM pg_inherits WHERE inhparent = '"audit_logs"'::regclass`;
+    expect(Number(audit[0]!.n)).toBeGreaterThan(1);
   });
 });
 

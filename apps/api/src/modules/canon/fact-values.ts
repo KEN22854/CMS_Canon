@@ -34,7 +34,7 @@ export function numberOf(value: unknown): number | null {
 
 /** "1,234.50" / "1.234,50" / "1 234" / "49" → number. Ambiguous separators resolve to the common reading. */
 export function parseLooseNumber(raw: string): number | null {
-  const s = raw.replace(/[\s  ]/g, '');
+  const s = raw.replace(/[\s\u00A0\u2009\u202F]/g, '');
   if (!/\d/.test(s)) return null;
   let t = s.replace(/[^\d.,-]/g, '');
   if (/,\d{1,2}$/.test(t) && !/\.\d{1,2}$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');

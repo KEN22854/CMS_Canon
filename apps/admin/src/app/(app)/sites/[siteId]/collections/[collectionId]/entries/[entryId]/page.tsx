@@ -359,7 +359,10 @@ function TagInput({ tags, aiTags, readOnly, onChange }: { tags: string[]; aiTags
             placeholder={tags.length ? '' : 'Add tag…'}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ',') (e.preventDefault(), add());
+              if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                add();
+              }
               else if (e.key === 'Backspace' && !draft && tags.length) onChange(tags.slice(0, -1));
             }}
             onBlur={add}

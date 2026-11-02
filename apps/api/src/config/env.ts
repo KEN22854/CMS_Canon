@@ -97,6 +97,9 @@ export const envSchema = z.object({
   /** Billing meter event name for AI overage (cents above the plan's included budget). */
   STRIPE_AI_METER_EVENT: z.string().default('canon_ai_overage_cents'),
 
+  /** Raw analytics events are kept this long (whole months); daily rollups keep history beyond. */
+  ANALYTICS_RAW_RETENTION_MONTHS: z.coerce.number().int().min(2).max(120).default(13),
+
   /** SSO domains are proven with a DNS TXT record; 'off' (dev/test only) trusts the claim. */
   SSO_DOMAIN_VERIFICATION: z.enum(['dns', 'off']).default('dns'),
 });

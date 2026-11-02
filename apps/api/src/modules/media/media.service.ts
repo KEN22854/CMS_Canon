@@ -309,6 +309,7 @@ function prefixFor(m: Pick<Media, 'tenantId' | 'siteId' | 'id'>): string {
 }
 
 function cleanName(name: string): string {
+  // eslint-disable-next-line no-control-regex -- stripping control characters is the point
   return name.replace(/[\u0000-\u001f\\/]/g, '_').slice(0, 255) || 'file';
 }
 

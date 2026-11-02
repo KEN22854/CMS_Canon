@@ -1,6 +1,7 @@
 {
   "name": "@canon/blocks",
   "version": "0.0.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "Block registry: Zod schemas for the page tree, rich text and block props, shared by API, admin and renderer",
   "main": "dist/index.js",
