@@ -60,7 +60,23 @@ export class McpFactory {
     const readOnly = { readOnlyHint: true, openWorldHint: false };
 
     if (ability.can('read', 'Site')) {
-      server.registerTool('list_sites', { title: 'List sites', description: 'Sites in this workspace with their locales and domains.', annotations: readOnly }, run(async () => (await this.sites.list(t)).map((s) => ({ id: s.id, name: s.name, defaultLocale: s.defaultLocale, locales: s.locales, domain: s.domain ?? s.internalDomain }))));
+      server.registerTool(
+        'list_sites',
+        {
+          title: 'List sites',
+          description: 'Sites in this workspace with their locales and domains.',
+          annotations: readOnly,
+        },
+        run(async () =>
+          (await this.sites.list(t)).map((s) => ({
+            id: s.id,
+            name: s.name,
+            defaultLocale: s.defaultLocale,
+            locales: s.locales,
+            domain: s.domainStatus === 'VERIFIED' && s.domain ? s.domain : s.internalDomain,
+          })),
+        ),
+      );
     }
 
     if (ability.can('read', 'Page')) {
@@ -69,7 +85,25 @@ export class McpFactory {
         { title: 'List pages', description: 'Pages of a site (draft and published), newest first. Filter by text or status.', inputSchema: { siteId: z.string(), q: z.string().max(100).optional(), status: z.enum(['DRAFT', 'PUBLISHED']).optional(), limit: z.number().int().min(1).max(100).default(30) }, annotations: readOnly },
         run(async (a: { siteId: string; q?: string; status?: 'DRAFT' | 'PUBLISHED'; limit: number }) => {
           const r = await this.pages.list(t, a.siteId, { q: a.q, status: a.status, limit: a.limit });
-          return (r as { items: { id: string; title: string; fullPath: string; locale: string; status: string; updatedAt: Date }[] }).items.map((x) => ({ id: x.id, title: x.title, path: x.fullPath, locale: x.locale, status: x.status, updatedAt: x.updatedAt }));
+          return (
+            r as {
+              items: {
+                id: string;
+                title: string;
+                fullPath: string;
+                locale: string;
+                status: string;
+                updatedAt: Date;
+              }[];
+            }
+          ).items.map((x) => ({
+            id: x.id,
+            title: x.title,
+            path: x.fullPath,
+            locale: x.locale,
+            status: x.status,
+            updatedAt: x.updatedAt,
+          }));
         }),
       );
       server.registerTool(
@@ -124,11 +158,45 @@ export class McpFactory {
     if (ability.can('create', 'Page')) {
       server.registerTool(
         'create_draft_page',
-        { title: 'Create a draft page', description: 'Creates an unpublished page. Content is a block tree (see get_page format "json"); omit it for an empty page. A human publishes.', inputSchema: { siteId: z.string(), title: z.string().min(1).max(200), slug: z.string().regex(/^[a-z0-9-]{1,80}$/), locale: z.string().max(10).optional(), description: z.string().max(500).optional(), content: z.unknown().optional() }, annotations: { destructiveHint: false, idempotentHint: false } },
-        run(async (a: { siteId: string; title: string; slug: string; locale?: string; description?: string; content?: unknown }) => {
-          const page = await this.pages.create(p, a.siteId, { title: a.title, slug: a.slug, locale: a.locale, description: a.description, content: a.content });
-          return { id: page.id, path: page.fullPath, status: page.status, version: page.version, note: 'Draft created — not published.' };
-        }),
+        {
+          title: 'Create a draft page',
+          description:
+            'Creates an unpublished page. Content is a block tree (see get_page format "json"); omit it for an empty page. A human publishes.',
+          inputSchema: {
+            siteId: z.string(),
+            title: z.string().min(1).max(200),
+            slug: z.string().regex(/^[a-z0-9-]{1,80}$/),
+            locale: z.string().max(10).optional(),
+            description: z.string().max(500).optional(),
+            content: z.unknown().optional(),
+          },
+          annotations: { destructiveHint: false, idempotentHint: false },
+        },
+        run(
+          async (a: {
+            siteId: string;
+            title: string;
+            slug: string;
+            locale?: string;
+            description?: string;
+            content?: unknown;
+          }) => {
+            const page = await this.pages.create(p, a.siteId, {
+              title: a.title,
+              slug: a.slug,
+              locale: a.locale,
+              description: a.description,
+              content: a.content,
+            });
+            return {
+              id: page.id,
+              path: page.fullPath,
+              status: page.status,
+              version: page.version,
+              note: 'Draft created — not published.',
+            };
+          },
+        ),
       );
     }
 

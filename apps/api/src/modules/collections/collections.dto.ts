@@ -60,7 +60,9 @@ export const updateEntryBody = z.object({
 });
 export type UpdateEntryBody = z.infer<typeof updateEntryBody>;
 
-export const publishEntryBody = z.object({ comment: z.string().max(200).optional() }).default({});
+export const publishEntryBody = z
+  .object({ comment: z.string().max(200).optional(), overrideReview: z.boolean().optional() })
+  .default({});
 
 export const importQuery = z.object({
   format: z.enum(['csv', 'json']).optional(),

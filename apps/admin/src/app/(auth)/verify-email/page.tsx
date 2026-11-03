@@ -8,12 +8,14 @@ import { AuthCard } from '@/components/auth-form';
 import { Alert } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { useAuth, type AuthPayload } from '@/lib/auth-store';
+import { useT } from '@/lib/i18n';
 
 function Verify() {
   const token = useSearchParams().get('token');
   const router = useRouter();
   const setSession = useAuth((s) => s.setSession);
-  const [error, setError] = useState<string | null>(token ? null : 'This link is missing its token.');
+  const t = useT();
+  const [error, setError] = useState<string | null>(token ? null : t('auth.missingToken'));
   // Strict-mode double effects would spend the single-use token twice and show a false error.
   const started = useRef(false);
 
@@ -29,21 +31,21 @@ function Verify() {
   }, [token, router, setSession]);
 
   return (
-    <AuthCard title="Confirming your email">
+    <AuthCard title={t('auth.confirming')}>
       {error ? (
         <>
           <Alert tone="error">{error}</Alert>
           <p className="text-sm text-muted-foreground">
-            You can request a new link from the{' '}
+            {t('auth.requestNewLink')}{' '}
             <Link className="text-primary hover:underline" href="/login">
-              sign-in page
+              {t('auth.signInPage')}
             </Link>
             .
           </p>
         </>
       ) : (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Verifying…
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> {t('auth.verifying')}
         </div>
       )}
     </AuthCard>

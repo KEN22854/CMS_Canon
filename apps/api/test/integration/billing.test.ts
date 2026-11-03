@@ -80,9 +80,21 @@ describe('billing', () => {
     expect((await t.http.post('/v1/billing/portal').set(h).expect(200)).body.url).toBe(`https://billing.stripe.test/${customer}`);
 
     // Dunning keeps features on; payment failure notifies owners.
-    expect((await send(event('customer.subscription.updated', sub('sub_1', customer, 'price_business', 'past_due'), up + 10)).expect(200)).body.outcome).toBe('synced:PAST_DUE');
-    expect((await send(event('invoice.payment_failed', { id: 'in_1', customer })).expect(200)).body.outcome).toBe('owners_notified');
-    expect(t.mailer.lastTo(owner.email)?.template).toBe('billing.payment_failed');
+    expect(
+      (
+        await send(
+          event(
+            'customer.subscription.updated',
+            sub('sub_1', customer, 'price_business', 'past_due'),
+            up + 10,
+          ),
+        ).expect(200)
+      ).body.outcome,
+    ).toBe('synced:PAST_DUE');
+    expect(
+      (await send(event('invoice.payment_failed', { id: 'in_1', customer })).expect(200)).body.outcome,
+    ).toBe('owners_notified');
+    expect(t.mailer.lastTo(owner.email)?.template).toBe('notification.billing.payment_failed'); // sent through the notification center
     // Cancellation ends paid features.
     expect((await send(event('customer.subscription.deleted', sub('sub_1', customer, 'price_business', 'canceled'), up + 20)).expect(200)).body.outcome).toBe('plan:BUSINESS->FREE');
     const overview2 = await t.http.get('/v1/billing').set(h).expect(200);

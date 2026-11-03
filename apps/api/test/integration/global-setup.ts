@@ -30,7 +30,7 @@ export default async function setup(project: TestProject): Promise<() => Promise
   const s3: StartedTestContainer = await new GenericContainer('chrislusf/seaweedfs:3.80')
     .withEntrypoint(['/bin/sh', '-c'])
     .withCommand([
-      "mkdir -p /etc/seaweedfs && printf '{\"identities\":[{\"name\":\"canon\",\"credentials\":[{\"accessKey\":\"canon\",\"secretKey\":\"canon-s3-secret\"}],\"actions\":[\"Admin\",\"Read\",\"List\",\"Tagging\",\"Write\"]},{\"name\":\"anonymous\",\"actions\":[\"Read:canon-media\"]}]}' > /etc/seaweedfs/s3.json && exec weed server -dir=/data -ip.bind=0.0.0.0 -volume.max=0 -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json",
+      'mkdir -p /etc/seaweedfs && printf \'{"identities":[{"name":"canon","credentials":[{"accessKey":"canon","secretKey":"canon-s3-secret"}],"actions":["Admin","Read","List","Tagging","Write"]},{"name":"anonymous","actions":["Read:canon-media"]}]}\' > /etc/seaweedfs/s3.json && exec weed server -dir=/data -ip.bind=0.0.0.0 -volume.max=0 -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json',
     ])
     .withExposedPorts(8333, 9333)
     .withWaitStrategy(Wait.forHttp('/cluster/status', 9333).forStatusCode(200))
@@ -91,6 +91,8 @@ export default async function setup(project: TestProject): Promise<() => Promise
     // Platform-wide recurring jobs would act on every test's tenants in the shared database.
     BILLING_JOBS: 'off',
     COMPLIANCE_JOBS: 'off',
+    NOTIFICATION_JOBS: 'off',
+    DOMAIN_JOBS: 'off',
     AI_DEFAULT_MODEL: 'ollama/llama3.1:8b',
     // Text calls land on llama (default); vision calls (alt text) need the VL model.
     AI_FALLBACK_MODELS: 'ollama/qwen2.5vl:7b',

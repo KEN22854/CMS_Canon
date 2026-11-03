@@ -10,6 +10,7 @@ import { findParent } from '../editor/tree-ops';
 import { BlockAiMenu } from './block-ai';
 import type { DropTarget } from './drop';
 import { useBuilder, type Breakpoint, type RemoteSelection } from './store';
+import { toRenderForms, useForms } from '@/lib/forms';
 
 const WIDTH: Record<Breakpoint, string> = { desktop: '100%', tablet: '768px', mobile: '390px' };
 
@@ -51,10 +52,16 @@ export function Canvas({
   const selectedId = useBuilder((s) => s.selectedId);
   const hoverId = useBuilder((s) => s.hoverId);
   const remote = useBuilder((s) => s.remoteSelections);
+  const formsQ = useForms(siteId);
+  const forms = useMemo(() => toRenderForms(formsQ.data), [formsQ.data]);
   const breakpoint = useBuilder((s) => s.breakpoint);
   const select = useBuilder((s) => s.select);
   const hover = useBuilder((s) => s.hover);
-  const [rects, setRects] = useState<{ sel: Rect | null; hov: Rect | null; remote: (RemoteSelection & { rect: Rect })[] }>({ sel: null, hov: null, remote: [] });
+  const [rects, setRects] = useState<{
+    sel: Rect | null;
+    hov: Rect | null;
+    remote: (RemoteSelection & { rect: Rect })[];
+  }>({ sel: null, hov: null, remote: [] });
 
   const measure = useCallback(() => {
     const host = hostRef.current;
@@ -107,7 +114,7 @@ export function Canvas({
           onMouseOver={(e) => !dragging && hover(idAt(e.target))}
         >
           <div style={siteThemeStyle(theme)} className="font-site text-site-fg">
-            <BlockRenderer node={root} ctx={{ media, facts, draft: true, editing: true }} isRoot />
+            <BlockRenderer node={root} ctx={{ media, facts, forms, draft: true, editing: true }} isRoot />
           </div>
 
           {/* Overlay: never intercepts the pointer except for the toolbar itself. */}
@@ -180,7 +187,17 @@ function Toolbar({ rect, id, siteId, pageId }: { rect: Rect; id: string; siteId:
   );
 }
 
-function Btn({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
+function Btn({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"

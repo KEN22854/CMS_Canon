@@ -1,5 +1,6 @@
 import { videoEmbedUrl, type BlockNode, type RichTextDoc } from '@canon/blocks';
 import type { CSSProperties, ReactNode } from 'react';
+import { FormView, type RenderForm } from './form';
 import { RichText } from './rich-text';
 
 /**
@@ -31,6 +32,8 @@ export interface RenderContext {
    * (wrappers would break flex/grid layouts like Columns). Embeds become inert.
    */
   editing?: boolean;
+  /** Forms embedded on the page (public definitions, keyed by id). */
+  forms?: Record<string, RenderForm>;
 }
 
 type P = Record<string, unknown>;
@@ -55,7 +58,17 @@ const TONE: Record<string, string> = { primary: 'bg-site-primary text-white', mu
 
 const CONTAINERS = new Set(['section', 'row', 'column']);
 
-export function BlockRenderer({ node, ctx, isRoot = false, parent }: { node: BlockNode; ctx: RenderContext; isRoot?: boolean; parent?: BlockNode }): ReactNode {
+export function BlockRenderer({
+  node,
+  ctx,
+  isRoot = false,
+  parent,
+}: {
+  node: BlockNode;
+  ctx: RenderContext;
+  isRoot?: boolean;
+  parent?: BlockNode;
+}): ReactNode {
   const p = node.props as P;
   const a = ctx.editing ? { 'data-block-id': node.id, 'data-block-type': node.type, ...(CONTAINERS.has(node.type) ? { 'data-block-container': '' } : {}) } : {};
   const children = () =>
@@ -280,6 +293,28 @@ export function BlockRenderer({ node, ctx, isRoot = false, parent }: { node: Blo
         </div>
       );
 
+    case 'form': {
+      const form = ctx.forms?.[str(p.formId)];
+      if (!form || !form.isActive)
+        return ctx.draft || ctx.editing ? (
+          <Placeholder
+            a={a}
+            label={str(p.formId) ? 'This form is inactive or was deleted' : 'Choose a form in the inspector'}
+          />
+        ) : null;
+      return (
+        <FormView
+          form={form}
+          title={str(p.title)}
+          intro={str(p.intro)}
+          submitLabel={str(p.submitLabel, 'Send')}
+          layout={str(p.layout, 'card')}
+          inert={Boolean(ctx.editing)}
+          attrs={a as Record<string, string>}
+        />
+      );
+    }
+
     default:
       // Registered-but-unrendered types (plugins, later phases) are visible only in preview/builder.
       return ctx.draft || ctx.editing ? <Placeholder a={a} label={`Block “${node.type}” has no renderer yet`} /> : null;
@@ -304,7 +339,19 @@ function CtaLink({ href, label, variant }: { href: string; label: string; varian
 }
 
 /** <picture> with AVIF then WebP sources; intrinsic size reserves space (no layout shift). */
-export function Picture({ media, alt, className, sizes, priority = false }: { media: RenderMedia; alt: string; className?: string; sizes: string; priority?: boolean }) {
+export function Picture({
+  media,
+  alt,
+  className,
+  sizes,
+  priority = false,
+}: {
+  media: RenderMedia;
+  alt: string;
+  className?: string;
+  sizes: string;
+  priority?: boolean;
+}) {
   const sources = media.variants?.sources ?? [];
   const set = (format: 'avif' | 'webp') =>
     sources

@@ -12,7 +12,8 @@
     "clean": "rimraf dist",
     "test:integration": "vitest run -c vitest.integration.config.mts",
     "test:coverage": "vitest run -c vitest.coverage.config.mts --coverage",
-    "eval": "dotenv -e ../../.env -- vitest run -c vitest.eval.config.mts"
+    "eval": "dotenv -e ../../.env -- vitest run -c vitest.eval.config.mts",
+    "openapi": "nest build && dotenv -e ../../.env -- node dist/openapi-dump.js && pnpm --filter @canon/sdk generate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1156.0",

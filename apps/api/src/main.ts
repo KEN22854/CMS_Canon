@@ -2,10 +2,11 @@ import { otelSdk } from './instrumentation';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { configureApp } from './bootstrap';
+import { buildOpenApi } from './common/http/openapi';
 import { APP_CONFIG, type AppConfig } from './config/env';
 
 async function bootstrap(): Promise<void> {
@@ -17,14 +18,7 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   if (config.NODE_ENV !== 'production') {
-    const doc = new DocumentBuilder()
-      .setTitle('Canon CMS API')
-      .setDescription('AI-native headless CMS — REST v1')
-      .setVersion('0.2.0')
-      .addBearerAuth()
-      .addApiKey({ type: 'apiKey', in: 'header', name: 'x-api-key' }, 'api-key')
-      .build();
-    SwaggerModule.setup('api/docs', app, () => SwaggerModule.createDocument(app, doc));
+    SwaggerModule.setup('api/docs', app, () => buildOpenApi(app));
   }
 
   await app.listen(config.API_PORT);

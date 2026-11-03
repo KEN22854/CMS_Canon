@@ -25,6 +25,12 @@ function describe(e: Envelope): string {
       return `🗂 Entry published: ${str(d.slug)} (${str(d.locale)})`;
     case 'fact.changed':
       return `🧭 Canon fact changed: ${str(d.key)} (v${String(d.version ?? '')}) — affected pages will be updated`;
+    case 'form.submitted': {
+      const fields = Object.entries((d.data ?? {}) as Record<string, unknown>)
+        .slice(0, 4)
+        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}`);
+      return `📨 New submission to ${str(d.formName)}${d.path ? ` on ${str(d.path)}` : ''}${fields.length ? ` — ${fields.join(' · ')}` : ''}`;
+    }
     case 'ping':
       return '👋 Canon is connected to this channel';
     default:

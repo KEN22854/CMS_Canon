@@ -20,14 +20,15 @@ const tier = (id: string, name: string, price: string, pitch: string, cta: strin
 export const FIRST_PARTY_PLUGINS: PluginManifest[] = [
   {
     name: 'slack-notifications',
-    version: '1.0.0',
+    version: '1.1.0',
     displayName: 'Slack notifications',
-    description: 'Posts to a Slack channel when pages or entries are published and when a Canon fact changes, so the team sees what went live.',
+    description:
+      'Posts to a Slack channel when pages or entries are published, a form receives a submission, or a Canon fact changes.',
     author: 'Canon',
     category: 'notifications',
     icon: '💬',
     permissions: [],
-    events: ['page.published', 'page.unpublished', 'entry.published', 'fact.changed'],
+    events: ['page.published', 'page.unpublished', 'entry.published', 'fact.changed', 'form.submitted'],
     settings: [
       { key: 'webhookUrl', label: 'Slack incoming webhook URL', kind: 'secret', required: true, placeholder: 'https://hooks.slack.com/services/…', help: 'Slack → Apps → Incoming Webhooks → Add to channel.' },
       { key: 'channel', label: 'Channel override', kind: 'text', required: false, placeholder: '#marketing' },
@@ -37,15 +38,31 @@ export const FIRST_PARTY_PLUGINS: PluginManifest[] = [
   },
   {
     name: 'automation-webhooks',
-    version: '1.0.0',
+    version: '1.1.0',
     displayName: 'Zapier / Make / n8n',
     description: 'Sends content events to an automation platform and gives it a read-only API key, so workflows can react to publishes and read the content.',
     author: 'Canon',
     category: 'automation',
     icon: '⚡',
     permissions: ['content:read'],
-    events: ['page.published', 'page.unpublished', 'page.updated', 'entry.published', 'entry.updated', 'fact.changed'],
-    settings: [{ key: 'endpoint', label: 'Catch hook URL', kind: 'url', required: true, placeholder: 'https://hooks.zapier.com/hooks/catch/…' }],
+    events: [
+      'page.published',
+      'page.unpublished',
+      'page.updated',
+      'entry.published',
+      'entry.updated',
+      'fact.changed',
+      'form.submitted',
+    ],
+    settings: [
+      {
+        key: 'endpoint',
+        label: 'Catch hook URL',
+        kind: 'url',
+        required: true,
+        placeholder: 'https://hooks.zapier.com/hooks/catch/…',
+      },
+    ],
     delivery: { kind: 'webhook', urlSetting: 'endpoint' },
     blocks: [],
   },

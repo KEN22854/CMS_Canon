@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { Public, RateLimit } from '../../common/auth/decorators';
@@ -23,7 +35,13 @@ import {
   type LoginBody,
   type RegisterBody,
 } from './auth.dto';
-import { AuthService, type AuthSuccess, type MfaChallenge } from './auth.service';
+import {
+  AuthService,
+  updateMeBody,
+  type AuthSuccess,
+  type MfaChallenge,
+  type UpdateMeBody,
+} from './auth.service';
 import { SessionService, type ClientMeta } from './session.service';
 import { TwoFactorService } from './two-factor.service';
 
@@ -155,6 +173,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Current principal, tenants and packed CASL rules for UI gating' })
   me(@Principal() p: RequestPrincipal) {
     return this.auth.me(p);
+  }
+
+  @Patch('me')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update your display name or interface language' })
+  updateMe(@Body(new ZodBody(updateMeBody)) body: UpdateMeBody, @Principal() p: RequestPrincipal) {
+    return this.auth.updateMe(userOf(p), body);
   }
 
   @Get('sessions')

@@ -13,7 +13,17 @@ import { deterministicCheck, literalSubstitution, type FactValueType } from './f
 import { FactsService } from './facts.service';
 import { parseStoredPath, storedPath } from './mentions.service';
 import { ensureTeam, type TeamRole } from './team';
-import { ContentTargets, contextAround, plainOf, replaceSpan, withField, type ContentTarget, type TargetField, type TargetType } from './targets';
+import {
+  ContentTargets,
+  contextAround,
+  plainOf,
+  replaceSpan,
+  withField,
+  type ContentTarget,
+  type TargetField,
+  type TargetType,
+} from './targets';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export const PROPAGATE_QUEUE = 'canon-propagate';
 
@@ -61,7 +71,14 @@ class StepLog {
     readonly runId: string,
     private readonly tenantId: string,
   ) {}
-  async add(step: { node: string; toolName?: string; toolInput?: unknown; toolOutput?: unknown; res?: CompletionResult; startedAt: number }) {
+  async add(step: {
+    node: string;
+    toolName?: string;
+    toolInput?: unknown;
+    toolOutput?: unknown;
+    res?: CompletionResult;
+    startedAt: number;
+  }) {
     this.n += 1;
     const tokens = step.res ? step.res.usage.inputTokens + step.res.usage.outputTokens : 0;
     const cost = step.res ? step.res.costMicroUsd / 1_000_000 : 0;
@@ -107,6 +124,7 @@ export class PropagationService implements OnApplicationBootstrap {
     private readonly prompts: PromptRegistry,
     private readonly content: AiContentService,
     private readonly queues: Queues,
+    private readonly notifications: NotificationsService,
     private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(PropagationService.name);
@@ -272,8 +290,21 @@ export class PropagationService implements OnApplicationBootstrap {
       for (const l of Object.values(logs)) await this.system.aiAgentRun.update({ where: { id: l.runId }, data: { status: 'COMPLETED', completedAt: new Date(), totalTokens: l.tokens, costUsd: l.cost } });
       const summary = { ...totals, bound: boundCount, from: oldDisplay, to: fact.displayValue, factKey: fact.key, costUsd: Math.round(cost * 1e6) / 1e6, tokens };
       // Content always waits for a human: the team proposes, people dispose.
-      await this.system.aiAgentRun.update({ where: { id: runId }, data: { status: 'WAITING_HUMAN', result: summary, totalTokens: tokens, costUsd: cost } });
-      await this.system.contentBranch.update({ where: { id: branch.id }, data: { status: 'IN_REVIEW', aiSummary: summary } });
+      await this.system.aiAgentRun.update({
+        where: { id: runId },
+        data: { status: 'WAITING_HUMAN', result: summary, totalTokens: tokens, costUsd: cost },
+      });
+      await this.system.contentBranch.update({
+        where: { id: branch.id },
+        data: { status: 'IN_REVIEW', aiSummary: summary },
+      });
+      await this.notifications.notifyRoles(tenantId, ['OWNER', 'ADMIN', 'EDITOR'], {
+        type: 'canon.branch_ready',
+        title: `Canon prepared updates for ${fact.key}`,
+        message: `${totals.proposed ?? 0} change(s) for ${oldDisplay || 'the old value'} → ${fact.displayValue}, waiting for review`,
+        link: `/canon/branches/${branch.id}`,
+        dedupeKey: `branch-ready:${branch.id}`,
+      });
     } catch (err) {
       this.logger.error({ err, runId }, 'canon.propagation_failed');
       const message = err instanceof Error ? err.message.slice(0, 300) : 'failed';
@@ -289,7 +320,22 @@ export class PropagationService implements OnApplicationBootstrap {
     logFor: (r: TeamRole) => Promise<StepLog>,
     agent: { systemPrompt: string; model: { name: string; provider: { name: string } } | null },
     prompt: Awaited<ReturnType<PromptRegistry['get']>>,
-    x: { fact: { key: string; displayValue: string; valueType: string; value: unknown; subject: { canonicalName: string } }; oldDisplay: string; oldValue: unknown; original: string; proposed: string; span: string; target: ContentTarget; runId: string },
+    x: {
+      fact: {
+        key: string;
+        displayValue: string;
+        valueType: string;
+        value: unknown;
+        subject: { canonicalName: string };
+      };
+      oldDisplay: string;
+      oldValue: unknown;
+      original: string;
+      proposed: string;
+      span: string;
+      target: ContentTarget;
+      runId: string;
+    },
   ): Promise<{ verdict: 'pass' | 'uncertain' | 'fail'; issues: string[] }> {
     const det = deterministicCheck(x.span, x.oldDisplay, { valueType: x.fact.valueType as FactValueType, value: x.fact.value, displayValue: x.fact.displayValue }, x.oldValue);
     const log = await logFor('Fact-Checker');
@@ -326,7 +372,9 @@ export class PropagationService implements OnApplicationBootstrap {
   }
 }
 
-function modelOf(agent: { model: { name: string; provider: { name: string } } | null }): ModelKey | undefined {
+function modelOf(agent: {
+  model: { name: string; provider: { name: string } } | null;
+}): ModelKey | undefined {
   const key = agent.model ? `${agent.model.provider.name}/${agent.model.name}` : undefined;
   return key && isModelKey(key) ? key : undefined;
 }

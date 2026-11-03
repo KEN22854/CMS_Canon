@@ -14,6 +14,7 @@ import { PrismaService, SystemPrismaService } from '../../infrastructure/prisma/
 import { Queues } from '../../infrastructure/queue/queue.module';
 import { EVENT_BY_TYPE, WEBHOOK_EVENTS, WEBHOOK_EVENT_NAMES, assertDeliverableUrl, pinnedFetch, signWebhook } from './events';
 import { pluginTarget } from './plugin-targets';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export const webhookBody = z.object({
   name: z.string().trim().min(2).max(80),
@@ -60,6 +61,7 @@ export class WebhooksService implements OnApplicationBootstrap {
     private readonly bus: EventBus,
     private readonly queues: Queues,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(WebhooksService.name);
@@ -241,6 +243,13 @@ export class WebhooksService implements OnApplicationBootstrap {
       if (updated.failureCount >= DISABLE_AFTER) {
         await this.system.webhook.update({ where: { id: hook.id }, data: { isActive: false, disabledReason: `Disabled after ${updated.failureCount} failed deliveries (last: ${error})` } });
         this.logger.warn({ webhookId: hook.id, tenantId: hook.tenantId }, 'webhook.disabled');
+        await this.notifications.notifyRoles(hook.tenantId, ['OWNER', 'ADMIN'], {
+          type: 'webhook.disabled',
+          title: `Webhook paused: ${hook.name}`,
+          message: `Canon stopped sending to ${hook.url} after ${updated.failureCount} failed deliveries (last: ${error}).`,
+          link: '/settings/integrations',
+          dedupeKey: `webhook-disabled:${hook.id}:${updated.failureCount}`,
+        });
       }
       return;
     }

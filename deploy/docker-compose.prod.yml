@@ -1,6 +1,7 @@
 # Single-host production:
 #   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d
-# Put a TLS-terminating proxy (Caddy, Traefik, nginx) in front of admin (:3000) and web (:3001).
+# TLS: add --profile edge to run the bundled Caddy (deploy/Caddyfile, on-demand certificates for
+# verified custom domains), or put your own proxy in front of admin (:3000) and web (:3001).
 # The browser reaches the API only through the admin's /api proxy; the renderer talks to it
 # on the internal network.
 name: canon
@@ -72,6 +73,20 @@ services:
     ports: ["127.0.0.1:3001:3001"]
     depends_on: [api]
 
+  caddy:
+    image: caddy:2-alpine
+    profiles: [edge]
+    restart: unless-stopped
+    environment:
+      ADMIN_HOST: ${ADMIN_HOST:?set ADMIN_HOST}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [admin, web]
+
 volumes:
+  caddy-data:
   pg-data:
   redis-data:

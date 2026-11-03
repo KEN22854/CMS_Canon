@@ -5,9 +5,20 @@ import { PageHeader } from '@/components/app-shell';
 import { Alert, Card, CardContent, CardDescription, CardHeader, CardTitle, Progress } from '@/components/ui';
 import { useAuth } from '@/lib/auth-store';
 import { useAiUsage, useQuota } from '@/lib/queries';
+import { useT } from '@/lib/i18n';
 import { formatNumber, formatUsd } from '@/lib/utils';
 
-function Meter({ label, used, limit, format = formatNumber }: { label: string; used: number; limit: number | null; format?: (v: number | null) => string }) {
+function Meter({
+  label,
+  used,
+  limit,
+  format = formatNumber,
+}: {
+  label: string;
+  used: number;
+  limit: number | null;
+  format?: (v: number | null) => string;
+}) {
   const pct = limit ? (used / limit) * 100 : 0;
   return (
     <div className="space-y-1.5">
@@ -27,15 +38,16 @@ export default function DashboardPage() {
   const tenant = useAuth((s) => s.tenant);
   const quota = useQuota();
   const ai = useAiUsage();
+  const t = useT();
 
   if (!tenant) {
     return (
       <>
-        <PageHeader title={`Welcome, ${user?.name ?? ''}`} />
+        <PageHeader title={t('dash.welcome', { name: user?.name ?? '' })} />
         <Alert>
-          You are not in a workspace yet.{' '}
+          {t('dash.noWorkspace')}{' '}
           <Link className="font-medium underline" href="/workspaces/new">
-            Create one
+            {t('dash.createOne')}
           </Link>
           .
         </Alert>
@@ -45,53 +57,91 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title={tenant.name} description={`${tenant.plan} plan · you are ${tenant.role.toLowerCase()}`} />
+      <PageHeader
+        title={tenant.name}
+        description={t('dash.planLine', { plan: tenant.plan, role: tenant.role.toLowerCase() })}
+      />
       {ai.data?.month.forecastOverBudget && (
         <Alert tone="warning" className="mb-4">
-          At the current pace this workspace will spend {formatUsd(ai.data.month.forecastUsd)} on AI this month — above its {formatUsd(ai.data.month.budgetUsd ?? 0)} budget.
+          {t('dash.aiForecast', {
+            forecast: formatUsd(ai.data.month.forecastUsd),
+            budget: formatUsd(ai.data.month.budgetUsd ?? 0),
+          })}
         </Alert>
       )}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Plan usage</CardTitle>
-            <CardDescription>Limits of the {tenant.plan} plan</CardDescription>
+            <CardTitle>{t('dash.planUsage')}</CardTitle>
+            <CardDescription>{t('dash.planLimits', { plan: tenant.plan })}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {quota.data ? (
               <>
-                <Meter label="Members (incl. pending invites)" used={quota.data.usage.members + quota.data.usage.pendingInvites} limit={quota.data.limits.members} />
-                <Meter label="Sites" used={quota.data.usage.sites} limit={quota.data.limits.sites} />
-                <Meter label="Pages" used={quota.data.usage.pages} limit={quota.data.limits.pages} />
-                <Meter label="Storage (MB)" used={quota.data.usage.storageMb} limit={quota.data.limits.storageMb} />
+                <Meter
+                  label={t('dash.members')}
+                  used={quota.data.usage.members + quota.data.usage.pendingInvites}
+                  limit={quota.data.limits.members}
+                />
+                <Meter
+                  label={t('dash.sites')}
+                  used={quota.data.usage.sites}
+                  limit={quota.data.limits.sites}
+                />
+                <Meter
+                  label={t('dash.pages')}
+                  used={quota.data.usage.pages}
+                  limit={quota.data.limits.pages}
+                />
+                <Meter
+                  label={t('dash.storage')}
+                  used={quota.data.usage.storageMb}
+                  limit={quota.data.limits.storageMb}
+                />
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">{quota.isError ? 'Could not load usage.' : 'Loading…'}</p>
+              <p className="text-sm text-muted-foreground">
+                {quota.isError ? t('dash.usageError') : t('common.loading')}
+              </p>
             )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>AI this month</CardTitle>
+            <CardTitle>{t('dash.aiMonth')}</CardTitle>
             <CardDescription>
               <Link href="/settings/ai-usage" className="text-primary hover:underline">
-                Details
+                {t('dash.details')}
               </Link>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {ai.data ? (
               <>
-                <Meter label="Spend" used={ai.data.month.spentUsd} limit={ai.data.month.budgetUsd} format={(v) => (v === null ? 'No cap' : formatUsd(v))} />
-                <Meter label="Tokens" used={ai.data.month.tokens} limit={ai.data.limits.tokensPerMonth} />
+                <Meter
+                  label={t('dash.spend')}
+                  used={ai.data.month.spentUsd}
+                  limit={ai.data.month.budgetUsd}
+                  format={(v) => (v === null ? t('dash.noCap') : formatUsd(v))}
+                />
+                <Meter
+                  label={t('dash.tokens')}
+                  used={ai.data.month.tokens}
+                  limit={ai.data.limits.tokensPerMonth}
+                />
                 <dl className="grid grid-cols-3 gap-2 pt-2 text-center">
-                  <Stat label="Requests" value={formatNumber(ai.data.totals.requests)} />
-                  <Stat label="Cache hits" value={`${Math.round(ai.data.totals.cacheHitRate * 100)}%`} />
-                  <Stat label="Forecast" value={formatUsd(ai.data.month.forecastUsd)} />
+                  <Stat label={t('dash.requests')} value={formatNumber(ai.data.totals.requests)} />
+                  <Stat
+                    label={t('dash.cacheHits')}
+                    value={`${Math.round(ai.data.totals.cacheHitRate * 100)}%`}
+                  />
+                  <Stat label={t('dash.forecast')} value={formatUsd(ai.data.month.forecastUsd)} />
                 </dl>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">{ai.isError ? 'AI usage is not available for your role.' : 'Loading…'}</p>
+              <p className="text-sm text-muted-foreground">
+                {ai.isError ? t('dash.aiNotAvailable') : t('common.loading')}
+              </p>
             )}
           </CardContent>
         </Card>

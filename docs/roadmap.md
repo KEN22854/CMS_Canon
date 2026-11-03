@@ -16,15 +16,15 @@ sound, and it has to improve itself**.
 - Raw analytics retention (`ANALYTICS_RAW_RETENTION_MONTHS`); the audit trail is never dropped.
 - A prompt evaluation suite on real models (`pnpm --filter @canon/api eval`).
 
-## Phase 9 — Essentials
+## Phase 9 — Essentials ✅
 
-- **Forms**: a form block, submissions, spam protection, delivery to CRMs and webhooks, notifications.
-- **Notification center** in the admin and an e-mail digest.
-- **Custom domains**: DNS ownership verification and automatic TLS.
-- **Review workflow**: draft → in review → approved, comments and assignments.
-- **Admin in English and Russian**.
-- **TypeScript SDK** (`@canon/sdk`) for frontends, generated from OpenAPI.
-- **SCIM 2.0**: users created and deactivated from the IdP automatically.
+- **Forms**: a form block with a field builder and templates; submissions checked by a honeypot, timing and heuristics, with AI deciding the doubtful ones; IPs shortened before storage; an inbox with statuses, CSV export (formula-injection safe) and erasure; delivery by e-mail, in-app notifications, `form.submitted` webhooks and Slack. Works without JavaScript.
+- **Notification center**: a bell with the unread count, a full inbox, and per-type e-mail preferences (instant, daily digest, off). Billing, webhooks, Canon branches, reviews, mentions and domains all notify through it.
+- **Custom domains**: a claim is pending until a DNS TXT record proves control; only verified domains are served and get certificates (Caddy on-demand TLS asks `GET /v1/tls/ask`). Daily re-checks warn owners and release a domain after 7 days without proof. Verified hostnames are unique across workspaces; unproven claims block nobody.
+- **Review workflow**: ask for review of an exact draft version, approve or request changes (four-eyes: never your own request), a review queue per site, and comments anchored to blocks with @mentions and resolvable threads. With “Require review before publishing” any edit after approval makes it stale; owners and admins can override, and the override is audited. Scheduled publishes refuse to ship edits made after approval.
+- **Admin in English and Russian**: dictionaries with plural rules, the choice saved to the profile (`PATCH /v1/auth/me`). Translated now: navigation, sign-in and sign-up, the dashboard, notifications, forms, reviews, domains and SCIM; the remaining screens follow.
+- **`@canon/sdk`**: a typed client generated from the OpenAPI document. The document now describes 97 request bodies from the Zod schemas the API validates with. MIT-licensed so it can be embedded in any frontend.
+- **SCIM 2.0** (`/scim/v2`, Enterprise): Users with filters, PATCH in both the Okta and Entra styles, roles through a Canon extension attribute, deprovisioning that ends access at once; only e-mails on verified SSO domains, and the last owner can never be removed.
 
 ## Phase 10 — What no other CMS does
 

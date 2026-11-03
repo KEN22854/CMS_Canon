@@ -11,10 +11,25 @@ import { SystemPrismaService } from '../../infrastructure/prisma/prisma.service'
 import { REDIS } from '../../infrastructure/redis/redis.module';
 import { MediaService } from '../media/media.service';
 import { PagesService } from '../pages/pages.service';
-import { DEFAULT_THEME } from '../sites/sites.service';
+import { DEFAULT_THEME, servedHost } from '../sites/sites.service';
+import { publicForm } from '../forms/forms.dto';
 
 const CACHE_TTL_SEC = 300;
-const INVALIDATING_EVENTS = ['PagePublished', 'PageUnpublished', 'PageMoved', 'SiteUpdated', 'SiteDeleted', 'EntryPublished', 'EntryUnpublished', 'CollectionUpdated', 'CollectionDeleted', 'FactChanged', 'ExperimentChanged', 'PersonalizationChanged'];
+const INVALIDATING_EVENTS = [
+  'PagePublished',
+  'PageUnpublished',
+  'PageMoved',
+  'SiteUpdated',
+  'SiteDeleted',
+  'EntryPublished',
+  'EntryUnpublished',
+  'CollectionUpdated',
+  'CollectionDeleted',
+  'FactChanged',
+  'ExperimentChanged',
+  'PersonalizationChanged',
+  'FormUpdated',
+];
 
 /**
  * Read model for the public renderer. Runs on the system role because the visitor has no tenant
@@ -41,7 +56,9 @@ export class DeliveryService implements OnModuleInit {
 
   async resolve(host: string) {
     const h = host.toLowerCase().replace(/:\d+$/, '');
-    const site = await this.system.site.findFirst({ where: { deletedAt: null, OR: [{ domain: h }, { internalDomain: h }] } });
+    const site = await this.system.site.findFirst({
+      where: { deletedAt: null, OR: [{ domain: h, domainStatus: 'VERIFIED' }, { internalDomain: h }] },
+    });
     if (!site) throw notFound('Site');
     return presentSite(site);
   }
@@ -153,10 +170,20 @@ export class DeliveryService implements OnModuleInit {
     const ogId = typeof seo.ogImageMediaId === 'string' ? seo.ogImageMediaId : undefined;
     if (ogId) mediaIds.push(ogId);
     const factKeys = collectPageFactKeys(content);
+    const formIds = collectFormIds(content.root);
 
-    const [mediaRows, factRows, alternates, nav] = await Promise.all([
-      mediaIds.length ? this.system.media.findMany({ where: { id: { in: mediaIds }, siteId: site.id, deletedAt: null, status: 'READY' } }) : [],
-      factKeys.length ? this.system.fact.findMany({ where: { tenantId: site.tenantId, key: { in: factKeys }, deletedAt: null }, select: { key: true, displayValue: true } }) : [],
+    const [mediaRows, factRows, alternates, nav, formRows] = await Promise.all([
+      mediaIds.length
+        ? this.system.media.findMany({
+            where: { id: { in: mediaIds }, siteId: site.id, deletedAt: null, status: 'READY' },
+          })
+        : [],
+      factKeys.length
+        ? this.system.fact.findMany({
+            where: { tenantId: site.tenantId, key: { in: factKeys }, deletedAt: null },
+            select: { key: true, displayValue: true },
+          })
+        : [],
       page.translationGroupId
         ? this.system.page.findMany({ where: { translationGroupId: page.translationGroupId, siteId: site.id, deletedAt: null, publishedVersion: { not: null } }, select: { locale: true, fullPath: true } })
         : [],
@@ -166,6 +193,9 @@ export class DeliveryService implements OnModuleInit {
         orderBy: [{ position: 'asc' }, { fullPath: 'asc' }],
         take: 8,
       }),
+      formIds.length
+        ? this.system.form.findMany({ where: { id: { in: formIds }, siteId: site.id, deletedAt: null } })
+        : [],
     ]);
 
     return {
@@ -176,6 +206,7 @@ export class DeliveryService implements OnModuleInit {
       nav: nav.map((n) => ({ title: n.title, path: n.fullPath })),
       media: Object.fromEntries(mediaRows.map((m) => [m.id, this.media.present(m)])),
       facts: Object.fromEntries(factRows.map((f) => [f.key, f.displayValue])),
+      forms: Object.fromEntries(formRows.map((f) => [f.id, publicForm(f)])),
     };
   }
 
@@ -219,7 +250,7 @@ function presentSite(s: Site) {
   return {
     id: s.id,
     name: s.name,
-    host: s.domain ?? s.internalDomain,
+    host: servedHost(s),
     defaultLocale: s.defaultLocale,
     locales: s.locales,
     theme: mergeTheme(s.theme),
@@ -238,4 +269,19 @@ function mergeTheme(raw: unknown) {
 export function normalizePath(p: string): string {
   const clean = `/${p}`.replace(/\/+/g, '/').replace(/\/$/, '').toLowerCase();
   return clean === '' ? '/' : clean;
+}
+
+/** Form blocks on a page (any depth): their definitions travel with the page. */
+function collectFormIds(node: {
+  type: string;
+  props: Record<string, unknown>;
+  children: { type: string; props: Record<string, unknown>; children: unknown[] }[];
+}): string[] {
+  const out = new Set<string>();
+  const walk = (n: typeof node) => {
+    if (n.type === 'form' && typeof n.props.formId === 'string' && n.props.formId) out.add(n.props.formId);
+    for (const c of n.children) walk(c as typeof node);
+  };
+  walk(node);
+  return [...out];
 }

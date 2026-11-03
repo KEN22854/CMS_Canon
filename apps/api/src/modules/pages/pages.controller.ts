@@ -18,13 +18,17 @@ import {
   type ScheduleBody,
   type UpdatePageBody,
 } from './pages.dto';
+import { ReviewsService } from '../reviews/reviews.service';
 import { PagesService } from './pages.service';
 
 @ApiTags('pages')
 @ApiBearerAuth()
 @Controller({ path: 'sites/:siteId/pages', version: '1' })
 export class PagesController {
-  constructor(private readonly pages: PagesService) {}
+  constructor(
+    private readonly pages: PagesService,
+    private readonly reviews: ReviewsService,
+  ) {}
 
   @Get()
   @RequirePermission('read', 'Page')
@@ -75,7 +79,14 @@ export class PagesController {
   @Post(':pageId/publish')
   @HttpCode(200)
   @RequirePermission('publish', 'Page')
-  publish(@Param('siteId') siteId: string, @Param('pageId') pageId: string, @Body(new ZodBody(publishBody)) body: { comment?: string }, @TenantScope() p: TenantPrincipal, @Req() req: Request) {
+  async publish(
+    @Param('siteId') siteId: string,
+    @Param('pageId') pageId: string,
+    @Body(new ZodBody(publishBody)) body: { comment?: string; overrideReview?: boolean },
+    @TenantScope() p: TenantPrincipal,
+    @Req() req: Request,
+  ) {
+    await this.reviews.assertPublishable(p, abilityOf(req), siteId, 'PAGE', pageId, body.overrideReview);
     return this.pages.publish(p, abilityOf(req), siteId, pageId, body.comment);
   }
 
@@ -89,7 +100,15 @@ export class PagesController {
   @Post(':pageId/schedule')
   @HttpCode(200)
   @RequirePermission('publish', 'Page')
-  schedule(@Param('siteId') siteId: string, @Param('pageId') pageId: string, @Body(new ZodBody(scheduleBody)) body: ScheduleBody, @TenantScope() p: TenantPrincipal, @Req() req: Request) {
+  async schedule(
+    @Param('siteId') siteId: string,
+    @Param('pageId') pageId: string,
+    @Body(new ZodBody(scheduleBody)) body: ScheduleBody,
+    @TenantScope() p: TenantPrincipal,
+    @Req() req: Request,
+  ) {
+    if (body.action === 'PUBLISH')
+      await this.reviews.assertPublishable(p, abilityOf(req), siteId, 'PAGE', pageId, body.overrideReview);
     return this.pages.schedule(p, abilityOf(req), siteId, pageId, body);
   }
 

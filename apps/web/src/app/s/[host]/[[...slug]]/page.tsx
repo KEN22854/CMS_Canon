@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { cookies, draftMode } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { BlockRenderer } from '@canon/ui-blocks';
+import { FormEnhancer } from '@/components/forms';
 import { Tracker } from '@/components/tracker';
 import { PREVIEW_COOKIE } from '@/lib/preview';
 import { getPage, getPreview, localizedHref, resolveSite, splitLocale, type DeliveryPage, type DeliverySite } from '@/lib/delivery';
@@ -97,9 +98,21 @@ export default async function SitePage({ params }: { params: Params }) {
         </div>
       </header>
       <main>
-        <BlockRenderer node={page.content.root} ctx={{ media: data.media, facts: data.facts, draft: data.draft }} isRoot />
+        <BlockRenderer
+          node={page.content.root}
+          ctx={{ media: data.media, facts: data.facts, draft: data.draft, forms: data.forms }}
+          isRoot
+        />
       </main>
-      {!data.draft && <Tracker siteId={site.id} path={page.path} title={page.title} experiments={data.applied?.experiments ?? NO_EXPERIMENTS} />}
+      {Object.keys(data.forms ?? {}).length > 0 && <FormEnhancer />}
+      {!data.draft && (
+        <Tracker
+          siteId={site.id}
+          path={page.path}
+          title={page.title}
+          experiments={data.applied?.experiments ?? NO_EXPERIMENTS}
+        />
+      )}
       <footer className="border-t border-site-fg/10 py-8 text-center text-sm opacity-60">
         © {new Date().getFullYear()} {site.name}
       </footer>

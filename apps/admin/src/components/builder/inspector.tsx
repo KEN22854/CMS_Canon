@@ -8,6 +8,7 @@ import { MediaPicker } from '../editor/media-picker';
 import { BlockAiMenu } from './block-ai';
 import { RichTextEditor } from './rich-text-editor';
 import { useBuilder } from './store';
+import { useForms } from '@/lib/forms';
 
 interface Ctx {
   siteId: string;
@@ -47,7 +48,23 @@ export function Inspector({ node, ...ctx }: { node: BlockNode } & Ctx) {
   );
 }
 
-function Field({ id, blockId, prop, meta, value, ctx, onChange }: { id: string; blockId: string; prop: string; meta: FieldMeta; value: unknown; ctx: Ctx; onChange: (v: unknown) => void }) {
+function Field({
+  id,
+  blockId,
+  prop,
+  meta,
+  value,
+  ctx,
+  onChange,
+}: {
+  id: string;
+  blockId: string;
+  prop: string;
+  meta: FieldMeta;
+  value: unknown;
+  ctx: Ctx;
+  onChange: (v: unknown) => void;
+}) {
   const label = (extra?: React.ReactNode) => (
     <div className="flex min-h-6 items-center justify-between">
       <Label htmlFor={id}>{meta.label}</Label>
@@ -103,8 +120,28 @@ function Field({ id, blockId, prop, meta, value, ctx, onChange }: { id: string; 
     case 'toggle':
       return (
         <label className="flex items-center gap-2 text-sm">
-          <input id={id} type="checkbox" disabled={ctx.readOnly} checked={value !== false} onChange={(e) => onChange(e.target.checked)} /> {meta.label}
+          <input
+            id={id}
+            type="checkbox"
+            disabled={ctx.readOnly}
+            checked={value !== false}
+            onChange={(e) => onChange(e.target.checked)}
+          />{' '}
+          {meta.label}
         </label>
+      );
+    case 'form':
+      return (
+        <div className="space-y-1.5">
+          {label()}
+          <FormPicker
+            id={id}
+            siteId={ctx.siteId}
+            value={typeof value === 'string' ? value : ''}
+            disabled={ctx.readOnly}
+            onChange={onChange}
+          />
+        </div>
       );
     case 'media':
       return (
@@ -121,7 +158,19 @@ function Field({ id, blockId, prop, meta, value, ctx, onChange }: { id: string; 
 }
 
 /** Repeating items (FAQ questions, feature cards, stats): edit, reorder, add and remove. */
-function ListField({ id, meta, value, ctx, onChange }: { id: string; meta: FieldMeta; value: unknown; ctx: Ctx; onChange: (v: unknown) => void }) {
+function ListField({
+  id,
+  meta,
+  value,
+  ctx,
+  onChange,
+}: {
+  id: string;
+  meta: FieldMeta;
+  value: unknown;
+  ctx: Ctx;
+  onChange: (v: unknown) => void;
+}) {
   const items = (Array.isArray(value) ? value : []) as Record<string, unknown>[];
   const fields = Object.entries(meta.itemFields ?? {});
   const max = meta.maxItems ?? 20;
@@ -191,10 +240,64 @@ function swap<T>(arr: T[], i: number, j: number): T[] {
   return next;
 }
 
-function IconBtn({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+function IconBtn({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick} className="rounded p-1 hover:bg-muted disabled:opacity-30">
       {children}
     </button>
+  );
+}
+
+/** Picks one of the site's forms; forms themselves are built under Site → Forms. */
+function FormPicker({
+  id,
+  siteId,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  siteId: string;
+  value: string;
+  disabled: boolean;
+  onChange: (v: unknown) => void;
+}) {
+  const forms = useForms(siteId);
+  return (
+    <div className="space-y-1">
+      <Select
+        id={id}
+        className="w-full"
+        disabled={disabled}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">Choose a form…</option>
+        {forms.data?.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name}
+            {f.isActive ? '' : ' (inactive)'}
+          </option>
+        ))}
+      </Select>
+      <a
+        href={value ? `/sites/${siteId}/forms/${value}` : `/sites/${siteId}/forms`}
+        target="_blank"
+        rel="noreferrer"
+        className="text-[11px] text-primary hover:underline"
+      >
+        {value ? 'Edit this form' : 'Create a form'}
+      </a>
+    </div>
   );
 }

@@ -14,8 +14,15 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
   app.set('trust proxy', config.TRUST_PROXY.split(',').map((s) => s.trim()));
   app.use(helmet());
   // SSE must not be compressed: gzip buffers chunks and destroys token-by-token streaming.
-  app.use(compression({ filter: (req, res) => !String(res.getHeader('Content-Type') ?? '').startsWith('text/event-stream') && compression.filter(req, res) }));
-  app.useBodyParser('json', { limit: '10mb' });
+  app.use(
+    compression({
+      filter: (req, res) =>
+        !String(res.getHeader('Content-Type') ?? '').startsWith('text/event-stream') &&
+        compression.filter(req, res),
+    }),
+  );
+  // SCIM clients send application/scim+json.
+  app.useBodyParser('json', { limit: '10mb', type: ['application/json', 'application/scim+json'] });
   // SAML responses arrive as an HTML form POST from the identity provider.
   app.useBodyParser('urlencoded', { extended: false, limit: '2mb' });
   app.use(cookieParser());

@@ -32,7 +32,11 @@ export async function startFakeOllama(): Promise<{ url: string; close: () => Pro
         return;
       }
       state.calls += 1;
-      const body = JSON.parse(raw || '{}') as { messages?: { content: string; images?: string[] }[]; stream?: boolean; format?: string };
+      const body = JSON.parse(raw || '{}') as {
+        messages?: { content: string; images?: string[] }[];
+        stream?: boolean;
+        format?: string;
+      };
       const lastMsg = body.messages?.at(-1);
       const last = lastMsg?.content ?? '';
       const transcript = (body.messages ?? []).map((m) => m.content).join('\n');
@@ -92,6 +96,13 @@ function fakeReply(user: string, json: boolean, hasImage: boolean, transcript = 
  * is too long for its block.
  */
 function experiencesReply(user: string): string | null {
+  // forms.classify: anything selling SEO is spam, the rest is a lead.
+  if (user.includes('<submission>'))
+    return JSON.stringify(
+      /seo|ranking/i.test(user)
+        ? { spam: true, confidence: 0.93, category: 'spam', summary: 'SEO pitch' }
+        : { spam: false, confidence: 0.9, category: 'lead', summary: 'Wants a demo' },
+    );
   if (user.startsWith('<data>')) {
     return JSON.stringify({
       summary: 'Traffic grew and the pricing page converts.',

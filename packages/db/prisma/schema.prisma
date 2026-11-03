@@ -286,6 +286,8 @@ model User {
   locale                     String     @default("en")
   preferredAiModel           String?
   aiSettings                 Json       @default("{}")
+  /// Per notification type: "instant" | "digest" | "off" for e-mail (in-app is always on).
+  notificationPrefs          Json       @default("{}")
   createdAt                  DateTime   @default(now())
   updatedAt                  DateTime   @updatedAt
   deletedAt                  DateTime?
@@ -385,19 +387,23 @@ model Tenant {
 }
 
 model TenantMember {
-  id        String     @id @default(cuid())
-  tenantId  String
-  userId    String
-  role      MemberRole @default(VIEWER)
-  invitedAt DateTime?
-  joinedAt  DateTime?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id          String     @id @default(cuid())
+  tenantId    String
+  userId      String
+  role        MemberRole @default(VIEWER)
+  invitedAt   DateTime?
+  joinedAt    DateTime?
+  /// SCIM: the IdP's id for this person; set when the membership is provisioned by SCIM.
+  externalId  String?
+  scimManaged Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, userId])
+  @@unique([tenantId, externalId])
   @@index([userId])
   @@map("tenant_members")
 }
@@ -453,28 +459,36 @@ model ApiKey {
 // ───────────────────────────────────────────────────────────────────────────
 
 model Site {
-  id             String    @id @default(cuid())
-  tenantId       String
-  name           String
-  slug           String
-  /// Custom domain; partial unique index (deletedAt IS NULL) in raw SQL.
-  domain         String?
-  internalDomain String    @unique
-  description    String?
-  favicon        String?
-  logo           String?
-  theme          Json      @default("{}")
-  defaultLocale  String    @default("en")
-  locales        String[]  @default(["en"])
-  seoDefaults    Json      @default("{}")
-  isPublished    Boolean   @default(false)
-  publishedAt    DateTime?
-  settings       Json      @default("{}")
+  id               String       @id @default(cuid())
+  tenantId         String
+  name             String
+  slug             String
+  /// Custom domain; unique among VERIFIED live sites (partial index in raw SQL).
+  domain           String?
+  domainStatus     DomainStatus @default(NONE)
+  /// Value of the `_canon-site.<domain>` TXT record that proves ownership.
+  domainToken      String?
+  domainVerifiedAt DateTime?
+  domainCheckedAt  DateTime?
+  domainError      String?
+  /// Publishing needs an approved review of the exact version (owners and admins may override).
+  requireReview    Boolean      @default(false)
+  internalDomain   String       @unique
+  description      String?
+  favicon          String?
+  logo             String?
+  theme            Json         @default("{}")
+  defaultLocale    String       @default("en")
+  locales          String[]     @default(["en"])
+  seoDefaults      Json         @default("{}")
+  isPublished      Boolean      @default(false)
+  publishedAt      DateTime?
+  settings         Json         @default("{}")
   /// {brandVoice, glossary[], forbiddenTopics[], defaultModel, budgetUsd}
-  aiSettings     Json      @default("{}")
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
+  aiSettings       Json         @default("{}")
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
 
   tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pages       Page[]
@@ -825,22 +839,23 @@ model WebhookDelivery {
 }
 
 model Form {
-  id                 String   @id @default(cuid())
+  id                 String    @id @default(cuid())
   tenantId           String
   siteId             String
   name               String
   slug               String
   fields             Json
-  settings           Json     @default("{}")
-  notificationEmails String[] @default([])
+  settings           Json      @default("{}")
+  notificationEmails String[]  @default([])
   webhookUrl         String?
   successMessage     String?
   redirectUrl        String?
   /// {spamDetection, autoTagging, autoReplyDraft}
-  aiSettings         Json     @default("{}")
-  isActive           Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  aiSettings         Json      @default("{}")
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
 
   site        Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
   submissions FormSubmission[]
@@ -861,6 +876,8 @@ model FormSubmission {
   status           SubmissionStatus @default(NEW)
   spamScore        Float?
   aiClassification Json?
+  /// Page path, referrer, UTM, locale, consent wording shown, spam reasons.
+  meta             Json             @default("{}")
   createdAt        DateTime         @default(now())
 
   form Form @relation(fields: [formId], references: [id], onDelete: Cascade)
@@ -968,13 +985,18 @@ model Notification {
   title     String
   message   String
   data      Json      @default("{}")
+  /// Admin path the notification opens.
+  link      String?
   isRead    Boolean   @default(false)
   readAt    DateTime?
+  /// Set once the e-mail (instant or digest) went out, so digests never repeat an item.
+  emailedAt DateTime?
   createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead, createdAt])
+  @@index([emailedAt, createdAt])
   @@map("notifications")
 }
 
@@ -1800,4 +1822,80 @@ model CollabDocument {
 
   @@index([tenantId])
   @@map("collab_documents")
+}
+
+enum DomainStatus {
+  NONE
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+enum ReviewStatus {
+  OPEN
+  APPROVED
+  CHANGES_REQUESTED
+  CANCELLED
+}
+
+/// Approval of one exact version of a page or entry before it is published.
+model ReviewRequest {
+  id            String            @id @default(cuid())
+  tenantId      String
+  siteId        String
+  entityType    ContentEntityType
+  entityId      String
+  /// Draft version under review; editing the draft afterwards makes the approval stale.
+  version       Int
+  status        ReviewStatus      @default(OPEN)
+  note          String?
+  requestedById String?
+  reviewerIds   String[]
+  decidedById   String?
+  decidedAt     DateTime?
+  decisionNote  String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([tenantId, status, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@map("review_requests")
+}
+
+/// Discussion on a page or entry, optionally anchored to a block; threads via parentId.
+model Comment {
+  id           String            @id @default(cuid())
+  tenantId     String
+  entityType   ContentEntityType
+  entityId     String
+  blockId      String?
+  parentId     String?
+  authorId     String?
+  body         String
+  mentions     String[]          @default([])
+  resolvedAt   DateTime?
+  resolvedById String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  deletedAt    DateTime?
+
+  @@index([entityType, entityId, createdAt])
+  @@index([tenantId])
+  @@map("comments")
+}
+
+/// Bearer tokens the IdP uses for SCIM 2.0 provisioning (hashed; shown once).
+model ScimToken {
+  id          String    @id @default(cuid())
+  tenantId    String
+  name        String
+  keyPrefix   String
+  tokenHash   String    @unique
+  createdById String?
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId])
+  @@map("scim_tokens")
 }

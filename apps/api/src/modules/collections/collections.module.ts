@@ -36,6 +36,7 @@ import { EnrichmentQueue } from './enrichment.queue';
 import { EnrichmentService } from './enrichment.service';
 import { EntriesIoService, MAX_IMPORT_BYTES } from './entries-io.service';
 import { EntriesService } from './entries.service';
+import { ReviewsService } from '../reviews/reviews.service';
 
 const truthy = (v?: string) => v === 'true' || v === '1';
 
@@ -133,6 +134,7 @@ export class EntriesController {
     private readonly entries: EntriesService,
     private readonly collections: CollectionsService,
     private readonly enrichment: EnrichmentService,
+    private readonly reviews: ReviewsService,
   ) {}
 
   @Get()
@@ -172,8 +174,18 @@ export class EntriesController {
   @Post(':entryId/publish')
   @HttpCode(200)
   @RequirePermission('publish', 'Entry')
-  @ApiOperation({ summary: 'Validate required fields and snapshot the draft; delivery serves only snapshots' })
-  publish(@Param('siteId') siteId: string, @Param('collectionId') cid: string, @Param('entryId') id: string, @Body(new ZodBody(publishEntryBody)) body: { comment?: string }, @TenantScope() p: TenantPrincipal, @Req() req: Request) {
+  @ApiOperation({
+    summary: 'Validate required fields and snapshot the draft; delivery serves only snapshots',
+  })
+  async publish(
+    @Param('siteId') siteId: string,
+    @Param('collectionId') cid: string,
+    @Param('entryId') id: string,
+    @Body(new ZodBody(publishEntryBody)) body: { comment?: string; overrideReview?: boolean },
+    @TenantScope() p: TenantPrincipal,
+    @Req() req: Request,
+  ) {
+    await this.reviews.assertPublishable(p, abilityOf(req), siteId, 'ENTRY', id, body.overrideReview);
     return this.entries.publish(p, abilityOf(req), siteId, cid, id, body.comment);
   }
 

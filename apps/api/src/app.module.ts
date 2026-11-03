@@ -32,6 +32,10 @@ import { SsoModule } from './modules/sso/sso.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { PluginsModule } from './modules/plugins/plugins.module';
 import { McpModule } from './modules/mcp/mcp.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { FormsModule } from './modules/forms/forms.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
+import { ScimModule } from './modules/scim/scim.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { HealthModule } from './modules/health/health.module';
 import { IdentityModule } from './modules/identity/identity.module';
@@ -101,6 +105,10 @@ const REQUEST_ID_HEADER = 'x-request-id';
     WebhooksModule,
     PluginsModule,
     McpModule,
+    NotificationsModule,
+    FormsModule,
+    ReviewsModule,
+    ScimModule,
     DeliveryModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],

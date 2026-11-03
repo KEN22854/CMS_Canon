@@ -3,9 +3,26 @@
 import { subject } from '@casl/ability';
 import type { RenderMedia, SiteThemeInput } from '@canon/ui-blocks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, CalendarClock, Eye, History, Languages, Loader2, Monitor, Redo2, Save, Settings2, Smartphone, Sparkles, Tablet, Undo2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  CalendarClock,
+  Eye,
+  History,
+  Languages,
+  Loader2,
+  MessageSquare,
+  Monitor,
+  Redo2,
+  Save,
+  Settings2,
+  Smartphone,
+  Sparkles,
+  Tablet,
+  Undo2,
+} from 'lucide-react';
+import { getBlock } from '@canon/blocks';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useCollab } from '@/components/builder/collab';
@@ -15,15 +32,18 @@ import { Presence } from '@/components/builder/presence';
 import { useFacts } from '@/components/builder/rich-text-editor';
 import { BuilderContext, createBuilderStore, selectedNode, useBuilder, useBuilderStore, useHistory, type Breakpoint, type Draft } from '@/components/builder/store';
 import { Workspace } from '@/components/builder/workspace';
+import { findNode } from '@/components/editor/tree-ops';
+import { ReviewPanel } from '@/components/review-panel';
 import { Alert, Badge, Button, Input, Label, Select } from '@/components/ui';
 import { useAbility } from '@/lib/ability';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
 import { STATUS_STYLE, useMedia, usePage, useSite, type PageDetail, type Site } from '@/lib/content';
 import { useTenantId } from '@/lib/queries';
+import { translate, currentLocale } from '@/lib/i18n';
 import { cn, formatUsd, relativeTime } from '@/lib/utils';
 
-type Panel = 'block' | 'page' | 'versions' | 'translate';
+type Panel = 'block' | 'page' | 'versions' | 'translate' | 'review';
 const AUTOSAVE_MS = 5_000;
 const BREAKPOINTS = [
   ['desktop', Monitor],
@@ -66,7 +86,11 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
   const history = useHistory();
   const [meta, setMeta] = useState<PageDetail>(initial);
   const [version, setVersion] = useState(initial.version);
-  const [panel, setPanel] = useState<Panel>('block');
+  const params = useSearchParams();
+  // Links from review and mention notifications open the review panel.
+  const [panel, setPanel] = useState<Panel>(
+    params.get('review') || params.get('comment') ? 'review' : 'block',
+  );
   const [conflict, setConflict] = useState(false);
   const [generating, setGenerating] = useState(false);
   const saving = useRef(false);
@@ -181,13 +205,36 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
   // Selecting a block on the canvas or in Layers brings its inspector forward.
   const selectedId = selected?.id;
   useEffect(() => {
-    if (selectedId) setPanel('block');
+    if (selectedId) setPanel((p) => (p === 'review' ? p : 'block'));
   }, [selectedId]);
+  const selectBlock = useBuilder((s) => s.select);
+  const blockLabel = useCallback(
+    (id: string) => {
+      const n = findNode(store.getState().draft.content.root, id);
+      return n ? (getBlock(n.type)?.name ?? n.type) : undefined;
+    },
+    [store],
+  );
 
   const lifecycle = useMutation({
     mutationFn: async (op: 'publish' | 'unpublish') => {
-      if (op === 'publish' && !(await save())) throw new Error('Save failed — fix the error before publishing');
-      return api<PageDetail>(`/sites/${siteId}/pages/${initial.id}/${op}`, { method: 'POST', body: {} });
+      if (op === 'publish' && !(await save()))
+        throw new Error('Save failed — fix the error before publishing');
+      const run = (body: object) =>
+        api<PageDetail>(`/sites/${siteId}/pages/${initial.id}/${op}`, { method: 'POST', body });
+      try {
+        return await run({});
+      } catch (err) {
+        // Sites with required review: owners/admins may knowingly publish anyway (audited).
+        if (!(err instanceof ApiError && err.code === 'REVIEW_REQUIRED')) throw err;
+        setPanel('review');
+        if (
+          (err.details as { canOverride?: boolean } | undefined)?.canOverride &&
+          window.confirm(`${err.message}\n\n${translate(currentLocale(), 'review.publishAnyway')}`)
+        )
+          return run({ overrideReview: true });
+        throw err;
+      }
     },
     onSuccess: (res, op) => {
       setMeta(res);
@@ -302,6 +349,7 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
                   ['page', 'Page & SEO', Sparkles],
                   ['versions', 'Versions', History],
                   ['translate', 'Translate', Languages],
+                  ['review', 'Review', MessageSquare],
                 ] as const
               ).map(([id, label, Icon]) => (
                 <button key={id} type="button" onClick={() => setPanel(id)} className={cn('flex flex-1 items-center justify-center gap-1 px-1 py-2 text-xs', panel === id ? 'border-b-2 border-primary font-medium' : 'text-muted-foreground')}>
@@ -316,10 +364,45 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
                 ) : (
                   <p className="text-sm text-muted-foreground">Select a block on the canvas or in Layers. Drag blocks in from the palette, or generate the page with AI.</p>
                 ))}
-              {panel === 'page' && <PagePanel readOnly={!canEdit} siteId={siteId} pageId={initial.id} isHome={meta.fullPath === '/'} />}
-              {panel === 'versions' && <VersionsPanel siteId={siteId} pageId={initial.id} canEdit={canEdit} onRestored={() => void loadLatest()} />}
-              {panel === 'translate' && <TranslatePanel siteId={siteId} page={meta} locales={site.locales} onDone={(id) => router.push(`/sites/${siteId}/pages/${id}`)} beforeTranslate={save} />}
-              {canPublish && panel === 'page' && <SchedulePanel siteId={siteId} page={meta} onChange={setMeta} />}
+              {panel === 'page' && (
+                <PagePanel
+                  readOnly={!canEdit}
+                  siteId={siteId}
+                  pageId={initial.id}
+                  isHome={meta.fullPath === '/'}
+                />
+              )}
+              {panel === 'versions' && (
+                <VersionsPanel
+                  siteId={siteId}
+                  pageId={initial.id}
+                  canEdit={canEdit}
+                  onRestored={() => void loadLatest()}
+                />
+              )}
+              {panel === 'translate' && (
+                <TranslatePanel
+                  siteId={siteId}
+                  page={meta}
+                  locales={site.locales}
+                  onDone={(id) => router.push(`/sites/${siteId}/pages/${id}`)}
+                  beforeTranslate={save}
+                />
+              )}
+              {panel === 'review' && (
+                <ReviewPanel
+                  siteId={siteId}
+                  entityType="PAGE"
+                  entityId={initial.id}
+                  beforeRequest={save}
+                  blockId={selected && selected.id !== draft.content.root.id ? selected.id : null}
+                  blockLabel={blockLabel}
+                  onSelectBlock={selectBlock}
+                />
+              )}
+              {canPublish && panel === 'page' && (
+                <SchedulePanel siteId={siteId} page={meta} onChange={setMeta} />
+              )}
             </div>
           </>
         }
@@ -329,11 +412,26 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
   );
 }
 
-function PagePanel({ readOnly, siteId, pageId, isHome }: { readOnly: boolean; siteId: string; pageId: string; isHome: boolean }) {
+function PagePanel({
+  readOnly,
+  siteId,
+  pageId,
+  isHome,
+}: {
+  readOnly: boolean;
+  siteId: string;
+  pageId: string;
+  isHome: boolean;
+}) {
   const draft = useBuilder((s) => s.draft);
   const setMeta = useBuilder((s) => s.setMeta);
   const suggest = useMutation({
-    mutationFn: () => api<{ suggestion: { title: string; description: string; keywords: string[] }; costUsd: number; model: string }>(`/sites/${siteId}/pages/${pageId}/ai-seo`, { method: 'POST', body: {} }),
+    mutationFn: () =>
+      api<{
+        suggestion: { title: string; description: string; keywords: string[] };
+        costUsd: number;
+        model: string;
+      }>(`/sites/${siteId}/pages/${pageId}/ai-seo`, { method: 'POST', body: {} }),
     onError: (err) => toast.error(errorMessage(err)),
   });
   return (
@@ -381,13 +479,27 @@ function PagePanel({ readOnly, siteId, pageId, isHome }: { readOnly: boolean; si
         <p className="text-right text-[11px] text-muted-foreground">{(draft.seo.description ?? '').length}/155</p>
       </div>
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" disabled={readOnly} checked={Boolean(draft.seo.noindex)} onChange={(e) => setMeta({ seo: { ...draft.seo, noindex: e.target.checked } })} /> Hide from search engines
+        <input
+          type="checkbox"
+          disabled={readOnly}
+          checked={Boolean(draft.seo.noindex)}
+          onChange={(e) => setMeta({ seo: { ...draft.seo, noindex: e.target.checked } })}
+        />{' '}
+        Hide from search engines
       </label>
     </div>
   );
 }
 
-function SchedulePanel({ siteId, page, onChange }: { siteId: string; page: PageDetail; onChange: (p: PageDetail) => void }) {
+function SchedulePanel({
+  siteId,
+  page,
+  onChange,
+}: {
+  siteId: string;
+  page: PageDetail;
+  onChange: (p: PageDetail) => void;
+}) {
   const [at, setAt] = useState('');
   const schedule = useMutation({
     mutationFn: () => api<PageDetail>(`/sites/${siteId}/pages/${page.id}/schedule`, { body: { at: new Date(at).toISOString(), action: 'PUBLISH', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } }),
@@ -418,10 +530,29 @@ function SchedulePanel({ siteId, page, onChange }: { siteId: string; page: PageD
   );
 }
 
-function VersionsPanel({ siteId, pageId, canEdit, onRestored }: { siteId: string; pageId: string; canEdit: boolean; onRestored: () => void }) {
+function VersionsPanel({
+  siteId,
+  pageId,
+  canEdit,
+  onRestored,
+}: {
+  siteId: string;
+  pageId: string;
+  canEdit: boolean;
+  onRestored: () => void;
+}) {
   const versions = useQuery({
     queryKey: ['versions', pageId],
-    queryFn: () => api<{ version: number; comment: string | null; createdAt: string; createdBy: { name: string } | null; isPublished: boolean }[]>(`/sites/${siteId}/pages/${pageId}/versions`),
+    queryFn: () =>
+      api<
+        {
+          version: number;
+          comment: string | null;
+          createdAt: string;
+          createdBy: { name: string } | null;
+          isPublished: boolean;
+        }[]
+      >(`/sites/${siteId}/pages/${pageId}/versions`),
   });
   const restore = useMutation({
     mutationFn: (v: number) => api(`/sites/${siteId}/pages/${pageId}/versions/${v}/restore`, { method: 'POST', body: {} }),
@@ -434,7 +565,8 @@ function VersionsPanel({ siteId, pageId, canEdit, onRestored }: { siteId: string
         <li key={v.version} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
           <div className="min-w-0">
             <p className="font-medium">
-              v{v.version} {v.isPublished && <Badge className="ml-1 border-success/40 text-success">live</Badge>}
+              v{v.version}{' '}
+              {v.isPublished && <Badge className="ml-1 border-success/40 text-success">live</Badge>}
             </p>
             <p className="truncate text-xs text-muted-foreground">
               {v.comment} · {v.createdBy?.name ?? 'system'} · {relativeTime(v.createdAt)}
@@ -452,7 +584,19 @@ function VersionsPanel({ siteId, pageId, canEdit, onRestored }: { siteId: string
   );
 }
 
-function TranslatePanel({ siteId, page, locales, onDone, beforeTranslate }: { siteId: string; page: PageDetail; locales: string[]; onDone: (id: string) => void; beforeTranslate: () => Promise<boolean> }) {
+function TranslatePanel({
+  siteId,
+  page,
+  locales,
+  onDone,
+  beforeTranslate,
+}: {
+  siteId: string;
+  page: PageDetail;
+  locales: string[];
+  onDone: (id: string) => void;
+  beforeTranslate: () => Promise<boolean>;
+}) {
   const targets = locales.filter((l) => l !== page.locale);
   const [target, setTarget] = useState(targets[0] ?? '');
   const existing = page.translations.find((t) => t.locale === target);
@@ -502,7 +646,17 @@ function TranslatePanel({ siteId, page, locales, onDone, beforeTranslate }: { si
   );
 }
 
-function ToolBtn({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+function ToolBtn({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick} className="rounded p-1.5 hover:bg-muted disabled:opacity-30">
       {children}

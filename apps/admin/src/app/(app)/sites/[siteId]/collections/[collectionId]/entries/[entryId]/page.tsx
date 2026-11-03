@@ -10,18 +10,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useFacts } from '@/components/builder/rich-text-editor';
 import { FieldInput } from '@/components/collections/field-input';
+import { ReviewPanel } from '@/components/review-panel';
 import { Alert, Badge, Button, Card, CardContent, Input, Label } from '@/components/ui';
 import { useAbility } from '@/lib/ability';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { entriesPath, qualityTone, useCollection, useEntry, type Collection, type DuplicateHit, type EntryDetail } from '@/lib/collections';
 import { STATUS_STYLE } from '@/lib/content';
 import { useTenantId } from '@/lib/queries';
+import { translate, currentLocale } from '@/lib/i18n';
 import { cn, formatUsd, relativeTime } from '@/lib/utils';
 
 const AUTOSAVE_MS = 5_000;
 
 export default function EntryPage() {
-  const { siteId, collectionId, entryId } = useParams<{ siteId: string; collectionId: string; entryId: string }>();
+  const { siteId, collectionId, entryId } = useParams<{
+    siteId: string;
+    collectionId: string;
+    entryId: string;
+  }>();
   const col = useCollection(siteId, collectionId);
   const entry = useEntry(siteId, collectionId, entryId);
   if (col.isPending || entry.isPending) return <Loader2 className="mx-auto mt-10 h-5 w-5 animate-spin text-muted-foreground" aria-label="Loading" />;
@@ -131,7 +137,18 @@ function EntryEditor({ c, initial, siteId }: { c: Collection; initial: EntryDeta
   const lifecycle = useMutation({
     mutationFn: async (op: 'publish' | 'unpublish') => {
       if (op === 'publish' && !(await save())) throw new Error('Fix the errors before publishing');
-      return api<EntryDetail>(`${base}/${op}`, { method: 'POST', body: {} });
+      const run = (body: object) => api<EntryDetail>(`${base}/${op}`, { method: 'POST', body });
+      try {
+        return await run({});
+      } catch (err) {
+        if (!(err instanceof ApiError && err.code === 'REVIEW_REQUIRED')) throw err;
+        if (
+          (err.details as { canOverride?: boolean } | undefined)?.canOverride &&
+          window.confirm(`${err.message}\n\n${translate(currentLocale(), 'review.publishAnyway')}`)
+        )
+          return run({ overrideReview: true });
+        throw err;
+      }
     },
     onSuccess: (e, op) => (apply(e), toast.success(op === 'publish' ? 'Published' : 'Unpublished'), void qc.invalidateQueries({ queryKey: ['entries', tid, c.id] })),
     onError: (err) => showIssues(err) || toast.error(err instanceof ApiError || !(err instanceof Error) ? errorMessage(err) : err.message),
@@ -257,6 +274,11 @@ function EntryEditor({ c, initial, siteId }: { c: Collection; initial: EntryDeta
 
         <aside className="space-y-4">
           <Card>
+            <CardContent className="p-4">
+              <ReviewPanel siteId={siteId} entityType="ENTRY" entityId={server.id} beforeRequest={save} />
+            </CardContent>
+          </Card>
+          <Card>
             <CardContent className="space-y-3 p-4">
               <div className="flex items-center justify-between">
                 <p className="flex items-center gap-1 text-sm font-medium">
@@ -291,8 +313,19 @@ function EntryEditor({ c, initial, siteId }: { c: Collection; initial: EntryDeta
                   <p className="text-sm">{server.summary}</p>
                 </div>
               )}
-              {server.aiMeta.enrichedAt && <p className="text-[10px] text-muted-foreground">Updated {relativeTime(server.aiMeta.enrichedAt)}</p>}
-              {!server.aiMeta.enrichedAt && <p className="text-xs text-muted-foreground">Not analysed yet. {c.aiSettings.autoTag || c.aiSettings.autoSummary || c.aiSettings.qualityScore ? 'Runs automatically after saving.' : 'Enable enrichment in the collection settings or press Run.'}</p>}
+              {server.aiMeta.enrichedAt && (
+                <p className="text-[10px] text-muted-foreground">
+                  Updated {relativeTime(server.aiMeta.enrichedAt)}
+                </p>
+              )}
+              {!server.aiMeta.enrichedAt && (
+                <p className="text-xs text-muted-foreground">
+                  Not analysed yet.{' '}
+                  {c.aiSettings.autoTag || c.aiSettings.autoSummary || c.aiSettings.qualityScore
+                    ? 'Runs automatically after saving.'
+                    : 'Enable enrichment in the collection settings or press Run.'}
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -329,7 +362,17 @@ function EntryEditor({ c, initial, siteId }: { c: Collection; initial: EntryDeta
   );
 }
 
-function TagInput({ tags, aiTags, readOnly, onChange }: { tags: string[]; aiTags: string[]; readOnly: boolean; onChange: (t: string[]) => void }) {
+function TagInput({
+  tags,
+  aiTags,
+  readOnly,
+  onChange,
+}: {
+  tags: string[];
+  aiTags: string[];
+  readOnly: boolean;
+  onChange: (t: string[]) => void;
+}) {
   const [draft, setDraft] = useState('');
   const add = () => {
     const t = draft.trim().toLowerCase().replace(/\s+/g, '-');
@@ -373,10 +416,30 @@ function TagInput({ tags, aiTags, readOnly, onChange }: { tags: string[]; aiTags
   );
 }
 
-function Versions({ base, canEdit, onRestored, count }: { base: string; canEdit: boolean; onRestored: (e: EntryDetail) => void; count: number }) {
+function Versions({
+  base,
+  canEdit,
+  onRestored,
+  count,
+}: {
+  base: string;
+  canEdit: boolean;
+  onRestored: (e: EntryDetail) => void;
+  count: number;
+}) {
   const versions = useQuery({
     queryKey: ['entry-versions', base, count],
-    queryFn: () => api<{ version: number; title: string; comment: string | null; createdAt: string; createdBy: { name: string } | null; isPublished: boolean }[]>(`${base}/versions`),
+    queryFn: () =>
+      api<
+        {
+          version: number;
+          title: string;
+          comment: string | null;
+          createdAt: string;
+          createdBy: { name: string } | null;
+          isPublished: boolean;
+        }[]
+      >(`${base}/versions`),
     enabled: count > 0,
   });
   const restore = useMutation({
@@ -392,7 +455,8 @@ function Versions({ base, canEdit, onRestored, count }: { base: string; canEdit:
         {versions.data?.map((v) => (
           <div key={v.version} className="flex items-center justify-between gap-2 text-xs">
             <span className="min-w-0 truncate">
-              v{v.version} {v.isPublished && <Badge className="border-success/40 text-success">live</Badge>} · {relativeTime(v.createdAt)}
+              v{v.version} {v.isPublished && <Badge className="border-success/40 text-success">live</Badge>} ·{' '}
+              {relativeTime(v.createdAt)}
             </span>
             {canEdit && (
               <button type="button" className="text-primary hover:underline" onClick={() => window.confirm(`Replace the draft with v${v.version}?`) && restore.mutate(v.version)}>

@@ -1,5 +1,6 @@
 import 'server-only';
 import type { PageContent } from '@canon/blocks';
+import type { RenderForm } from '@canon/ui-blocks';
 
 export interface SiteTheme {
   colors: { primary: string; background: string; foreground: string; muted: string };
@@ -28,7 +29,10 @@ export interface DeliveryMedia {
   alt: string | null;
   mimeType: string;
   dominantColor: string | null;
-  variants: { thumb?: { url: string }; sources: { url: string; width: number; height: number; format: 'webp' | 'avif' }[] } | null;
+  variants: {
+    thumb?: { url: string };
+    sources: { url: string; width: number; height: number; format: 'webp' | 'avif' }[];
+  } | null;
 }
 
 export interface DeliveryPage {
@@ -40,7 +44,13 @@ export interface DeliveryPage {
     description: string | null;
     locale: string;
     path: string;
-    seo: { title?: string; description?: string; ogImageMediaId?: string; noindex?: boolean; canonical?: string };
+    seo: {
+      title?: string;
+      description?: string;
+      ogImageMediaId?: string;
+      noindex?: boolean;
+      canonical?: string;
+    };
     content: PageContent;
     publishedAt: string | null;
   };
@@ -48,19 +58,27 @@ export interface DeliveryPage {
   nav: { title: string; path: string }[];
   media: Record<string, DeliveryMedia>;
   facts: Record<string, string>;
+  /** Forms embedded on the page (public definitions). */
+  forms?: Record<string, RenderForm>;
   /** Which experiment variants / segment the API actually applied (re-validated server-side). */
   applied?: { experiments: { testId: string; variantId: string }[]; segmentId: string | null };
 }
 
 export interface DeliveryList {
   site: DeliverySite;
-  pages: { id: string; title: string; path: string; locale: string; updatedAt: string; translationGroupId: string | null }[];
+  pages: {
+    id: string;
+    title: string;
+    path: string;
+    locale: string;
+    updatedAt: string;
+    translationGroupId: string | null;
+  }[];
 }
 
 const API = process.env.CANON_API_URL ?? 'http://localhost:4000';
 /** Long ISR window: freshness comes from on-demand revalidation on publish, not from polling. */
 const REVALIDATE_SEC = 3_600;
-
 
 async function get<T>(path: string, tags: string[], cache: 'isr' | 'none' = 'isr'): Promise<T | null> {
   const res = await fetch(`${API}/v1/delivery${path}`, {
@@ -100,4 +118,3 @@ export function localizedHref(site: DeliverySite, locale: string, path: string):
   if (locale === site.defaultLocale) return path;
   return path === '/' ? `/${locale}` : `/${locale}${path}`;
 }
-

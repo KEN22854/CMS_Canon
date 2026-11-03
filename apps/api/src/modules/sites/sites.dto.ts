@@ -33,6 +33,8 @@ export const updateSiteBody = z
     logo: z.string().max(40).nullable(),
     seoDefaults: z.object({ titleTemplate: z.string().max(120).optional(), description: z.string().max(300).optional(), ogImageMediaId: z.string().max(40).optional() }).strict(),
     settings: z.record(z.string(), z.unknown()),
+    /** Publishing needs an approved review of the exact draft version (owners/admins can override). */
+    requireReview: z.boolean(),
   })
   .partial()
   .strict();

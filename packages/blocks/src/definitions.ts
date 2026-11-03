@@ -10,7 +10,18 @@ const spacing = z.enum(['none', 'sm', 'md', 'lg', 'xl']);
 const align = z.enum(['left', 'center', 'right']);
 
 /** What the inspector needs to know about a prop: kind drives the field widget and AI actions. */
-export type FieldKind = 'text' | 'textarea' | 'richtext' | 'url' | 'select' | 'number' | 'toggle' | 'media' | 'color' | 'list';
+export type FieldKind =
+  | 'text'
+  | 'textarea'
+  | 'richtext'
+  | 'url'
+  | 'select'
+  | 'number'
+  | 'toggle'
+  | 'media'
+  | 'color'
+  | 'list'
+  | 'form';
 
 export interface FieldMeta {
   kind: FieldKind;
@@ -323,6 +334,36 @@ export function videoEmbedUrl(url: string): string | null {
   return vm ? `https://player.vimeo.com/video/${vm[1]}?dnt=1` : null;
 }
 
+export const formBlock = define({
+  type: 'form',
+  name: 'Form',
+  description:
+    'A lead or contact form built in Forms: fields, consent, spam protection and delivery to your team.',
+  category: 'marketing',
+  isContainer: false,
+  props: z.object({
+    formId: z.string().max(40).default(''),
+    title: short(160),
+    intro: short(400),
+    submitLabel: z.string().min(1).max(40).default('Send'),
+    layout: z.enum(['stacked', 'card']).default('card'),
+  }),
+  defaults: () => ({
+    formId: '',
+    title: 'Get in touch',
+    intro: '',
+    submitLabel: 'Send',
+    layout: 'card' as const,
+  }),
+  fields: {
+    formId: { kind: 'form', label: 'Form' },
+    title: { kind: 'text', label: 'Title', ai: true },
+    intro: { kind: 'textarea', label: 'Intro', ai: true },
+    submitLabel: { kind: 'text', label: 'Button label', ai: true },
+    layout: { kind: 'select', label: 'Layout', options: ['stacked', 'card'] },
+  },
+});
+
 export const BLOCKS = [
   sectionBlock,
   rowBlock,
@@ -341,6 +382,7 @@ export const BLOCKS = [
   testimonialBlock,
   spacerBlock,
   dividerBlock,
+  formBlock,
 ] as const;
 export type KnownBlockType = (typeof BLOCKS)[number]['type'];
 

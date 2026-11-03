@@ -1,7 +1,7 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Copy, KeyRound, Loader2 } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CheckCircle2, Copy, KeyRound, Loader2, Trash2, UsersRound } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
 import { useSso, type SsoView } from '@/lib/platform';
 import { useTenantId } from '@/lib/queries';
+import { useT } from '@/lib/i18n';
 import { relativeTime } from '@/lib/utils';
 
 interface Form {
@@ -84,7 +85,10 @@ export default function SsoPage() {
       <>
         <PageHeader title="Single sign-on" description="SAML 2.0 with Okta, Microsoft Entra ID, Google Workspace, OneLogin…" />
         <Alert>
-          SSO is part of the Enterprise plan. <Link href="/settings/billing" className="font-medium underline">See plans</Link>
+          SSO is part of the Enterprise plan.{' '}
+          <Link href="/settings/billing" className="font-medium underline">
+            See plans
+          </Link>
         </Alert>
       </>
     );
@@ -152,10 +156,20 @@ export default function SsoPage() {
                 </Select>
               </div>
               <label className="flex items-center gap-2 pt-6 text-sm">
-                <input type="checkbox" checked={form.jitProvisioning} onChange={(e) => set('jitProvisioning', e.target.checked)} /> Create accounts on first sign-in
+                <input
+                  type="checkbox"
+                  checked={form.jitProvisioning}
+                  onChange={(e) => set('jitProvisioning', e.target.checked)}
+                />{' '}
+                Create accounts on first sign-in
               </label>
               <label className="flex items-center gap-2 pt-6 text-sm">
-                <input type="checkbox" checked={form.enforced} onChange={(e) => set('enforced', e.target.checked)} /> Require SSO (owners keep password access)
+                <input
+                  type="checkbox"
+                  checked={form.enforced}
+                  onChange={(e) => set('enforced', e.target.checked)}
+                />{' '}
+                Require SSO (owners keep password access)
               </label>
             </div>
             <div className="flex justify-between gap-2">
@@ -184,7 +198,15 @@ export default function SsoPage() {
                 <div key={d.domain} className="flex flex-wrap items-center gap-3 rounded-md border p-3">
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-2 font-medium">
-                      {d.domain} {d.verified ? <Badge className="border-success/40 text-success"><CheckCircle2 className="mr-1 h-3 w-3" />verified</Badge> : <Badge className="border-warning/40 text-warning">not verified</Badge>}
+                      {d.domain}{' '}
+                      {d.verified ? (
+                        <Badge className="border-success/40 text-success">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          verified
+                        </Badge>
+                      ) : (
+                        <Badge className="border-warning/40 text-warning">not verified</Badge>
+                      )}
                     </p>
                     {!d.verified && (
                       <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
@@ -202,6 +224,7 @@ export default function SsoPage() {
             </CardContent>
           </Card>
         )}
+        {v.domains.some((d) => d.verified) && <ScimCard />}
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
           <KeyRound className="h-3.5 w-3.5" aria-hidden /> Sign-ins through the IdP skip Canon two-factor: your IdP enforces MFA. Every SSO login and provisioned account is in the audit log.
         </p>
@@ -210,3 +233,94 @@ export default function SsoPage() {
   );
 }
 
+interface ScimTokens {
+  baseUrl: string;
+  tokens: { id: string; name: string; keyPrefix: string; lastUsedAt: string | null; createdAt: string }[];
+}
+
+/** SCIM 2.0: the IdP creates, updates and removes members; e-mails must be on verified domains. */
+function ScimCard() {
+  const tid = useTenantId();
+  const qc = useQueryClient();
+  const key = ['scim-tokens', tid];
+  const list = useQuery({
+    queryKey: key,
+    queryFn: () => api<ScimTokens>('/scim-tokens'),
+    enabled: Boolean(tid),
+  });
+  const [name, setName] = useState('');
+  const [shown, setShown] = useState<string | null>(null);
+  const t = useT();
+  const create = useMutation({
+    mutationFn: () => api<{ token: string }>('/scim-tokens', { body: { name } }),
+    onSuccess: (r) => (setShown(r.token), setName(''), void qc.invalidateQueries({ queryKey: key })),
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  const revoke = useMutation({
+    mutationFn: (id: string) => api(`/scim-tokens/${id}`, { method: 'DELETE' }),
+    onSuccess: () => (void qc.invalidateQueries({ queryKey: key }), toast.success(t('scim.revoked'))),
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <UsersRound className="h-4 w-4" aria-hidden /> {t('scim.title')}
+        </CardTitle>
+        <CardDescription>
+          {t('scim.description', { attr: 'urn:ietf:params:scim:schemas:extension:canon:2.0:User:role' })}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {list.data && <CopyField label={t('scim.baseUrl')} value={list.data.baseUrl} />}
+        {shown && (
+          <Alert>
+            <p className="mb-2 font-medium">{t('scim.copyNow')}</p>
+            <CopyField label={t('scim.bearer')} value={shown} />
+          </Alert>
+        )}
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[14rem] flex-1 space-y-1">
+            <Label htmlFor="scim-name">{t('scim.newToken')}</Label>
+            <Input
+              id="scim-name"
+              value={name}
+              placeholder="Okta production"
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <Button
+            disabled={name.trim().length < 2}
+            loading={create.isPending}
+            onClick={() => create.mutate()}
+          >
+            {t('scim.createToken')}
+          </Button>
+        </div>
+        {list.data?.tokens.map((tk) => (
+          <div key={tk.id} className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm">
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">{tk.name}</p>
+              <p className="text-xs text-muted-foreground">
+                <code>{tk.keyPrefix}…</code> · {t('scim.created', { when: relativeTime(tk.createdAt) })} ·{' '}
+                {tk.lastUsedAt
+                  ? t('scim.lastUsed', { when: relativeTime(tk.lastUsedAt) })
+                  : t('scim.neverUsed')}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={t('scim.revoke', { name: tk.name })}
+              onClick={() =>
+                window.confirm(t('scim.revokeConfirm', { name: tk.name })) && revoke.mutate(tk.id)
+              }
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}

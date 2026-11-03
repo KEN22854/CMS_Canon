@@ -13,7 +13,11 @@ const config: NextConfig = {
   // The browser only ever talks to this origin; /api/v1/* is proxied to the API. That keeps the
   // refresh cookie first-party and SameSite=Strict without CORS gymnastics.
   async rewrites() {
-    return [{ source: '/api/v1/:path*', destination: `${API_URL}/v1/:path*` }];
+    return [
+      { source: '/api/v1/:path*', destination: `${API_URL}/v1/:path*` },
+      // Identity providers provision members here (SCIM 2.0).
+      { source: '/api/scim/v2/:path*', destination: `${API_URL}/scim/v2/:path*` },
+    ];
   },
   async headers() {
     return [

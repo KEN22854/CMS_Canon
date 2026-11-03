@@ -80,7 +80,9 @@ export class SitesService {
     if (body.favicon !== undefined) data.favicon = body.favicon;
     if (body.logo !== undefined) data.logo = body.logo;
     if (body.seoDefaults) data.seoDefaults = { ...(current.seoDefaults as object), ...body.seoDefaults };
-    if (body.settings) data.settings = { ...(current.settings as object), ...body.settings } as Prisma.InputJsonValue;
+    if (body.requireReview !== undefined) data.requireReview = body.requireReview;
+    if (body.settings)
+      data.settings = { ...(current.settings as object), ...body.settings } as Prisma.InputJsonValue;
     if (body.locales || body.defaultLocale) {
       const locales = body.locales ?? current.locales;
       const def = body.defaultLocale ?? current.defaultLocale;
@@ -88,13 +90,32 @@ export class SitesService {
       data.locales = locales;
       data.defaultLocale = def;
     }
-    if (body.domain !== undefined) {
-      if (body.domain && body.domain.endsWith(`.${this.config.PUBLIC_SITES_DOMAIN}`)) throw badRequest('INVALID_DOMAIN', 'Platform subdomains are assigned automatically');
-      // Global uniqueness (another tenant may own it) is a cross-tenant read by nature.
-      if (body.domain && (await this.system.site.findFirst({ where: { domain: body.domain, deletedAt: null, NOT: { id: siteId } }, select: { id: true } }))) {
+    const domain = body.domain === undefined ? undefined : (body.domain?.toLowerCase() ?? null);
+    if (domain !== undefined && domain !== current.domain) {
+      if (
+        domain &&
+        (domain === this.config.PUBLIC_SITES_DOMAIN || domain.endsWith(`.${this.config.PUBLIC_SITES_DOMAIN}`))
+      )
+        throw badRequest('INVALID_DOMAIN', 'Platform subdomains are assigned automatically');
+      // Only a *verified* claim blocks others (cross-tenant read by nature); unproven claims never squat a name.
+      if (
+        domain &&
+        (await this.system.site.findFirst({
+          where: { domain, domainStatus: 'VERIFIED', deletedAt: null, NOT: { id: siteId } },
+          select: { id: true },
+        }))
+      ) {
         throw conflict('This domain is already connected to another site');
       }
-      data.domain = body.domain;
+      // A new hostname always starts unproven, with a fresh token.
+      Object.assign(data, {
+        domain,
+        domainStatus: domain ? 'PENDING' : 'NONE',
+        domainToken: domain ? createId() : null,
+        domainVerifiedAt: null,
+        domainCheckedAt: null,
+        domainError: null,
+      });
     }
     const site = await this.prisma.forTenant({ tenantId: actor.tenantId, userId: actor.userId }).site.update({ where: { id: siteId }, data });
     await this.siteChanged(actor, siteId, 'site.updated', body as Prisma.InputJsonValue, [current.domain, site.domain]);
@@ -145,8 +166,13 @@ export class SitesService {
   }
 }
 
+/** The hostname visitors actually reach: the custom domain once verified, else the platform one. */
+export function servedHost(s: Pick<Site, 'domain' | 'domainStatus' | 'internalDomain'>): string {
+  return s.domain && s.domainStatus === 'VERIFIED' ? s.domain : s.internalDomain;
+}
+
 export function presentSite(s: Site, config: AppConfig) {
-  const host = s.domain ?? s.internalDomain;
+  const host = servedHost(s);
   // Dev renderer listens on a port; production hosts are served on 443 by the edge.
   const url = config.NODE_ENV === 'production' ? `https://${host}` : `http://${host}:${config.WEB_PUBLIC_PORT}`;
   return {
@@ -155,6 +181,7 @@ export function presentSite(s: Site, config: AppConfig) {
     slug: s.slug,
     description: s.description,
     domain: s.domain,
+    domainStatus: s.domainStatus,
     internalDomain: s.internalDomain,
     url,
     defaultLocale: s.defaultLocale,
@@ -165,6 +192,7 @@ export function presentSite(s: Site, config: AppConfig) {
     aiSettings: s.aiSettings,
     favicon: s.favicon,
     logo: s.logo,
+    requireReview: s.requireReview,
     isPublished: s.isPublished,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,

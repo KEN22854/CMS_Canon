@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { packRules } from '@casl/ability/extra';
 import type { MemberRole, User } from '@canon/db';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
@@ -207,6 +208,11 @@ export class AuthService {
     await this.revoker.revokeAll(user.id, 'password_changed', p.sessionId);
   }
 
+  async updateMe(userId: string, body: UpdateMeBody): Promise<PublicUser> {
+    const user = await this.prisma.user.update({ where: { id: userId }, data: body });
+    return toPublic(user);
+  }
+
   async me(p: RequestPrincipal) {
     if (!p.userId) {
       return { actorType: p.actorType, tenantId: p.tenantId, scopes: p.scopes, rules: packRules(defineAbilityFor(p).rules) };
@@ -275,6 +281,13 @@ export class AuthService {
     return { kind: 'session', accessToken, expiresIn: this.tokens.accessTtlSec, session, user: toPublic(user), tenant };
   }
 }
+
+/** Interface languages the admin ships; content locales are per site and unrelated. */
+export const UI_LOCALES = ['en', 'ru'] as const;
+export const updateMeBody = z
+  .object({ name: z.string().trim().min(1).max(100).optional(), locale: z.enum(UI_LOCALES).optional() })
+  .strict();
+export type UpdateMeBody = z.infer<typeof updateMeBody>;
 
 export function toPublic(u: User): PublicUser {
   return {

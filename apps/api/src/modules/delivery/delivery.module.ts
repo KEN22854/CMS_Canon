@@ -56,5 +56,10 @@ export class DeliveryController {
   }
 }
 
-@Module({ imports: [PagesModule, MediaModule], controllers: [DeliveryController], providers: [DeliveryService, DeliveryTokenGuard] })
+@Module({
+  imports: [PagesModule, MediaModule],
+  controllers: [DeliveryController],
+  providers: [DeliveryService, DeliveryTokenGuard],
+  exports: [DeliveryTokenGuard],
+})
 export class DeliveryModule {}

@@ -2,6 +2,7 @@ import { Injectable, type OnApplicationBootstrap } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 import { SystemPrismaService } from '../../infrastructure/prisma/prisma.service';
 import { Queues } from '../../infrastructure/queue/queue.module';
+import { ReviewsService } from '../reviews/reviews.service';
 import { PagesService } from './pages.service';
 import { PUBLISH_QUEUE, ScheduleStore } from './schedule-store';
 
@@ -16,6 +17,7 @@ export class PublishScheduler implements OnApplicationBootstrap {
     private readonly store: ScheduleStore,
     private readonly system: SystemPrismaService,
     private readonly pages: PagesService,
+    private readonly reviews: ReviewsService,
     private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(PublishScheduler.name);
@@ -39,7 +41,13 @@ export class PublishScheduler implements OnApplicationBootstrap {
       const page = await this.system.page.findFirst({ where: { id: row.entityId, tenantId: row.tenantId, deletedAt: null }, select: { siteId: true } });
       if (!page) throw new Error('page no longer exists');
       const actor = { actorType: 'system' as const, tenantId: row.tenantId };
-      if (row.action === 'PUBLISH') await this.pages.publish(actor, null, page.siteId, row.entityId, 'Scheduled publish');
+      if (
+        row.action === 'PUBLISH' &&
+        (await this.reviews.approvalWentStale(row.tenantId, page.siteId, 'PAGE', row.entityId))
+      )
+        throw new Error('the page changed after its review was approved');
+      if (row.action === 'PUBLISH')
+        await this.pages.publish(actor, null, page.siteId, row.entityId, 'Scheduled publish');
       else await this.pages.unpublish(actor, null, page.siteId, row.entityId);
       await this.system.scheduledPublish.update({ where: { id: scheduleId }, data: { status: 'DONE' } });
     } catch (err) {

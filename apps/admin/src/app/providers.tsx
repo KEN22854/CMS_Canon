@@ -1,9 +1,10 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
 import { ApiError } from '@/lib/api';
+import { useLocale } from '@/lib/i18n';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(
@@ -18,6 +19,10 @@ export function Providers({ children }: { children: ReactNode }) {
         },
       }),
   );
+  const locale = useLocale();
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
   return (
     <QueryClientProvider client={client}>
       {children}

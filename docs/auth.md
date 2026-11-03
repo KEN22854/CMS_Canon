@@ -131,3 +131,23 @@ GET  /v1/ai/usage   GET /v1/tenants/:id/ai-usage
 ```
 
 Deferred by plan: OAuth social login, WebAuthn/passkeys and SAML/OIDC SSO move to Phase 7 (Enterprise). The session and principal model already accommodates them: each is just another way to call `startSession`.
+
+## SCIM 2.0 provisioning
+
+Enterprise workspaces can let their identity provider manage membership. In **Settings → Single
+sign-on → Automatic provisioning**, create a token and give the IdP the base URL
+`<ADMIN_PUBLIC_URL>/api/scim/v2` and the `cs_…` bearer token. The token is stored hashed and shown once.
+
+- **Users only** (`/Users`, plus `ServiceProviderConfig`, `ResourceTypes` and `Schemas`). Groups and
+  bulk operations are not supported.
+- **Matching** is by e-mail (`userName` or the primary e-mail). Only addresses on the SSO
+  connection's verified domains can be provisioned, which is the same trust boundary as SSO login.
+- **Roles**: send `urn:ietf:params:scim:schemas:extension:canon:2.0:User:role` (ADMIN, EDITOR,
+  AUTHOR or VIEWER). Without it, the connection's default role applies. Ownership is never
+  provisioned, and an IdP cannot demote an owner.
+- **Deprovisioning**: `active: false` or `DELETE` removes the membership right away and forces the
+  person's sessions to re-check it. The account itself is kept, so assigning the person again
+  restores access. The last owner cannot be removed.
+- **Filters**: `userName eq "…"` and `externalId eq "…"`. PATCH accepts both the Okta style (`path`)
+  and the Entra ID style (a partial resource without a path).
+- Every provisioning, role change and deprovisioning is in the audit log with the token id.

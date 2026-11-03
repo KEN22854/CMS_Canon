@@ -5,7 +5,7 @@ import type { RequestPrincipal } from '../../common/auth/principal';
 import { ApiError, conflict, forbidden } from '../../common/http/api-error';
 import { APP_CONFIG, type AppConfig } from '../../config/env';
 import { AuditService } from '../../infrastructure/audit/audit.service';
-import { Mailer } from '../../infrastructure/mail/mailer';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService, SystemPrismaService } from '../../infrastructure/prisma/prisma.service';
 import { Queues } from '../../infrastructure/queue/queue.module';
 import { TenantAiSettingsService } from '../intelligence/infrastructure/tenant-ai-settings';
@@ -51,7 +51,7 @@ export class BillingService implements OnApplicationBootstrap {
     private readonly tenants: TenantsService,
     private readonly aiSettings: TenantAiSettingsService,
     private readonly audit: AuditService,
-    private readonly mailer: Mailer,
+    private readonly notifications: NotificationsService,
     private readonly queues: Queues,
     private readonly logger: PinoLogger,
   ) {
@@ -160,8 +160,23 @@ export class BillingService implements OnApplicationBootstrap {
       case 'invoice.payment_failed': {
         const tenant = typeof obj.customer === 'string' ? await this.system.tenant.findUnique({ where: { billingCustomerId: obj.customer }, select: { id: true, name: true } }) : null;
         if (!tenant) return { tenantId: null, outcome: 'unknown_customer' };
-        await this.notifyOwners(tenant.id, 'billing.payment_failed', 'Payment failed', `We couldn't charge the card for ${tenant.name}. Paid features stay on while Stripe retries — update the payment method in Billing to avoid a downgrade.`);
-        await this.audit.record({ tenantId: tenant.id, action: 'billing.payment_failed', entityType: 'Billing', entityId: tenant.id, changes: { invoice: obj.id as string } }, undefined);
+        await this.notifications.notifyRoles(tenant.id, ['OWNER'], {
+          type: 'billing.payment_failed',
+          title: 'Payment failed',
+          message: `We couldn't charge the card for ${tenant.name}. Paid features stay on while Stripe retries — update the payment method in Billing to avoid a downgrade.`,
+          link: '/settings/billing',
+          dedupeKey: `payment-failed:${event.id}`,
+        });
+        await this.audit.record(
+          {
+            tenantId: tenant.id,
+            action: 'billing.payment_failed',
+            entityType: 'Billing',
+            entityId: tenant.id,
+            changes: { invoice: obj.id as string },
+          },
+          undefined,
+        );
         return { tenantId: tenant.id, outcome: 'owners_notified' };
       }
       default:
@@ -235,13 +250,5 @@ export class BillingService implements OnApplicationBootstrap {
       reported++;
     }
     return { reported };
-  }
-
-  private async notifyOwners(tenantId: string, type: string, title: string, message: string): Promise<void> {
-    const owners = await this.system.tenantMember.findMany({ where: { tenantId, role: 'OWNER' }, select: { user: { select: { id: true, email: true } } } });
-    for (const o of owners) {
-      await this.system.notification.create({ data: { userId: o.user.id, tenantId, type, title, message } });
-      await this.mailer.send({ to: o.user.email, subject: title, text: message, html: `<p>${message}</p>`, template: type }).catch((err: unknown) => this.logger.warn({ err }, 'billing.mail_failed'));
-    }
   }
 }

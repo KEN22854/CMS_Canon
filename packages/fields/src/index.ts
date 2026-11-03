@@ -4,3 +4,4 @@ export * from './text';
 export * from './csv';
 export * from './schema-diff';
 export * from './presets';
+export * from './forms';

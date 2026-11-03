@@ -23,7 +23,15 @@ export interface Report {
   previous: Totals;
   change: Record<keyof Totals, number | null>;
   series: { day: string; views: number; visitors: number; conversions: number }[];
-  pages: { path: string; title: string | null; views: number; visitors: number; bounceRate: number; avgEngagedSec: number; conversions: number }[];
+  pages: {
+    path: string;
+    title: string | null;
+    views: number;
+    visitors: number;
+    bounceRate: number;
+    avgEngagedSec: number;
+    conversions: number;
+  }[];
   dims: Record<Dimension, { value: string; views: number; visitors: number; conversions: number }[]>;
 }
 
@@ -31,7 +39,12 @@ export type Severity = 'positive' | 'warning' | 'info';
 export interface Insights {
   summary: string;
   insights: { title: string; detail: string; severity: Severity; path?: string }[];
-  recommendations: { title: string; detail: string; action: 'ab_test' | 'personalize' | 'content' | 'seo' | 'none'; path?: string }[];
+  recommendations: {
+    title: string;
+    detail: string;
+    action: 'ab_test' | 'personalize' | 'content' | 'seo' | 'none';
+    path?: string;
+  }[];
   generatedBy: 'ai' | 'rules';
   ai?: { model: string; costUsd: number };
 }
@@ -119,7 +132,7 @@ export interface PagePersonalization {
   updatedAt: string;
 }
 
-export const GOALS = ['cta_click', 'signup', 'purchase', 'contact', 'download'];
+export const GOALS = ['cta_click', 'form_submit', 'signup', 'purchase', 'contact', 'download'];
 
 export const VERDICT: Record<Verdict, { label: string; className: string }> = {
   collecting: { label: 'Collecting data', className: 'border-muted-foreground/30 text-muted-foreground' },

@@ -3,28 +3,26 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { AuthCard, Field } from '@/components/auth-form';
 import { Alert, Button } from '@/components/ui';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useAuth, type AuthPayload } from '@/lib/auth-store';
-
-const credentials = z.object({ email: z.email('Enter a valid email'), password: z.string().min(1, 'Enter your password') });
-const mfa = z.object({ code: z.string().trim().min(6, 'Enter the 6-digit code or a backup code').max(12) });
+import { useT, type MessageKey } from '@/lib/i18n';
 
 type LoginResponse = AuthPayload | { mfaRequired: true; mfaToken: string };
 
 /** Why an SSO round trip came back to the login page (?sso_error=CODE). */
-const SSO_ERRORS: Record<string, string> = {
-  SSO_INVALID_RESPONSE: 'Your identity provider’s response could not be verified. Try again, or ask your admin to check the SSO certificate.',
-  SSO_DOMAIN_MISMATCH: 'Your identity provider signed you in with an address this workspace has not verified.',
-  SSO_NOT_A_MEMBER: 'You are not a member of this workspace yet — ask an admin to invite you.',
-  SSO_NO_EMAIL: 'Your identity provider did not share your email address.',
-  ACCOUNT_DISABLED: 'This account is disabled.',
-  NOT_FOUND: 'This SSO connection no longer exists.',
-};
+const SSO_ERRORS = [
+  'SSO_INVALID_RESPONSE',
+  'SSO_DOMAIN_MISMATCH',
+  'SSO_NOT_A_MEMBER',
+  'SSO_NO_EMAIL',
+  'ACCOUNT_DISABLED',
+  'NOT_FOUND',
+];
 
 function LoginForm() {
   const router = useRouter();
@@ -36,6 +34,16 @@ function LoginForm() {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [error, setError] = useState<{ code: string; message: string; loginUrl?: string } | null>(null);
   const [resent, setResent] = useState(false);
+  const t = useT();
+  const credentials = useMemo(
+    () =>
+      z.object({
+        email: z.email(t('auth.invalidEmail')),
+        password: z.string().min(1, t('auth.enterPassword')),
+      }),
+    [t],
+  );
+  const mfa = useMemo(() => z.object({ code: z.string().trim().min(6, t('auth.mfaInvalid')).max(12) }), [t]);
 
   const form = useForm<z.infer<typeof credentials>>({ resolver: zodResolver(credentials) });
   const codeForm = useForm<z.infer<typeof mfa>>({ resolver: zodResolver(mfa) });
@@ -68,13 +76,14 @@ function LoginForm() {
   /** Step 1 for SSO users: the email's domain decides which identity provider to bounce to. */
   const sso = async () => {
     const email = form.getValues('email');
-    if (!z.email().safeParse(email).success) return form.setError('email', { message: 'Enter your work email first' });
+    if (!z.email().safeParse(email).success)
+      return form.setError('email', { message: t('auth.ssoEmailFirst') });
     setSsoBusy(true);
     setError(null);
     try {
       const r = await api<{ sso: boolean; loginUrl?: string }>('/auth/sso/discover', { body: { email }, auth: false });
       if (r.sso && r.loginUrl) return window.location.assign(r.loginUrl);
-      setError({ code: 'NO_SSO', message: 'Single sign-on is not set up for this email domain — use your password.' });
+      setError({ code: 'NO_SSO', message: t('auth.noSso') });
     } catch (err) {
       setError({ code: err instanceof ApiError ? err.code : 'UNKNOWN', message: errorMessage(err) });
     } finally {
@@ -89,15 +98,23 @@ function LoginForm() {
 
   if (mfaToken) {
     return (
-      <AuthCard title="Two-factor authentication" description="Enter the code from your authenticator app, or one of your backup codes.">
+      <AuthCard title={t('auth.mfaTitle')} description={t('auth.mfaDescription')}>
         <form onSubmit={onCode} className="space-y-4" noValidate>
-          <Field id="code" label="Verification code" inputMode="numeric" autoComplete="one-time-code" autoFocus registration={codeForm.register('code')} error={codeForm.formState.errors.code} />
+          <Field
+            id="code"
+            label={t('auth.mfaCode')}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            registration={codeForm.register('code')}
+            error={codeForm.formState.errors.code}
+          />
           {error && <Alert tone="error">{error.message}</Alert>}
           <Button type="submit" className="w-full" loading={codeForm.formState.isSubmitting}>
-            Verify
+            {t('auth.verify')}
           </Button>
           <Button type="button" variant="link" className="w-full" onClick={() => setMfaToken(null)}>
-            Use a different account
+            {t('auth.otherAccount')}
           </Button>
         </form>
       </AuthCard>
@@ -106,30 +123,42 @@ function LoginForm() {
 
   return (
     <AuthCard
-      title="Sign in"
-      description="Welcome back to Canon."
+      title={t('auth.signIn')}
+      description={t('auth.welcomeBack')}
       footer={
         <>
-          No account?{' '}
+          {t('auth.noAccount')}{' '}
           <Link href="/register" className="font-medium text-primary hover:underline">
-            Create one
+            {t('auth.createOne')}
           </Link>
         </>
       }
     >
-      {ssoError && !error && <Alert tone="error" className="mb-4">{SSO_ERRORS[ssoError] ?? 'Single sign-on failed. Try again.'}</Alert>}
+      {ssoError && !error && (
+        <Alert tone="error" className="mb-4">
+          {SSO_ERRORS.includes(ssoError) ? t(`auth.sso.${ssoError}` as MessageKey) : t('auth.ssoFailed')}
+        </Alert>
+      )}
       <form onSubmit={onLogin} className="space-y-4" noValidate>
-        <Field id="email" label="Email" type="email" autoComplete="email" autoFocus registration={form.register('email')} error={form.formState.errors.email} />
+        <Field
+          id="email"
+          label={t('auth.email')}
+          type="email"
+          autoComplete="email"
+          autoFocus
+          registration={form.register('email')}
+          error={form.formState.errors.email}
+        />
         <Field
           id="password"
-          label="Password"
+          label={t('auth.password')}
           type="password"
           autoComplete="current-password"
           registration={form.register('password')}
           error={form.formState.errors.password}
           hint={
             <Link href="/forgot-password" className="text-xs text-primary hover:underline">
-              Forgot password?
+              {t('auth.forgot')}
             </Link>
           }
         />
@@ -139,17 +168,17 @@ function LoginForm() {
             {error.code === 'SSO_REQUIRED' && error.loginUrl && (
               <div className="mt-2">
                 <Button type="button" size="sm" onClick={() => window.location.assign(error.loginUrl!)}>
-                  Continue with SSO
+                  {t('auth.continueSso')}
                 </Button>
               </div>
             )}
             {error.code === 'EMAIL_NOT_VERIFIED' && (
               <div className="mt-2">
                 {resent ? (
-                  <span>New link sent — check your inbox.</span>
+                  <span>{t('auth.linkSent')}</span>
                 ) : (
                   <Button type="button" variant="link" size="sm" onClick={resend}>
-                    Resend verification email
+                    {t('auth.resendVerification')}
                   </Button>
                 )}
               </div>
@@ -157,13 +186,19 @@ function LoginForm() {
           </Alert>
         )}
         <Button type="submit" className="w-full" loading={form.formState.isSubmitting}>
-          Sign in
+          {t('auth.signIn')}
         </Button>
         <div className="relative py-1 text-center text-xs text-muted-foreground">
-          <span className="bg-card px-2">or</span>
+          <span className="bg-card px-2">{t('common.or')}</span>
         </div>
-        <Button type="button" variant="outline" className="w-full" loading={ssoBusy} onClick={() => void sso()}>
-          Sign in with SSO
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          loading={ssoBusy}
+          onClick={() => void sso()}
+        >
+          {t('auth.signInSso')}
         </Button>
       </form>
     </AuthCard>

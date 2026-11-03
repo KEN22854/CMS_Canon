@@ -1,0 +1,29 @@
+{
+  "name": "@canon/sdk",
+  "version": "0.3.0",
+  "license": "MIT",
+  "description": "Typed client for the Canon CMS REST API, generated from its OpenAPI document",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "openapi.json"
+  ],
+  "scripts": {
+    "generate": "openapi-typescript openapi.json -o src/schema.d.ts",
+    "build": "tsc -p tsconfig.build.json && node -e \"require('fs').copyFileSync('src/schema.d.ts','dist/schema.d.ts')\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.13.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "openapi-typescript": "^7.5.2",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2",
+    "vitest": "^5.0.5"
+  }
+}

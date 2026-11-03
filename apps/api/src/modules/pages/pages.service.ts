@@ -11,7 +11,7 @@ import { AuditService } from '../../infrastructure/audit/audit.service';
 import { BlockRegistry } from '../../infrastructure/blocks/block-registry';
 import { Outbox } from '../../infrastructure/events/outbox';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
-import { SitesService } from '../sites/sites.service';
+import { SitesService, servedHost } from '../sites/sites.service';
 import { TenantsService } from '../tenancy/tenants.service';
 import type { CreatePageBody, ListPagesQuery, ReorderBody, ScheduleBody, UpdatePageBody } from './pages.dto';
 import { ScheduleStore } from './schedule-store';
@@ -332,13 +332,22 @@ export class PagesService {
   async previewUrl(tenantId: string, siteId: string, pageId: string) {
     const page = await this.get(tenantId, siteId, pageId);
     const site = await this.sites.get(tenantId, siteId);
-    const token = await this.jwt.signAsync({ pid: page.id, tid: tenantId, sid: siteId, typ: 'preview' } satisfies PreviewClaims, {
-      audience: PREVIEW_AUDIENCE,
-      expiresIn: this.config.PREVIEW_TTL_SEC,
-    });
-    const host = site.domain ?? site.internalDomain;
-    const base = this.config.NODE_ENV === 'production' ? `https://${host}` : `http://${host}:${this.config.WEB_PUBLIC_PORT}`;
-    return { url: `${base}/api/draft?token=${encodeURIComponent(token)}`, expiresInSec: this.config.PREVIEW_TTL_SEC };
+    const token = await this.jwt.signAsync(
+      { pid: page.id, tid: tenantId, sid: siteId, typ: 'preview' } satisfies PreviewClaims,
+      {
+        audience: PREVIEW_AUDIENCE,
+        expiresIn: this.config.PREVIEW_TTL_SEC,
+      },
+    );
+    const host = servedHost(site);
+    const base =
+      this.config.NODE_ENV === 'production'
+        ? `https://${host}`
+        : `http://${host}:${this.config.WEB_PUBLIC_PORT}`;
+    return {
+      url: `${base}/api/draft?token=${encodeURIComponent(token)}`,
+      expiresInSec: this.config.PREVIEW_TTL_SEC,
+    };
   }
 
   async verifyPreview(token: string): Promise<PreviewClaims> {

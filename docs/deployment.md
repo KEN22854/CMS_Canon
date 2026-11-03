@@ -167,7 +167,29 @@ and are written to the audit log.
   authenticate with an API key (`Authorization: Bearer ck_…`); the tools offered follow the key's
   scopes, and writes are limited to drafts and review branches.
 
-## 8. Kubernetes and single-host
+## 8. Custom domains and TLS
+
+A site can be served on a customer's own hostname. The flow:
+
+1. In **Site → Settings** the owner enters `www.example.com`. The domain is now *pending*. Pending
+   claims are not exclusive, so nobody can squat a name by typing it in.
+2. Canon shows two DNS records: `TXT _canon-site.www.example.com = canon-site=<token>` (proof of
+   control, keep it in place) and `CNAME www.example.com → SITES_CNAME_TARGET` (defaults to
+   `sites.<PUBLIC_SITES_DOMAIN>`, point that name at your edge). Apex domains need ALIAS/ANAME or
+   CNAME flattening.
+3. **Check DNS now** (or the daily job, for up to a week) verifies the TXT record. Only then does
+   the renderer answer on that host. Verified hostnames are unique across all workspaces.
+4. TLS: the bundled Caddy (`deploy/Caddyfile`, `--profile edge`) issues certificates on demand
+   on the first visit. Before it requests one it calls `GET /v1/tls/ask?domain=…`, which allows only
+   platform site hosts and verified custom domains. With another proxy, use the same endpoint as
+   its certificate-issuance check.
+5. Every day Canon re-checks verified domains. If the TXT record disappears, owners and admins are
+   notified and the site keeps serving for 7 days. After that the domain is released (status
+   *disconnected*) and the site falls back to its platform address.
+
+`SITE_DOMAIN_VERIFICATION=off` skips the DNS lookup and is refused in production.
+
+## 9. Kubernetes and single-host
 
 - `deploy/k8s/canon.yaml` — namespace, config, secret template, migration job, API (3+ replicas,
   PDB, HPA, probes on `/health` and `/health/ready`), admin, renderer (HPA), and an nginx ingress
@@ -180,7 +202,7 @@ Ingress requirements: WebSocket upgrade for `/api/v1/collab/*`, request bodies u
 upload limit, `X-Forwarded-For`/`X-Forwarded-Host` passed through, and the wildcard sites domain
 plus customer custom domains routed to the renderer.
 
-## 9. Operations
+## 10. Operations
 
 - **Health**: `/health` (liveness), `/health/ready` (database and Redis).
 - **Logs**: JSON (pino) with request ids; secrets and auth headers are redacted.
@@ -199,7 +221,7 @@ plus customer custom domains routed to the renderer.
   with its env flag; cap AI spend per tenant in Settings → AI usage or globally by removing a
   provider key; rotate `DELIVERY_TOKEN` / `REVALIDATE_SECRET` together on API and renderer.
 
-## 10. Security checklist
+## 11. Security checklist
 
 - [ ] Owner DB credentials only in the migration job; API uses `canon_app` / `canon_system` with strong passwords
 - [ ] `JWT_ACCESS_SECRET`, `ENCRYPTION_KEY`, `DELIVERY_TOKEN`, `REVALIDATE_SECRET` from a secret manager

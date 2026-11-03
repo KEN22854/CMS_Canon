@@ -50,11 +50,15 @@ export const listPagesQuery = z.object({
 });
 export type ListPagesQuery = z.infer<typeof listPagesQuery>;
 
-export const publishBody = z.object({ comment: z.string().max(200).optional() }).default({});
+/** overrideReview: owners/admins publish without an approved review (audited). */
+export const publishBody = z
+  .object({ comment: z.string().max(200).optional(), overrideReview: z.boolean().optional() })
+  .default({});
 export const scheduleBody = z.object({
   at: z.coerce.date().refine((d) => d.getTime() > Date.now() + 30_000, { message: 'Schedule at least 30 seconds ahead' }),
   action: z.enum(['PUBLISH', 'UNPUBLISH']).default('PUBLISH'),
   timezone: z.string().max(64).default('UTC'),
+  overrideReview: z.boolean().optional(),
 });
 export type ScheduleBody = z.infer<typeof scheduleBody>;
 

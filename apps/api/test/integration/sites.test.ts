@@ -25,7 +25,10 @@ describe('sites', () => {
     const dup = await site(owner, { name: 'Docs again', slug: 'docs' }).expect(409);
     expect(dup.body.error.message).toContain('"docs"');
 
-    const list = (await t.http.get('/v1/sites').set(bearer(owner.accessToken)).expect(200)).body as { name: string; pageCount: number }[];
+    const list = (await t.http.get('/v1/sites').set(bearer(owner.accessToken)).expect(200)).body as {
+      name: string;
+      pageCount: number;
+    }[];
     expect(list.map((s) => s.name)).toEqual(['First', 'Docs']);
     expect(list.every((s) => s.pageCount === 1)).toBe(true); // every site starts with a home page
   });
@@ -41,9 +44,16 @@ describe('sites', () => {
     expect((await t.http.patch(`/v1/sites/${s.id}`).set(h).send({ domain: `x.${t.config.PUBLIC_SITES_DOMAIN}` }).expect(400)).body.error.code).toBe('INVALID_DOMAIN');
     const domain = `shop-${owner.tenantId.slice(-6)}.example.com`;
     await t.http.patch(`/v1/sites/${s.id}`).set(h).send({ domain: domain.toUpperCase() }).expect(200);
-    // Another workspace cannot take a connected domain.
+    // An unproven claim blocks nobody; once verified, another workspace cannot take it.
     const other = await signUp(t);
     const theirs = (await site(other, { name: 'Copycat' }).expect(201)).body as { id: string };
+    await t.http.patch(`/v1/sites/${theirs.id}`).set(bearer(other.accessToken)).send({ domain }).expect(200);
+    await t.system.site.update({ where: { id: s.id }, data: { domainStatus: 'VERIFIED' } });
+    await t.http
+      .patch(`/v1/sites/${theirs.id}`)
+      .set(bearer(other.accessToken))
+      .send({ domain: null })
+      .expect(200);
     await t.http.patch(`/v1/sites/${theirs.id}`).set(bearer(other.accessToken)).send({ domain }).expect(409);
 
     await t.http.patch(`/v1/sites/${s.id}`).set(h).send({ seoDefaults: { titleTemplate: '%s · Shop' }, settings: { analytics: true } }).expect(200);
@@ -82,7 +92,10 @@ describe('sites', () => {
   it('soft-deletes a site, frees its domain and purges its hosts', async () => {
     const owner = await signUp(t);
     const h = bearer(owner.accessToken);
-    const s = (await site(owner, { name: 'Gone' }).expect(201)).body as { id: string; internalDomain: string };
+    const s = (await site(owner, { name: 'Gone' }).expect(201)).body as {
+      id: string;
+      internalDomain: string;
+    };
     const domain = `gone-${owner.tenantId.slice(-6)}.example.com`;
     await t.http.patch(`/v1/sites/${s.id}`).set(h).send({ domain }).expect(200);
     await t.http.delete(`/v1/sites/${s.id}`).set(h).expect(204);

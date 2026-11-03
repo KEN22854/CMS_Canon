@@ -1,13 +1,28 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CheckCircle2, Copy, Loader2, TriangleAlert } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Select } from '@/components/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Select,
+} from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { useSite, type Site } from '@/lib/content';
 import { useTenantId } from '@/lib/queries';
+import { useT, type MessageKey } from '@/lib/i18n';
+import { relativeTime } from '@/lib/utils';
 
 const FONTS = ['system', 'serif', 'mono', 'Inter', 'Manrope', 'Lora'];
 const RADII = ['none', 'sm', 'md', 'lg', 'full'];
@@ -19,6 +34,7 @@ export default function SiteSettings() {
   return (
     <div className="space-y-6">
       <General site={site.data} />
+      {site.data.domain && <DomainCard site={site.data} />}
       <Theme site={site.data} />
       <AiSettings site={site.data} />
       <Danger site={site.data} />
@@ -49,7 +65,12 @@ function General({ site }: { site: Site }) {
   const [defaultLocale, setDefaultLocale] = useState(site.defaultLocale);
   const [domain, setDomain] = useState(site.domain ?? '');
   const [titleTemplate, setTitleTemplate] = useState(site.seoDefaults.titleTemplate ?? '');
-  const list = locales.split(',').map((l) => l.trim()).filter(Boolean);
+  const [requireReview, setRequireReview] = useState(site.requireReview);
+  const t = useT();
+  const list = locales
+    .split(',')
+    .map((l) => l.trim())
+    .filter(Boolean);
   useEffect(() => {
     if (list.length && !list.includes(defaultLocale)) setDefaultLocale(list[0]!);
   }, [list, defaultLocale]);
@@ -65,7 +86,15 @@ function General({ site }: { site: Site }) {
           className="grid gap-4 md:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault();
-            save.mutate({ name, description: description || null, locales: list, defaultLocale, domain: domain || null, seoDefaults: { titleTemplate: titleTemplate || undefined } });
+            save.mutate({
+              name,
+              description: description || null,
+              locales: list,
+              defaultLocale,
+              domain: domain || null,
+              requireReview,
+              seoDefaults: { titleTemplate: titleTemplate || undefined },
+            });
           }}
         >
           <div className="space-y-1.5">
@@ -98,13 +127,154 @@ function General({ site }: { site: Site }) {
             <Label htmlFor="s-tt">Title template</Label>
             <Input id="s-tt" value={titleTemplate} placeholder="%s · Acme" onChange={(e) => setTitleTemplate(e.target.value)} />
           </div>
+          <label className="flex items-start gap-2 text-sm md:col-span-2">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={requireReview}
+              onChange={(e) => setRequireReview(e.target.checked)}
+            />
+            <span>
+              {t('review.requireLabel')}
+              <span className="block text-xs text-muted-foreground">{t('review.requireHint')}</span>
+            </span>
+          </label>
           <div className="md:col-span-2">
             <Button type="submit" loading={save.isPending}>
               Save
             </Button>
           </div>
         </form>
-        {domain && <Alert className="mt-4">Point a CNAME for {domain} to {site.internalDomain}. Automatic TLS and ownership verification arrive with the edge setup.</Alert>}
+      </CardContent>
+    </Card>
+  );
+}
+
+interface DomainStatus {
+  domain: string;
+  status: Site['domainStatus'];
+  verifiedAt: string | null;
+  checkedAt: string | null;
+  error: string | null;
+  records: { type: string; name: string; value: string; purpose: string }[];
+}
+
+const DOMAIN_BADGE: Record<Site['domainStatus'], { label: MessageKey; className: string }> = {
+  NONE: { label: 'domain.badge.NONE', className: '' },
+  PENDING: {
+    label: 'domain.badge.PENDING',
+    className: 'border-amber-500/40 text-amber-700 dark:text-amber-400',
+  },
+  VERIFIED: {
+    label: 'domain.badge.VERIFIED',
+    className: 'border-emerald-500/40 text-emerald-700 dark:text-emerald-400',
+  },
+  FAILED: { label: 'domain.badge.FAILED', className: 'border-destructive/40 text-destructive' },
+};
+
+/** DNS instructions and verification for the custom domain; it is served only once proven. */
+function DomainCard({ site }: { site: Site }) {
+  const tid = useTenantId();
+  const t = useT();
+  const qc = useQueryClient();
+  const status = useQuery({
+    queryKey: ['domain', tid, site.id, site.domain],
+    queryFn: () => api<DomainStatus>(`/sites/${site.id}/domain`),
+    enabled: Boolean(tid),
+  });
+  const verify = useMutation({
+    mutationFn: () => api<DomainStatus>(`/sites/${site.id}/domain/verify`, { method: 'POST', body: {} }),
+    onSuccess: (d) => {
+      qc.setQueryData(['domain', tid, site.id, site.domain], d);
+      if (d.status === 'VERIFIED') {
+        toast.success(t('domain.isLive', { domain: d.domain }));
+        void qc.invalidateQueries({ queryKey: ['site', tid, site.id] });
+      }
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  const d = status.data;
+  const badge = DOMAIN_BADGE[d?.status ?? site.domainStatus];
+  const copy = (v: string) =>
+    void navigator.clipboard.writeText(v).then(() => toast.success(t('common.copied')));
+  return (
+    <Card>
+      <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
+        <div className="space-y-1.5">
+          <CardTitle className="flex items-center gap-2">
+            {site.domain} <Badge className={badge.className}>{t(badge.label)}</Badge>
+          </CardTitle>
+          <CardDescription>
+            {d?.status === 'VERIFIED'
+              ? t('domain.live', { domain: d.domain })
+              : t('domain.pending', { internal: site.internalDomain })}
+          </CardDescription>
+        </div>
+        {d && d.status !== 'VERIFIED' && (
+          <Button loading={verify.isPending} onClick={() => verify.mutate()}>
+            {t('domain.checkNow')}
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {status.isPending && (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Loading" />
+        )}
+        {d?.error && (
+          <Alert tone={d.status === 'VERIFIED' ? undefined : 'error'} className="flex items-start gap-2">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {d.error}
+          </Alert>
+        )}
+        {d && (
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 font-medium">{t('domain.type')}</th>
+                  <th className="px-3 py-2 font-medium">{t('domain.name')}</th>
+                  <th className="px-3 py-2 font-medium">{t('domain.value')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.records.map((r) => (
+                  <tr key={r.type} className="border-b align-top last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs">{r.type}</td>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => copy(r.name)}
+                        className="flex items-center gap-1 break-all text-left font-mono text-xs hover:text-primary"
+                        title={t('common.copy')}
+                      >
+                        {r.name} <Copy className="h-3 w-3 shrink-0" aria-hidden />
+                      </button>
+                    </td>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => copy(r.value)}
+                        className="flex items-center gap-1 break-all text-left font-mono text-xs hover:text-primary"
+                        title={t('common.copy')}
+                      >
+                        {r.value} <Copy className="h-3 w-3 shrink-0" aria-hidden />
+                      </button>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {t(`domain.purpose.${r.type}` as MessageKey) || r.purpose}
+                      </p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {d?.status === 'VERIFIED' && (
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden />{' '}
+            {t('domain.verified', { when: d.verifiedAt ? relativeTime(d.verifiedAt) : '' })}
+            {d.checkedAt ? t('domain.lastChecked', { when: relativeTime(d.checkedAt) }) : ''}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

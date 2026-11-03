@@ -17,7 +17,7 @@ const FLUSH_BATCH = 2_000;
 const MAX_EVENTS_PER_VISITOR_MIN = 300;
 export const REALTIME_WINDOW_MS = 5 * 60_000;
 /** Default conversion goals; a site overrides them in settings.analytics.goals. */
-export const DEFAULT_GOALS = ['signup', 'purchase', 'contact', 'cta_click', 'download'];
+export const DEFAULT_GOALS = ['signup', 'purchase', 'contact', 'cta_click', 'download', 'form_submit'];
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{6,64}$/);
 

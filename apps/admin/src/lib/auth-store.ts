@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { adoptProfileLocale } from './i18n';
 
 export type MemberRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'AUTHOR' | 'VIEWER';
 
@@ -47,6 +48,7 @@ export const useAuth = create<AuthState>((set) => ({
   tenant: null,
   setSession: (p) => {
     set({ status: 'authenticated', accessToken: p.accessToken, user: p.user, tenant: p.tenant });
+    adoptProfileLocale(p.user.locale);
     // Refresh a minute before expiry so users never see a 401 round-trip mid-edit.
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => {

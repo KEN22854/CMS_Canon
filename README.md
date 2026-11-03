@@ -31,6 +31,9 @@ Fact "Pro plan price" $49 → $59
 - Collections with a field schema, relations, validation for drafts and for publishing, CSV/JSON import and export, and a headless content API.
 - Multi-domain renderer (Next.js) with ISR, on-demand revalidation, previews, locales and hreflang.
 - Media library with variants and AI alt text.
+- Forms: a form block, a field builder, spam protection (honeypot, timing, heuristics, AI for doubtful cases), an inbox with CSV export and erasure, and delivery by e-mail, notifications, webhooks and Slack.
+- Review workflow: ask for review of an exact draft version, approve or send back, comments anchored to blocks with @mentions; a site can require approval before publishing.
+- Admin in English and Russian, with the choice saved to the profile.
 
 **AI**
 - Provider-agnostic gateway (Anthropic, OpenAI, Google, Ollama) with fallbacks and caching. It also enforces guardrails, PII redaction, per-tenant quotas and budgets, and keeps a cost ledger.
@@ -54,7 +57,10 @@ Fact "Pro plan price" $49 → $59
 - Plugins and a marketplace: integrations act through scoped API keys after explicit consent and can add block presets to the builder.
 - Webhooks: signed, retried, with a delivery log and SSRF protection.
 - **MCP server** for AI agents. The available tools depend on the API key's scopes, and agents can never publish.
-- SAML single sign-on with DNS-verified domains and just-in-time provisioning.
+- SAML single sign-on with DNS-verified domains and just-in-time provisioning; SCIM 2.0 provisioning from the identity provider.
+- Custom domains proven with a DNS TXT record, with on-demand TLS through the bundled Caddy edge and a daily re-check.
+- Notification center (in-app bell and e-mail, instant or daily digest, per-type preferences).
+- `@canon/sdk`: a typed TypeScript client generated from the OpenAPI document; request bodies come from the same Zod schemas the API validates with.
 - Audit log with a daily hash chain, GDPR export and erasure, workspace export.
 - Multi-tenancy enforced by Postgres row-level security, RBAC, 2FA, API keys.
 
@@ -181,16 +187,16 @@ canon-cms/
 
 ## Tests
 
-270 tests, all green:
+297 tests, all green:
 
 | Package | Tests |
 |---|---|
-| fields · blocks · ai-gateway | 15 · 16 · 30 |
-| edge · collab | 8 · 6 |
+| fields · blocks · ai-gateway | 19 · 16 · 30 |
+| edge · collab · sdk | 8 · 6 · 4 |
 | admin (unit) | 7 |
-| API unit | 53 |
-| API integration (real Postgres + Redis + S3, fake LLM, Stripe and IdP) | 126 |
-| End-to-end (Playwright: sign-up, builder, publishing, co-editing, plugins, audit, billing, SSO) | 9 |
+| API unit | 56 |
+| API integration (real Postgres + Redis + S3, fake LLM, Stripe and IdP) | 139 |
+| End-to-end (Playwright: sign-up, builder, publishing, co-editing, plugins, audit, billing, SSO, forms, review gate, RU/EN) | 12 |
 
 API coverage: 83% statements, 89% lines, 85% functions, 68% branches.
 
@@ -231,8 +237,9 @@ Stripe and SAML, scaling, backups, upgrades and a security checklist.
 | [6](docs/phases.md#what-is-in-phase-6) | Realtime collaboration, analytics, A/B testing, personalization |
 | [7](docs/phases.md#what-is-in-phase-7) | Billing, plugins, webhooks, MCP, SSO, compliance, deployment |
 | [8](docs/roadmap.md#phase-8--foundation-) | CI, linting, E2E, prompt evals, slim images, AGPL, fixes |
+| [9](docs/roadmap.md#phase-9--essentials-) | Forms, notifications, custom domains + TLS, review workflow, RU/EN admin, SDK, SCIM |
 
-Next: essentials (forms, notifications, custom domains, review workflow, RU/EN admin, SDK, SCIM), then features no other CMS has — AI search visibility, living facts, brand and legal guard, site time machine, growth autopilot, one-click migration from Tilda — and the Russian market (YooKassa, GigaChat, YandexGPT, Yandex Metrica, 152-FZ). See the [roadmap](docs/roadmap.md).
+Next: features no other CMS has — AI search visibility, living facts, brand and legal guard, site time machine, growth autopilot, one-click migration from Tilda — and the Russian market (YooKassa, GigaChat, YandexGPT, Yandex Metrica, 152-FZ). See the [roadmap](docs/roadmap.md).
 
 ## Known limitations
 

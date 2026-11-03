@@ -11,13 +11,19 @@ export interface Site {
   slug: string;
   description: string | null;
   domain: string | null;
+  domainStatus: 'NONE' | 'PENDING' | 'VERIFIED' | 'FAILED';
+  requireReview: boolean;
   internalDomain: string;
   url: string;
   defaultLocale: string;
   locales: string[];
   theme: { colors?: Record<string, string>; font?: string; radius?: string; mode?: string };
   seoDefaults: { titleTemplate?: string; description?: string };
-  aiSettings: { brandVoice?: string; glossary?: ({ term: string; translations?: Record<string, string> } & Record<string, unknown>)[]; forbiddenTopics?: string[] };
+  aiSettings: {
+    brandVoice?: string;
+    glossary?: ({ term: string; translations?: Record<string, string> } & Record<string, unknown>)[];
+    forbiddenTopics?: string[];
+  };
   pageCount?: number;
   isPublished: boolean;
 }
@@ -70,7 +76,10 @@ export interface MediaItem {
   folder: string;
   tags: string[];
   dominantColor: string | null;
-  variants: { thumb?: { url: string }; sources: { url: string; width: number; height: number; format: 'webp' | 'avif' }[] } | null;
+  variants: {
+    thumb?: { url: string };
+    sources: { url: string; width: number; height: number; format: 'webp' | 'avif' }[];
+  } | null;
   createdAt: string;
 }
 
