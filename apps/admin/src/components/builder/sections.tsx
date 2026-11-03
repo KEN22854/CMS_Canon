@@ -21,7 +21,7 @@ export function SectionLibrary({ locale, filter }: { locale: string; filter: (..
   const insert = useBuilder((s) => s.insert);
   const [tone, setTone] = useState<SectionTone>('light');
   const name = (key: string, fallback: string) => translate(ui, `section.${key}` as MessageKey) || fallback;
-  const groups = SECTION_CATEGORIES.map((c) => ({ c, items: SECTION_PRESETS.filter((p) => p.category === c && filter(name(p.key, p.name), p.name, p.description)) })).filter((g) => g.items.length);
+  const groups = SECTION_CATEGORIES.map((c) => ({ c, items: SECTION_PRESETS.filter((p) => p.category === c && filter(name(p.key, ui === 'ru' && p.nameRu ? p.nameRu : p.name), p.name, p.description)) })).filter((g) => g.items.length);
   if (!groups.length) return null;
   return (
     <div className="space-y-2">
@@ -42,7 +42,7 @@ export function SectionLibrary({ locale, filter }: { locale: string; filter: (..
             {items.map((p) => (
               <button key={p.key} type="button" title={p.description} onClick={() => insert(p.build(locale, tone))} className="flex items-center gap-1.5 rounded-md border border-dashed bg-card px-2 py-1.5 text-left text-xs font-medium hover:border-primary hover:text-primary">
                 <LayoutTemplate className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="min-w-0 truncate">{name(p.key, p.name)}</span>
+                <span className="min-w-0 truncate">{name(p.key, ui === 'ru' && p.nameRu ? p.nameRu : p.name)}</span>
               </button>
             ))}
           </div>

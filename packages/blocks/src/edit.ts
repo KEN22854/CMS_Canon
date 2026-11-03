@@ -32,7 +32,8 @@ export function canContain(parent: BlockNode, childType: string, isRoot: boolean
   if (!isRoot && !def?.isContainer) return false;
   if (def?.allowedChildren && !isRoot) return def.allowedChildren.includes(childType);
   if (childType === 'column') return false;
-  if (childType === 'section') return isRoot;
+  // Full-width bands (sections and free-form blocks) live only at the top level.
+  if (childType === 'section' || childType === 'canvas') return isRoot;
   return true;
 }
 
@@ -79,21 +80,35 @@ export function replaceBlock(content: PageContent, id: string, block: BlockNode)
   return withRoot(content, mapTree(content.root, (n) => (n.id === id ? block : n)));
 }
 
-export function updateProps(content: PageContent, id: string, patch: Record<string, unknown>): PageContent {
-  return withRoot(content, mapTree(content.root, (n) => (n.id === id ? { ...n, props: { ...n.props, ...patch } } : n)));
+/** Structural equality of JSON values (props, styles, animation). */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  return ka.length === Object.keys(b).length && ka.every((k) => Object.hasOwn(b, k) && sameValue((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
 }
 
-/** Node-level fields edited by the Style panel and Layers (name, visibility, lock, styles). */
-export type NodeMeta = Partial<Pick<BlockNode, 'name' | 'hidden' | 'locked' | 'styles'>>;
+// An edit that sets what is already there changes nothing: the same tree comes back, so the
+// builder records no undo step and no log entry for it (aligning aligned elements, say).
+export function updateProps(content: PageContent, id: string, patch: Record<string, unknown>): PageContent {
+  return withRoot(content, mapTree(content.root, (n) => (n.id !== id || Object.keys(patch).every((k) => sameValue(n.props[k], patch[k])) ? n : { ...n, props: { ...n.props, ...patch } })));
+}
+
+/** Node-level fields edited by the Design panel and Layers (name, visibility, lock, styles, animation). */
+export type NodeMeta = Partial<Pick<BlockNode, 'name' | 'hidden' | 'locked' | 'styles' | 'animation'>>;
+
+const unsetMeta = (v: unknown) => v === undefined || v === false || v === '';
 
 export function updateNodeMeta(content: PageContent, id: string, patch: NodeMeta): PageContent {
   return withRoot(
     content,
     mapTree(content.root, (n) => {
       if (n.id !== id) return n;
+      const keys = Object.keys(patch) as (keyof NodeMeta)[];
+      if (keys.every((k) => (unsetMeta(patch[k]) ? unsetMeta(n[k]) : sameValue(n[k], patch[k])))) return n;
       const next: BlockNode = { ...n, ...patch };
       // Unset fields are removed, so documents stay minimal and diffs readable.
-      for (const k of Object.keys(patch) as (keyof NodeMeta)[]) if (patch[k] === undefined || patch[k] === false || patch[k] === '') delete next[k];
+      for (const k of keys) if (unsetMeta(patch[k])) delete next[k];
       return next;
     }),
   );
@@ -352,7 +367,7 @@ export function describeOperation(op: EditorOperation, root?: BlockNode): string
     case 'PROPS_UPDATE':
       return `Edit ${label(op.id)}: ${Object.keys(op.patch).join(', ')}`;
     case 'NODE_META':
-      return `${Object.keys(op.patch).map((k) => (k === 'hidden' ? (op.patch.hidden ? 'Hide' : 'Show') : k === 'locked' ? (op.patch.locked ? 'Lock' : 'Unlock') : k === 'name' ? 'Rename' : 'Style')).join(', ')} ${label(op.id)}`;
+      return `${Object.keys(op.patch).map((k) => (k === 'hidden' ? (op.patch.hidden ? 'Hide' : 'Show') : k === 'locked' ? (op.patch.locked ? 'Lock' : 'Unlock') : k === 'name' ? 'Rename' : k === 'animation' ? 'Animate' : 'Style')).join(', ')} ${label(op.id)}`;
     case 'STYLE_SET':
       return `${label(op.id)}: ${op.property} ${op.value ?? 'reset'} (${op.breakpoint})`;
     case 'NODE_GROUP':

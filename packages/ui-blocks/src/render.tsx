@@ -1,4 +1,4 @@
-import { compileStyles, expandInstance, videoEmbedUrl, type BlockNode, type RichTextDoc } from '@canon/blocks';
+import { ANIMATION_CSS, compileStyles, expandInstance, videoEmbedUrl, type BlockNode, type RichTextDoc } from '@canon/blocks';
 import type { ComponentType, CSSProperties, ReactNode } from 'react';
 import { FormView, type RenderForm } from './form';
 import { RichText } from './rich-text';
@@ -90,7 +90,7 @@ const STATS_COLS: Record<number, string> = { 1: '', 2: '@xl:grid-cols-2', 3: '@x
 const FEATURE_COLS: Record<number, string> = { 2: '@2xl:grid-cols-2', 3: '@2xl:grid-cols-2 @4xl:grid-cols-3', 4: '@2xl:grid-cols-2 @5xl:grid-cols-4' };
 const TONE: Record<string, string> = { primary: 'bg-site-primary text-white', muted: 'bg-site-muted text-site-fg', dark: 'bg-site-fg text-site-bg' };
 
-const CONTAINERS = new Set(['section', 'row', 'column', 'group']);
+const CONTAINERS = new Set(['section', 'row', 'column', 'group', 'canvas']);
 const GROUP_LAYOUT: Record<string, string> = { stack: 'flex flex-col', row: 'flex flex-row flex-wrap', grid: 'grid' };
 const GROUP_GAP: Record<string, string> = { none: 'gap-0', sm: 'gap-3', md: 'gap-6', lg: 'gap-10' };
 const GROUP_ALIGN: Record<string, string> = { start: 'items-start', center: 'items-center', end: 'items-end', stretch: 'items-stretch' };
@@ -107,8 +107,14 @@ export function BlockRenderer({
   const a = {
     ...(ctx.editing ? { 'data-block-id': node.id, 'data-block-type': node.type, ...(CONTAINERS.has(node.type) ? { 'data-block-container': '' } : {}), ...(node.hidden ? { 'data-hidden': '' } : {}), ...(node.locked ? { 'data-locked': '' } : {}) } : {}),
     // Target of the compiled node styles (PageStyles); the block's own root element, no wrapper.
-    ...(node.styles ? { 'data-cn': node.id } : {}),
+    ...(node.styles || node.animation?.type ? { 'data-cn': node.id } : {}),
+    // Entrances don't run while editing (the canvas replays them on request); hover effects do.
+    ...(node.animation?.type && !ctx.editing ? { 'data-anim': node.animation.type, 'data-anim-trigger': node.animation.trigger ?? 'scroll' } : {}),
+    ...(node.animation?.type && ctx.editing ? { 'data-anim-edit': node.animation.type } : {}),
+    ...(node.animation?.hover ? { 'data-hover': node.animation.hover } : {}),
   };
+  // In the builder, text elements name the prop they show, so they can be edited in place.
+  const F = (path: string) => (ctx.editing ? { 'data-field': path } : {});
   const children = () =>
     node.children.length === 0 && ctx.editing ? (
       <EmptyContainer label={label(ctx, node.type === 'row' ? 'addColumns' : isRoot ? 'emptyPage' : 'dropHere')} />
@@ -149,10 +155,34 @@ export function BlockRenderer({
       const layout = str(p.layout, 'stack');
       const cols = Math.min(6, Math.max(2, Number(p.columns) || 3));
       return (
-        <div {...a} style={layout === 'grid' ? { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` } : undefined} className={`${GROUP_LAYOUT[layout] ?? GROUP_LAYOUT.stack} ${GROUP_GAP[str(p.gap, 'md')] ?? GROUP_GAP.md} ${GROUP_ALIGN[str(p.align, 'stretch')] ?? ''} min-w-0`}>
+        // One column in narrow containers, the chosen number from 768 px up; through a variable so a
+      // per-breakpoint gridTemplateColumns style still wins over both.
+      <div {...a} style={layout === 'grid' ? ({ '--grid-cols': cols } as CSSProperties) : undefined} className={`${GROUP_LAYOUT[layout] ?? GROUP_LAYOUT.stack} ${layout === 'grid' ? 'grid-cols-1 @3xl:[grid-template-columns:repeat(var(--grid-cols),minmax(0,1fr))]' : ''} ${GROUP_GAP[str(p.gap, 'md')] ?? GROUP_GAP.md} ${GROUP_ALIGN[str(p.align, 'stretch')] ?? ''} min-w-0`}>
           {children()}
         </div>
       );
+    }
+
+    case 'canvas': {
+      // Free-form: children are positioned by their styles (left/top/width per breakpoint) inside
+      // a frame — the centred 1200 px grid, or the full window. The height is a variable, so a
+      // min-height override per breakpoint (style layer) still wins over it.
+      const height = Math.min(4000, Math.max(80, Number(p.height) || 560));
+      return (
+        <section {...a} data-free-form="" style={{ '--free-h': `${height}px` } as CSSProperties} className={`relative isolate min-h-[var(--free-h)] overflow-hidden ${BG[str(p.background, 'default')] ?? BG.default}`}>
+          {str(p.imageUrl) && <ExternalImage src={str(p.imageUrl)} className="absolute inset-0 -z-10 h-full w-full object-cover" />}
+          {str(p.videoUrl) && <BackgroundVideo src={str(p.videoUrl)} poster={str(p.imageUrl) || undefined} editing={Boolean(ctx.editing)} />}
+          {str(p.overlay, 'none') !== 'none' && <div aria-hidden className={`absolute inset-0 -z-10 ${str(p.overlay) === 'dark' ? 'bg-black/55' : 'bg-white/60'}`} />}
+          <div data-free-frame="" className={`absolute inset-y-0 left-0 right-0 mx-auto ${str(p.frame) === 'window' ? '' : 'max-w-[1200px]'}`}>
+            {node.children.length === 0 && ctx.editing ? <EmptyContainer label={label(ctx, 'dropHere')} /> : node.children.map((c) => (ctx.Child ? <ctx.Child key={c.id} node={c} ctx={ctx} parent={node} /> : <BlockRenderer key={c.id} node={c} ctx={ctx} parent={node} />))}
+          </div>
+        </section>
+      );
+    }
+
+    case 'shape': {
+      const kind = str(p.kind, 'rectangle');
+      return <div {...a} aria-hidden className={kind === 'line' ? 'h-px w-40 bg-current opacity-30' : `h-32 w-48 bg-site-primary/20 ${kind === 'circle' ? 'rounded-full' : 'rounded-site'}`} />;
     }
 
     case 'component': {
@@ -172,16 +202,20 @@ export function BlockRenderer({
     case 'hero': {
       const bg = ctx.media[str(p.mediaId)];
       const align = str(p.align, 'center');
+      const hasMedia = Boolean(bg || str(p.imageUrl) || str(p.videoUrl));
+      const overlay = hasMedia ? str(p.overlay, 'dark') : 'none';
       return (
-        <section {...a} className="relative isolate overflow-hidden bg-site-muted">
-          {bg && <Picture media={bg} alt="" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-40" sizes="100vw" priority />}
+        <section {...a} className={`relative isolate overflow-hidden ${hasMedia ? (overlay === 'dark' ? 'bg-black text-white' : 'bg-site-muted') : 'bg-site-muted'}`}>
+          {bg ? <Picture media={bg} alt="" className="absolute inset-0 -z-10 h-full w-full object-cover" sizes="100vw" priority /> : str(p.imageUrl) && <ExternalImage src={str(p.imageUrl)} className="absolute inset-0 -z-10 h-full w-full object-cover" priority />}
+          {str(p.videoUrl) && <BackgroundVideo src={str(p.videoUrl)} poster={str(p.imageUrl) || undefined} editing={Boolean(ctx.editing)} />}
+          {overlay !== 'none' && <div aria-hidden className={`absolute inset-0 -z-10 ${overlay === 'dark' ? 'bg-black/55' : 'bg-white/60'}`} />}
           <div className={`mx-auto max-w-4xl px-6 py-24 @3xl:py-32 ${ALIGN[align]}`}>
-            {str(p.eyebrow) && <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-site-primary">{str(p.eyebrow)}</p>}
-            <h1 className="text-4xl font-bold tracking-tight @3xl:text-6xl">{str(p.title)}</h1>
-            {str(p.subtitle) && <p className="mt-6 text-lg opacity-80 @3xl:text-xl">{str(p.subtitle)}</p>}
+            {str(p.eyebrow) && <p {...F('eyebrow')} className="mb-4 text-sm font-semibold uppercase tracking-wider text-site-primary">{str(p.eyebrow)}</p>}
+            <h1 {...F('title')} className="text-4xl font-bold tracking-tight @3xl:text-6xl">{str(p.title)}</h1>
+            {str(p.subtitle) && <p {...F('subtitle')} className="mt-6 text-lg opacity-80 @3xl:text-xl">{str(p.subtitle)}</p>}
             {str(p.ctaLabel) && (
               <div className={`mt-10 flex ${FLEX_ALIGN[align]}`}>
-                <CtaLink href={str(p.ctaHref, '/')} variant="primary" label={str(p.ctaLabel)} />
+                <CtaLink href={str(p.ctaHref, '/')} variant="primary" label={str(p.ctaLabel)} field={F('ctaLabel')} />
               </div>
             )}
           </div>
@@ -194,7 +228,7 @@ export function BlockRenderer({
       const size = level === 1 ? 'text-4xl @3xl:text-5xl' : level === 2 ? 'text-3xl' : level === 3 ? 'text-2xl' : 'text-xl';
       const H = `h${Math.min(Math.max(level, 1), 4)}` as 'h1';
       return (
-        <H {...a} className={`mx-auto max-w-3xl px-6 font-bold tracking-tight ${size} ${ALIGN[str(p.align, 'left')]}`}>
+        <H {...a} {...F('text')} className={`mx-auto max-w-3xl px-6 font-bold tracking-tight ${size} ${ALIGN[str(p.align, 'left')]}`}>
           {str(p.text)}
         </H>
       );
@@ -202,23 +236,40 @@ export function BlockRenderer({
 
     case 'text':
       return (
-        <div {...a} className={`mx-auto max-w-3xl px-6 text-lg leading-relaxed ${ALIGN[str(p.align, 'left')]}`}>
+        <div {...a} {...F('doc')} className={`mx-auto max-w-3xl px-6 text-lg leading-relaxed ${ALIGN[str(p.align, 'left')]}`}>
           <RichText doc={p.doc as RichTextDoc} facts={ctx.facts} showMissing={ctx.draft || Boolean(ctx.editing)} />
         </div>
       );
 
     case 'image': {
       const m = ctx.media[str(p.mediaId)];
+      if (!m && str(p.src)) {
+        return (
+          <figure {...a} className="mx-auto max-w-5xl px-6">
+            <ExternalImage src={str(p.src)} alt={str(p.alt)} className={`h-full w-full object-cover ${p.rounded === false ? '' : 'rounded-site'}`} />
+            {str(p.caption) && <figcaption {...F('caption')} className="mt-2 text-center text-sm opacity-70">{str(p.caption)}</figcaption>}
+          </figure>
+        );
+      }
       if (!m) return ctx.draft || ctx.editing ? <Placeholder a={a} label={label(ctx, 'chooseImage')} tall /> : null;
       return (
         <figure {...a} className="mx-auto max-w-5xl px-6">
           <Picture media={m} alt={str(p.alt) || m.alt || ''} className={p.rounded === false ? '' : 'rounded-site'} sizes="(min-width: 1024px) 960px, 100vw" />
-          {str(p.caption) && <figcaption className="mt-2 text-center text-sm opacity-70">{str(p.caption)}</figcaption>}
+          {str(p.caption) && <figcaption {...F('caption')} className="mt-2 text-center text-sm opacity-70">{str(p.caption)}</figcaption>}
         </figure>
       );
     }
 
     case 'video': {
+      const file = str(p.fileUrl);
+      if (file) {
+        const loop = p.autoplay === true;
+        return (
+          <div {...a} className="mx-auto max-w-4xl px-6">
+            <video src={file} title={str(p.title) || undefined} className="aspect-video w-full rounded-site bg-black object-cover" preload="metadata" playsInline {...(loop ? { autoPlay: !ctx.editing, muted: true, loop: true } : { controls: !ctx.editing })} />
+          </div>
+        );
+      }
       const src = videoEmbedUrl(str(p.url));
       if (!src) return ctx.draft || ctx.editing ? <Placeholder a={a} label={label(ctx, 'pasteVideo')} tall /> : null;
       return (
@@ -240,7 +291,7 @@ export function BlockRenderer({
     case 'button':
       return (
         <div {...a} className={`mx-auto flex max-w-3xl px-6 ${FLEX_ALIGN[str(p.align, 'left')]}`}>
-          <CtaLink href={str(p.href, '/')} variant={str(p.variant, 'primary')} label={str(p.label)} />
+          <CtaLink href={str(p.href, '/')} variant={str(p.variant, 'primary')} label={str(p.label)} field={F('label')} />
         </div>
       );
 
@@ -249,10 +300,10 @@ export function BlockRenderer({
       return (
         <div {...a} className="mx-auto max-w-5xl px-6">
           <div className={`rounded-site px-8 py-14 text-center @3xl:px-16 ${TONE[tone] ?? TONE.primary}`}>
-            <h2 className="text-3xl font-bold tracking-tight @3xl:text-4xl">{str(p.title)}</h2>
-            {str(p.text) && <p className="mx-auto mt-4 max-w-2xl text-lg opacity-90">{str(p.text)}</p>}
+            <h2 {...F('title')} className="text-3xl font-bold tracking-tight @3xl:text-4xl">{str(p.title)}</h2>
+            {str(p.text) && <p {...F('text')} className="mx-auto mt-4 max-w-2xl text-lg opacity-90">{str(p.text)}</p>}
             <div className="mt-8 flex justify-center">
-              <CtaLink href={str(p.buttonHref, '/')} variant={tone === 'primary' ? 'inverse' : 'primary'} label={str(p.buttonLabel)} />
+              <CtaLink href={str(p.buttonHref, '/')} variant={tone === 'primary' ? 'inverse' : 'primary'} label={str(p.buttonLabel)} field={F('buttonLabel')} />
             </div>
           </div>
         </div>
@@ -263,13 +314,13 @@ export function BlockRenderer({
       const items = list<{ title?: string; text?: string }>(p.items);
       return (
         <div {...a} className="mx-auto max-w-6xl px-6">
-          {str(p.title) && <h2 className="mb-10 text-center text-3xl font-bold tracking-tight">{str(p.title)}</h2>}
+          {str(p.title) && <h2 {...F('title')} className="mb-10 text-center text-3xl font-bold tracking-tight">{str(p.title)}</h2>}
           <div className={`grid grid-cols-1 gap-6 ${FEATURE_COLS[Number(p.columns) || 3] ?? FEATURE_COLS[3]}`}>
             {items.map((f, i) => (
               <div key={i} className="rounded-site border border-site-fg/10 bg-site-bg p-6 text-site-fg">
                 <div className="mb-4 h-9 w-9 rounded-site bg-site-primary/15" aria-hidden />
-                <h3 className="text-lg font-semibold">{str(f.title)}</h3>
-                {str(f.text) && <p className="mt-2 opacity-75">{str(f.text)}</p>}
+                <h3 {...F(`items.${i}.title`)} className="text-lg font-semibold">{str(f.title)}</h3>
+                {str(f.text) && <p {...F(`items.${i}.text`)} className="mt-2 opacity-75">{str(f.text)}</p>}
               </div>
             ))}
           </div>
@@ -284,8 +335,8 @@ export function BlockRenderer({
           {items.map((s, i) => (
             <div key={i}>
               <dt className="sr-only">{str(s.label)}</dt>
-              <dd className="text-4xl font-bold tracking-tight text-site-primary">{str(s.value)}</dd>
-              <dd className="mt-1 text-sm uppercase tracking-wide opacity-70">{str(s.label)}</dd>
+              <dd {...F(`items.${i}.value`)} className="text-4xl font-bold tracking-tight text-site-primary">{str(s.value)}</dd>
+              <dd {...F(`items.${i}.label`)} className="mt-1 text-sm uppercase tracking-wide opacity-70">{str(s.label)}</dd>
             </div>
           ))}
         </dl>
@@ -297,17 +348,17 @@ export function BlockRenderer({
       // <details> works without JS and is indexable; the builder keeps every answer expanded.
       return (
         <div {...a} className="mx-auto max-w-3xl px-6">
-          {str(p.title) && <h2 className="mb-8 text-3xl font-bold tracking-tight">{str(p.title)}</h2>}
+          {str(p.title) && <h2 {...F('title')} className="mb-8 text-3xl font-bold tracking-tight">{str(p.title)}</h2>}
           <div className="divide-y divide-site-fg/10 border-y border-site-fg/10">
             {items.map((f, i) => (
               <details key={i} className="group py-4" open={ctx.editing || undefined}>
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold [&::-webkit-details-marker]:hidden">
-                  {str(f.q)}
+                  <span {...F(`items.${i}.q`)}>{str(f.q)}</span>
                   <span className="text-xl leading-none transition-transform group-open:rotate-45" aria-hidden>
                     +
                   </span>
                 </summary>
-                <p className="mt-3 whitespace-pre-line opacity-80">{str(f.a)}</p>
+                <p {...F(`items.${i}.a`)} className="mt-3 whitespace-pre-line opacity-80">{str(f.a)}</p>
               </details>
             ))}
           </div>
@@ -318,7 +369,9 @@ export function BlockRenderer({
     case 'quote':
       return (
         <figure {...a} className="mx-auto max-w-3xl px-6">
-          <blockquote className="border-l-4 border-site-primary pl-6 text-2xl font-medium leading-snug">“{str(p.text)}”</blockquote>
+          <blockquote className="border-l-4 border-site-primary pl-6 text-2xl font-medium leading-snug">
+            “<span {...F('text')}>{str(p.text)}</span>”
+          </blockquote>
           {(str(p.author) || str(p.role)) && (
             <figcaption className="mt-4 pl-7 text-sm opacity-70">
               {str(p.author)}
@@ -333,12 +386,14 @@ export function BlockRenderer({
       const photo = ctx.media[str(p.mediaId)];
       return (
         <figure {...a} className="mx-auto max-w-3xl px-6 text-center">
-          <blockquote className="text-xl leading-relaxed @3xl:text-2xl">“{str(p.quote)}”</blockquote>
+          <blockquote className="text-xl leading-relaxed @3xl:text-2xl">
+            “<span {...F('quote')}>{str(p.quote)}</span>”
+          </blockquote>
           <figcaption className="mt-6 flex items-center justify-center gap-3">
             {photo && <Picture media={photo} alt={str(p.name)} className="h-12 w-12 rounded-full object-cover" sizes="48px" />}
             <span className="text-left">
-              <span className="block font-semibold">{str(p.name)}</span>
-              {str(p.role) && <span className="block text-sm opacity-70">{str(p.role)}</span>}
+              <span {...F('name')} className="block font-semibold">{str(p.name)}</span>
+              {str(p.role) && <span {...F('role')} className="block text-sm opacity-70">{str(p.role)}</span>}
             </span>
           </figcaption>
         </figure>
@@ -383,7 +438,7 @@ export function BlockRenderer({
   }
 }
 
-function CtaLink({ href, label, variant }: { href: string; label: string; variant: string }) {
+function CtaLink({ href, label, variant, field }: { href: string; label: string; variant: string; field?: object }) {
   const external = /^https?:/i.test(href);
   const cls =
     variant === 'link'
@@ -394,7 +449,7 @@ function CtaLink({ href, label, variant }: { href: string; label: string; varian
           ? 'rounded-site bg-white px-6 py-3 font-semibold text-site-primary shadow hover:opacity-90'
           : 'rounded-site bg-site-primary px-6 py-3 font-semibold text-white shadow hover:opacity-90';
   return (
-    <a href={href} data-canon-event="cta_click" className={`inline-block ${cls}`} {...(external ? { rel: 'noopener noreferrer' } : {})}>
+    <a href={href} data-canon-event="cta_click" className={`inline-block ${cls}`} {...(external ? { rel: 'noopener noreferrer' } : {})} {...field}>
       {label}
     </a>
   );
@@ -440,6 +495,23 @@ export function Picture({
   );
 }
 
+/**
+ * A stock photo by link (allow-listed hosts, validated on save). Lazy unless it is the first
+ * screen; decoding async so a large photo doesn't block the page.
+ */
+function ExternalImage({ src, alt = '', className, priority = false }: { src: string; alt?: string; className?: string; priority?: boolean }) {
+  return <img src={src} alt={alt} className={className} loading={priority ? 'eager' : 'lazy'} decoding="async" referrerPolicy="no-referrer" />;
+}
+
+/**
+ * A silent looping background video. It only loads metadata until it plays, sits behind the
+ * content, and is hidden for people who prefer reduced motion (the poster stays). In the builder
+ * it shows the first frame instead of playing, so editing stays calm.
+ */
+function BackgroundVideo({ src, poster, editing }: { src: string; poster?: string; editing: boolean }) {
+  return <video aria-hidden src={src} poster={poster} className="absolute inset-0 -z-10 h-full w-full object-cover motion-reduce:hidden" preload="metadata" muted loop playsInline autoPlay={!editing} />;
+}
+
 function Placeholder({ a, label, tall = false }: { a: object; label: string; tall?: boolean }) {
   return (
     <div {...a} className="mx-auto max-w-3xl px-6">
@@ -459,5 +531,19 @@ function EmptyContainer({ label }: { label: string }) {
  */
 export function PageStyles({ root }: { root: BlockNode }): ReactNode {
   const css = compileStyles(root);
-  return css ? <style data-canon-styles="" dangerouslySetInnerHTML={{ __html: css }} /> : null;
+  const animated = usesAnimation(root);
+  const all = [animated ? ANIMATION_CSS : '', css].filter(Boolean).join('\n');
+  return all ? <style data-canon-styles="" dangerouslySetInnerHTML={{ __html: all }} /> : null;
+}
+
+/** True when any block animates (entrance or hover): only then the page carries the animation CSS. */
+export function usesAnimation(root: BlockNode): boolean {
+  const walk = (n: BlockNode): boolean => Boolean(n.animation?.type || n.animation?.hover) || n.children.some(walk);
+  return walk(root);
+}
+
+/** True when a block enters on scroll: the page then needs the small observer script. */
+export function usesScrollAnimation(root: BlockNode): boolean {
+  const walk = (n: BlockNode): boolean => (Boolean(n.animation?.type) && (n.animation?.trigger ?? 'scroll') === 'scroll') || n.children.some(walk);
+  return walk(root);
 }

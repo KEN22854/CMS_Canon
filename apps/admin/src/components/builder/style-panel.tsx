@@ -5,6 +5,7 @@ import { ChevronDown, Eye, EyeOff, RotateCcw } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useT, type MessageKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { AnimationPanel } from './animation-panel';
 import { useBlockLabels } from './labels';
 import { useBuilder } from './store';
 
@@ -138,6 +139,8 @@ export function StylePanel({ node, readOnly }: { node: BlockNode; readOnly: bool
         <p className="text-muted-foreground">{bp === 'base' ? t('style.appliesAll') : t('style.appliesBp', { bp: bpName(bp) })}</p>
         {overrides > 0 && <p className="mt-1 text-primary">{t('style.overrides', { count: overrides })}</p>}
       </div>
+
+      <AnimationPanel node={node} readOnly={readOnly} />
 
       <button
         type="button"

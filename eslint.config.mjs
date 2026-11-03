@@ -7,7 +7,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/.next/**', '**/coverage/**', '**/.turbo/**', '**/next-env.d.ts', 'packages/db/prisma/migrations/**'],
+    ignores: ['**/node_modules/**', '**/dist/**', '**/.next/**', '**/coverage/**', '**/.turbo/**', '**/next-env.d.ts', 'packages/db/prisma/migrations/**', '.trail/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -47,7 +47,7 @@ export default tseslint.config(
     rules: { '@typescript-eslint/consistent-type-imports': 'off' },
   },
   {
-    files: ['**/test/**/*.ts', '**/*.test.ts', '**/*.config.{ts,mts,mjs}', 'packages/db/prisma/seed*.ts', 'packages/db/prisma/seed/**/*.ts'],
+    files: ['**/test/**/*.ts', '**/*.test.ts', 'packages/*/scripts/**', 'packages/*/bench/**', '**/*.config.{ts,mts,mjs}', 'packages/db/prisma/seed*.ts', 'packages/db/prisma/seed/**/*.ts'],
     rules: { 'no-console': 'off', '@typescript-eslint/no-explicit-any': 'off' },
   },
 );

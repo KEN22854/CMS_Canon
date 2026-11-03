@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { animationSchema, normalizeAnimation, type BlockAnimation } from './animation';
 import { getBlock, type FieldMeta } from './definitions';
 import { collectFactKeys, mapRichText, type RichTextDoc } from './rich-text';
 import { validateStyles, type ResponsiveStyles } from './styles';
@@ -20,6 +21,8 @@ export interface BlockNode {
   locked?: boolean;
   /** Visual overrides per breakpoint (see styles.ts). */
   styles?: ResponsiveStyles;
+  /** Entrance and hover animation (see animation.ts). */
+  animation?: BlockAnimation;
 }
 
 export interface PageContent {
@@ -36,6 +39,7 @@ const nodeSchema: z.ZodType<BlockNode> = z.lazy(() =>
     hidden: z.boolean().optional(),
     locked: z.boolean().optional(),
     styles: z.unknown().optional(),
+    animation: z.unknown().optional(),
   }),
 ) as z.ZodType<BlockNode>;
 
@@ -95,6 +99,13 @@ export function validatePageContent(input: unknown, opts: ValidateOptions = {}):
     if (!node.name) delete out.name;
     if (!node.hidden) delete out.hidden;
     if (!node.locked) delete out.locked;
+    if (node.animation !== undefined) {
+      const anim = animationSchema.safeParse(node.animation);
+      if (!anim.success) issues.push({ path: `${path}.animation`, message: anim.error.issues[0]?.message ?? 'Invalid animation' });
+      const a = anim.success ? normalizeAnimation(anim.data) : undefined;
+      if (a) out.animation = a;
+      else delete out.animation;
+    }
     return out;
   };
 

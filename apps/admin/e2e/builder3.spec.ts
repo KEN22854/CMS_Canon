@@ -126,7 +126,7 @@ test('the builder speaks Russian', async ({ page }) => {
   await expect(page.getByRole('application', { name: 'Холст страницы' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Стиль', exact: true })).toBeVisible();
   await expect(page.getByText('Готовые секции')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Тарифы · 3 плана' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Тарифы · 3 плана', exact: true })).toBeVisible();
   await page.locator('[data-block-type="hero"]').first().click({ position: { x: 10, y: 10 } });
   await page.getByRole('button', { name: 'Стиль', exact: true }).click();
   await expect(page.getByText('Редактируется: Десктоп')).toBeVisible();

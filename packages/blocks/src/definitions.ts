@@ -6,6 +6,29 @@ const safeUrl = z
   .max(2048)
   .refine((h) => h === '' || /^(https?:|mailto:|tel:|\/|#)/i.test(h), { message: 'Only http(s), mailto, tel, relative and anchor URLs are allowed' });
 
+/**
+ * Stock media shown by link (templates, quick starts). Only these hosts, only https: a page can't
+ * point the visitor's browser at an arbitrary server. Swapping in an upload from the media library
+ * (mediaId) always wins over the link.
+ */
+export const EXTERNAL_IMAGE_HOSTS = ['images.unsplash.com', 'picsum.photos', 'fastly.picsum.photos', 'images.pexels.com', 'assets.mixkit.co'] as const;
+export const EXTERNAL_VIDEO_HOSTS = ['assets.mixkit.co', 'videos.pexels.com'] as const;
+const hostIn = (hosts: readonly string[]) => (v: string) => {
+  if (v === '') return true;
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' && !u.username && !u.password && hosts.includes(u.hostname);
+  } catch {
+    return false;
+  }
+};
+export const externalImageUrl = z.string().max(2048).refine(hostIn(EXTERNAL_IMAGE_HOSTS), { message: `Image links must be https on ${EXTERNAL_IMAGE_HOSTS.join(', ')}` });
+export const externalVideoUrl = z
+  .string()
+  .max(2048)
+  .refine(hostIn(EXTERNAL_VIDEO_HOSTS), { message: `Video files must be https on ${EXTERNAL_VIDEO_HOSTS.join(', ')}` })
+  .refine((v) => v === '' || /\.(mp4|webm)(\?|$)/i.test(v), { message: 'Video files must be .mp4 or .webm' });
+
 const spacing = z.enum(['none', 'sm', 'md', 'lg', 'xl']);
 const align = z.enum(['left', 'center', 'right']);
 
@@ -87,9 +110,13 @@ export const heroBlock = define({
     ctaLabel: z.string().max(40).default(''),
     ctaHref: safeUrl.default(''),
     mediaId: z.string().max(40).default(''),
+    imageUrl: externalImageUrl.default(''),
+    /** A muted, looping background video (stock file by link). */
+    videoUrl: externalVideoUrl.default(''),
+    overlay: z.enum(['none', 'light', 'dark']).default('dark'),
     align: align.default('center'),
   }),
-  defaults: () => ({ eyebrow: '', title: 'A headline that says what you do', subtitle: '', ctaLabel: '', ctaHref: '', mediaId: '', align: 'center' as const }),
+  defaults: () => ({ eyebrow: '', title: 'A headline that says what you do', subtitle: '', ctaLabel: '', ctaHref: '', mediaId: '', imageUrl: '', videoUrl: '', overlay: 'dark' as const, align: 'center' as const }),
   fields: {
     eyebrow: { kind: 'text', label: 'Eyebrow', ai: true },
     title: { kind: 'text', label: 'Title', ai: true },
@@ -97,6 +124,9 @@ export const heroBlock = define({
     ctaLabel: { kind: 'text', label: 'Button label', ai: true },
     ctaHref: { kind: 'url', label: 'Button link' },
     mediaId: { kind: 'media', label: 'Background image' },
+    imageUrl: { kind: 'url', label: 'Background image link (stock)' },
+    videoUrl: { kind: 'url', label: 'Background video link (.mp4)' },
+    overlay: { kind: 'select', label: 'Darken the background', options: ['none', 'light', 'dark'] },
     align: { kind: 'select', label: 'Alignment', options: ['left', 'center', 'right'] },
   },
 });
@@ -138,14 +168,17 @@ export const imageBlock = define({
   isContainer: false,
   props: z.object({
     mediaId: z.string().max(40).default(''),
+    /** A stock photo by link, used while no library image is chosen. */
+    src: externalImageUrl.default(''),
     /** Overrides the media library alt for this placement; empty = use the library alt. */
     alt: z.string().max(300).default(''),
     caption: z.string().max(300).default(''),
     rounded: z.boolean().default(true),
   }),
-  defaults: () => ({ mediaId: '', alt: '', caption: '', rounded: true }),
+  defaults: () => ({ mediaId: '', src: '', alt: '', caption: '', rounded: true }),
   fields: {
     mediaId: { kind: 'media', label: 'Image' },
+    src: { kind: 'url', label: 'Image link (stock)' },
     alt: { kind: 'text', label: 'Alt text (override)', ai: true },
     caption: { kind: 'text', label: 'Caption', ai: true },
     rounded: { kind: 'toggle', label: 'Rounded corners' },
@@ -319,12 +352,22 @@ const VIDEO_URL = /^https:\/\/(www\.)?(youtube\.com\/watch\?v=[\w-]{6,20}|youtu\
 export const videoBlock = define({
   type: 'video',
   name: 'Video',
-  description: 'An embedded YouTube or Vimeo video.',
+  description: 'An embedded YouTube or Vimeo video, or a video file that can play silently on a loop.',
   category: 'media',
   isContainer: false,
-  props: z.object({ url: z.string().regex(VIDEO_URL, 'Use a YouTube or Vimeo link').or(z.literal('')).default(''), title: short(200) }),
-  defaults: () => ({ url: '', title: '' }),
-  fields: { url: { kind: 'url', label: 'YouTube or Vimeo URL' }, title: { kind: 'text', label: 'Accessible title', ai: true } },
+  props: z.object({
+    url: z.string().regex(VIDEO_URL, 'Use a YouTube or Vimeo link').or(z.literal('')).default(''),
+    fileUrl: externalVideoUrl.default(''),
+    autoplay: z.boolean().default(false),
+    title: short(200),
+  }),
+  defaults: () => ({ url: '', fileUrl: '', autoplay: false, title: '' }),
+  fields: {
+    url: { kind: 'url', label: 'YouTube or Vimeo URL' },
+    fileUrl: { kind: 'url', label: 'Or a video file link (.mp4)' },
+    autoplay: { kind: 'toggle', label: 'Play silently on a loop (file only)' },
+    title: { kind: 'text', label: 'Accessible title', ai: true },
+  },
 });
 
 /** Privacy-friendly embed URL (youtube-nocookie) for a validated video link, or null. */
@@ -386,6 +429,47 @@ export const groupBlock = define({
   },
 });
 
+/**
+ * Free-form block: its children are placed by coordinates (left/top/width per breakpoint in the
+ * style layer) inside a centred frame, like a design tool. Height is the block's min-height.
+ */
+export const canvasBlock = define({
+  type: 'canvas',
+  name: 'Free-form block',
+  description: 'Place text, images, buttons and shapes anywhere by dragging; positions are kept per screen size.',
+  category: 'layout',
+  isContainer: true,
+  props: z.object({
+    height: z.number().int().min(80).max(4000).default(560),
+    frame: z.enum(['grid', 'window']).default('grid'),
+    background: z.enum(['default', 'muted', 'primary', 'dark']).default('default'),
+    imageUrl: externalImageUrl.default(''),
+    videoUrl: externalVideoUrl.default(''),
+    overlay: z.enum(['none', 'light', 'dark']).default('none'),
+  }),
+  defaults: () => ({ height: 560, frame: 'grid' as const, background: 'default' as const, imageUrl: '', videoUrl: '', overlay: 'none' as const }),
+  fields: {
+    height: { kind: 'number', label: 'Height (desktop, px)' },
+    frame: { kind: 'select', label: 'Positions relative to', options: ['grid', 'window'] },
+    background: { kind: 'select', label: 'Background', options: ['default', 'muted', 'primary', 'dark'] },
+    imageUrl: { kind: 'url', label: 'Background image link (stock)' },
+    videoUrl: { kind: 'url', label: 'Background video link (.mp4)' },
+    overlay: { kind: 'select', label: 'Darken the background', options: ['none', 'light', 'dark'] },
+  },
+});
+
+/** A plain rectangle (or circle) for free-form compositions: colour, radius and size come from styles. */
+export const shapeBlock = define({
+  type: 'shape',
+  name: 'Shape',
+  description: 'A rectangle or circle; colour, corners, shadow and size are set in Style.',
+  category: 'layout',
+  isContainer: false,
+  props: z.object({ kind: z.enum(['rectangle', 'circle', 'line']).default('rectangle') }),
+  defaults: () => ({ kind: 'rectangle' as const }),
+  fields: { kind: { kind: 'select', label: 'Shape', options: ['rectangle', 'circle', 'line'] } },
+});
+
 /** Pattern of node and component ids (also used by the style compiler). */
 export const NODE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -428,6 +512,8 @@ export const BLOCKS = [
   formBlock,
   groupBlock,
   componentBlock,
+  canvasBlock,
+  shapeBlock,
 ] as const;
 export type KnownBlockType = (typeof BLOCKS)[number]['type'];
 

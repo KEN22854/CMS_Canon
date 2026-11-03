@@ -144,3 +144,18 @@ describe('node meta and styles', () => {
     expect(yDocToDraft(b)).toEqual(yDocToDraft(a));
   });
 });
+
+describe('animations in co-editing', () => {
+  it('round-trips a block animation and drops a malformed one', () => {
+    const doc = new Y.Doc();
+    const draft = { title: 'T', slug: 't', description: '', seo: {}, content: { root: { id: 'r', type: 'section', props: {}, children: [{ id: 'h', type: 'heading', props: { text: 'Hi' }, children: [], animation: { type: 'slide-up', delay: 200 } }] } } };
+    draftToYDoc(doc, draft);
+    expect(yDocToDraft(doc)!.content.root.children[0]!.animation).toEqual({ type: 'slide-up', delay: 200 });
+    const next = structuredClone(draft);
+    next.content.root.children[0]!.animation = { type: 'zoom-in' } as never;
+    applyDraftDiff(doc, draft, next);
+    expect(yDocToDraft(doc)!.content.root.children[0]!.animation).toEqual({ type: 'zoom-in' });
+    (doc.getMap('blocks').get('h') as Y.Map<unknown>).set('animation', '{not json');
+    expect(yDocToDraft(doc)!.content.root.children[0]!.animation).toBeUndefined();
+  });
+});

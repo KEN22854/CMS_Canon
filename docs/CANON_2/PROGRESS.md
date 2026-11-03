@@ -1,8 +1,77 @@
 # Canon 2.0 — progress
 
-Last update: 2026-11-03.
+Last update: 2026-11-04.
 
-## Iteration 4 (this one) — Stage 9, SEO platform
+## Iteration 6 (this one) — hundreds of templates, photos and video, animation, the board
+
+- **Open-source templates**: 257 sections converted from two MIT libraries, **Tailblocks**
+  (mertJF/tailblocks, 126) and **HyperUI** (markmead/hyperui, 131). A converter
+  (`packages/blocks/scripts/import-vendor-templates.cjs`) reads their Tailwind markup **as text**
+  (nothing from them is executed), maps elements to Canon blocks (headings, text, buttons, images,
+  forms, grids/rows/stacks) and Tailwind classes to the responsive style layer (desktop and mobile
+  values), turns accent colours into theme tokens, fills placeholder copy per locale (en/ru, pools
+  per category: shop products, team names, quotes) and validates every tree. 2 of 259 were dropped
+  (logo clouds made of inline SVG). They load lazily in the block library with a source badge
+  ("Tailblocks · MIT") and the licence files ship next to them.
+- **Own library**: 114 layouts × 4 tones (was 92), incl. **19 media heroes** (10 background videos,
+  9 full-bleed photos) and 3 free-form video compositions; **21 page templates** (was 12): video
+  landing, creative studio, travel, wellness, interior, school, music, eco farm, business; startup,
+  local business and event now open with video/photo. A new **Shop** category. Total in the
+  library: **371 sections** plus 21 pages. Photo and video heroes lead the Hero category; each video
+  hero's cover is the first frame of its own clip.
+- **Photos and video from external links**: hero (`imageUrl`, `videoUrl`, overlay), image (`src`),
+  video (`fileUrl`, autoplay), free-form block background. Only https and an allowlist of hosts
+  (Unsplash, Picsum, Pexels images; Mixkit, Pexels videos). Background video is muted, looped,
+  `playsInline`, `preload=metadata`, hidden under `prefers-reduced-motion`, not autoplayed in
+  the editor.
+- **Animation** (start of Stage 11): any block gets an entrance (fade, slide ×4, zoom in/out, blur,
+  rotate, flip), a trigger (on load / when scrolled into view), duration, delay, easing (incl.
+  spring) and a hover effect (lift, grow, glow, dim, tilt). Stored as `node.animation`, validated
+  by a strict schema, compiled to CSS variables per block; the live site adds an
+  IntersectionObserver only when a page uses scroll animations; reduced motion turns it all off.
+  Design → Animation in the editor, with "Play the animation".
+- **The free-form block is a board**: Shift/Ctrl+click selects several elements, they move
+  together; **smart guides** snap to the frame's edges and centre and to other elements (pink
+  lines); rotate handle (Shift: 15° steps); align left/centre/right/top/middle/bottom, distribute
+  (3+), bring to front / send to back; arrow keys nudge 1 px (Shift 10); drag an element from the
+  add bar and drop it where it should be. A selected element has its own **Content** and
+  **Design and animation** buttons (the block bar above belongs to the whole block).
+- Fixes found on the way: an edit that sets what is already there (align aligned elements, retype
+  the same text) now returns the same tree, so it is no undo step and no log entry — before, in
+  co-editing, the next Ctrl+Z silently undid the step before it; Shift+click extended the
+  browser's text selection; two buttons named "Preview" on one screen; a grid's inline column count
+  beat the responsive style layer (now a CSS variable).
+- Tests: +5 blocks unit (all 257 converted sections validate in both locales with allowed hosts
+  only; animation schema and CSS; no-op edits), +1 collab (animation survives Yjs), the
+  simple-editor E2E now covers the board, animation and a video hero up to the live HTML.
+
+## Iteration 5 — the simple editor (block-by-block, free-form)
+
+The builder now opens in a **simple mode** made for people who build pages, not trees:
+- A clean page of blocks, no side panels. Hovering a block shows its name and a bar: **Content**,
+  **Design**, Canon AI, move up/down, duplicate, hide, delete. Content/Design open the inspector as
+  a drawer; it closes again.
+- **"+" between blocks** and a big **Add block** at the end open the **block library**: categories
+  on the left, real previews (the site's renderer and theme, scaled to the card) on the right, four
+  colour tones, search. A click inserts exactly where the "+" was.
+- **Edit text in place**: double-click any heading, paragraph, button label, card title, FAQ
+  question, stat… type, Enter. Formatted rich text opens in the panel instead (nothing is lost).
+- **Free-form block** (new `canvas` block): add text, headings, buttons, images and shapes (new
+  `shape` block) and **drag them anywhere**; resize by the handles; snap to an 8 px grid (Alt: free);
+  drag the block's bottom to set its height. Positions are kept **per breakpoint**: on Tablet or
+  Mobile you move things without touching desktop, and **Arrange** stacks the elements for that
+  screen in one step. Every drag is one undo step.
+- **Library size**: 92 section layouts (16 heroes, 20 feature grids, 14 social-proof, 11 content,
+  6 pricing, 6 CTA, 5 team, 4 free-form compositions, 4 header/footer, 3 contact, 3 FAQ) × 4 tones,
+  20 basic blocks, **12 whole-page templates** (landing, startup, agency, portfolio, course, event,
+  local business, about, pricing, contact, article, coming soon). Russian names for all.
+- **Pro mode** (switch in the toolbar) keeps the full builder: palette, layers, history, all panels.
+- Fixes on the way: toolbar buttons never fired (a capture-phase stopPropagation on their
+  container), hovering the builder's own controls dropped the hovered block.
+- Free-form blocks and shapes are kept out of the AI catalog (they need hand-placed coordinates).
+- Tests: +2 blocks unit (templates, free-form), +1 E2E (the whole simple-editor flow, incl. the live site).
+
+## Iteration 4 — Stage 9, SEO platform
 
 - **Redirects**: exact and prefix rules (`/blog/*` → `/news/*`), 301/302/307/308, created in
   Site → SEO, imported from CSV (per-line errors), or **automatically** when a published page
@@ -79,8 +148,8 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 
 1. Stage 5, next steps: streaming plans, canvas preview before applying, multi-page plans
    ("update the price on every page"), plans as review requests for approval by someone else.
-2. Stage 4: more layouts (target 100+ distinct layouts, today 29 × 4 tones), block variants,
-   section thumbnails in the palette.
+2. Stage 4: own media library for templates (today photos and videos are external links),
+   block variants; Stage 11: timeline, scroll-linked (parallax) effects, per-breakpoint animation.
 3. Operation-based undo (today undo is still snapshot-based with structural sharing; the
    operation log is for history, audit and AI).
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.

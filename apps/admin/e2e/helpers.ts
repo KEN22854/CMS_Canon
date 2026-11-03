@@ -21,7 +21,10 @@ async function lastMailTo(to: string, timeoutMs = 20_000): Promise<string> {
 }
 
 /** Registers through the UI, confirms via the e-mailed link, and lands signed in on the dashboard. */
-export async function signUp(page: Page, opts: { workspace?: string } = {}): Promise<{ email: string }> {
+export async function signUp(page: Page, opts: { workspace?: string; editor?: 'simple' | 'pro' } = {}): Promise<{ email: string }> {
+  // Specs written for the full (pro) builder keep it; simple-editor specs ask for 'simple'.
+  const editor = opts.editor ?? 'pro';
+  await page.addInitScript((m) => window.localStorage.setItem('canon.builder.mode', m), editor);
   const email = `e2e.${Date.now()}.${randomBytes(3).toString('hex')}@canon.localhost`;
   // Sign-up is rate-limited per client IP (5 per 10 min). Each test presents its own TEST-NET-3
   // address; behind a real ingress a client-supplied X-Forwarded-For is ignored by TRUST_PROXY.

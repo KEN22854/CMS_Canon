@@ -35,6 +35,18 @@ describe('typed operations', () => {
     expect('styles' in findNode(p.root, 'a')!).toBe(false);
   });
 
+  it('gives the same tree back for an edit that sets what is already there', () => {
+    // Otherwise "align" on aligned elements would be an undo step that changes nothing.
+    const p = applyOperation(page(), { op: 'STYLE_SET', id: 'a', breakpoint: 'base', property: 'left', value: '40px' });
+    expect(applyOperation(p, { op: 'STYLE_SET', id: 'a', breakpoint: 'base', property: 'left', value: ' 40px ' })).toBe(p);
+    expect(applyOperation(p, { op: 'STYLE_SET', id: 'a', breakpoint: 'tablet', property: 'left', value: null })).toBe(p);
+    expect(applyOperation(p, { op: 'PROPS_UPDATE', id: 'a', patch: { text: 'a' } })).toBe(p);
+    expect(applyOperation(p, { op: 'NODE_META', id: 'a', patch: { hidden: false, styles: { base: { left: '40px' } } } })).toBe(p);
+    expect(applyOperations(p, [{ op: 'STYLE_SET', id: 'a', breakpoint: 'base', property: 'left', value: '40px' }, { op: 'PROPS_UPDATE', id: 'b', patch: { level: 2 } }])).toBe(p);
+    // A real change still goes through.
+    expect(findNode(applyOperation(p, { op: 'PROPS_UPDATE', id: 'a', patch: { text: 'b' } }).root, 'a')!.props.text).toBe('b');
+  });
+
   it('groups siblings into a Group and ungroups them back', () => {
     const p = page();
     const g = applyOperation(p, { op: 'NODE_GROUP', ids: ['c', 'b'], wrapper: n('g', 'group') });

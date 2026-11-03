@@ -145,13 +145,16 @@ export function auditPage(page: SeoPageInput, site: SeoSiteContext): { issues: S
   return { issues, score, words };
 }
 
+const MEDIA_FIELDS = new Set(['url', 'src', 'imageUrl', 'videoUrl', 'fileUrl']);
+
 /** A link field counts only when its button actually shows (a CTA without a label renders no link). */
 function labelled(n: BlockNode, field: string): boolean {
   const p = n.props;
   if (n.type === 'hero' && field === 'ctaHref') return Boolean(p.ctaLabel);
   if (n.type === 'cta' && field === 'buttonHref') return Boolean(p.buttonLabel);
   if (n.type === 'button' && field === 'href') return Boolean(p.label);
-  return field !== 'url'; // video URLs are embeds, not links
+  // Video URLs are embeds and the stock-media fields are files, not links a visitor follows.
+  return !MEDIA_FIELDS.has(field);
 }
 
 function richWalk(doc: RichTextDoc, blockId: string, headings: { level: number; blockId: string }[], links: { href: string; blockId: string }[]) {

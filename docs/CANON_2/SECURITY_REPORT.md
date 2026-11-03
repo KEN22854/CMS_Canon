@@ -78,6 +78,25 @@ The inline script in `apps/admin/src/app/layout.tsx` is a static string that onl
   text can't break out of the script element; noindex pages and previews get none.
 - The 404 route handler validates the host header before using it.
 
+## Templates, external media, animation (iteration 6)
+
+- **Third-party templates** were downloaded once (with the owner's approval) and converted
+  offline; their files are parsed as text, no script from them runs, at build time or in the
+  product. Only text, classes mapped to an allowlist of style properties (each value validated
+  by the style layer), and image URLs survive; event handlers, inline styles and unknown
+  attributes are dropped. Every converted tree passes `validatePageContent` in a unit test.
+- **External media**: https only, no credentials in the URL, host must be on an allowlist
+  (images.unsplash.com, picsum.photos, fastly.picsum.photos, images.pexels.com and video stills
+  from assets.mixkit.co; videos from assets.mixkit.co,
+  videos.pexels.com), videos must end in .mp4/.webm. Validated server-side with the page.
+  Images load with `referrerPolicy="no-referrer"` and lazily. A page's visitors fetch these
+  files from the third party — documented for site owners; a later step copies media into the
+  site's storage.
+- **Animation** values are enums and bounded numbers (strict schema), so nothing user-typed
+  reaches CSS.
+- Licences: MIT texts of both libraries are kept next to the generated data and in
+  THIRD_PARTY_NOTICES.md.
+
 ## Clipboard
 
 Copied blocks are stored in the browser's `localStorage` (same origin as the admin) and are

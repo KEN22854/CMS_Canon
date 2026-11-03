@@ -8,12 +8,14 @@ import { toast } from 'sonner';
 import { translate, currentLocale, type MessageKey } from '@/lib/i18n';
 import { cn, relativeTime } from '@/lib/utils';
 import { findNode, findParent, newBlock } from '../editor/tree-ops';
+import { BlockLibrary } from './block-library';
 import { Canvas } from './canvas';
 import { useBlockLabels } from './labels';
 import { resolveCanvasDrop, resolveLayerDrop, type DragItem, type DropTarget } from './drop';
 import { Layers } from './layers';
 import { Palette } from './palette';
 import { historyOf, useBuilder, useBuilderStore } from './store';
+import { X } from 'lucide-react';
 
 type Zone = 'canvas' | 'layers';
 
@@ -29,6 +31,9 @@ export function Workspace({ siteId, pageId, locale, theme, media, facts, readOnl
   const [tab, setTab] = useState<'blocks' | 'layers' | 'history'>('blocks');
   const L = useBlockLabels();
   const t = L.t;
+  const simple = useBuilder((s) => s.mode === 'simple');
+  const inspectorOpen = useBuilder((s) => s.inspector.open);
+  const closeInspector = useBuilder((s) => s.closeInspector);
   const [active, setActive] = useState<DragItem | null>(null);
   const [drop, setDrop] = useState<{ zone: Zone; target: DropTarget } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -72,7 +77,7 @@ export function Workspace({ siteId, pageId, locale, theme, media, facts, readOnl
   return (
     <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActive((e.active.data.current as DragItem) ?? null)} onDragMove={onMove} onDragEnd={onEnd} onDragCancel={() => (setActive(null), setDrop(null))}>
       <div className="flex min-h-0 flex-1">
-        {!readOnly && (
+        {!readOnly && !simple && (
           <aside className="hidden w-64 shrink-0 flex-col border-r bg-background lg:flex" aria-label={t('builder.sidebar')}>
             <div className="flex border-b text-sm">
               {(['blocks', 'layers', 'history'] as const).map((id) => (
@@ -87,10 +92,23 @@ export function Workspace({ siteId, pageId, locale, theme, media, facts, readOnl
         <main className="min-w-0 flex-1">
           <Canvas media={media} facts={facts} theme={theme} hostRef={canvasRef} drop={drop?.zone === 'canvas' ? drop.target : null} dragging={Boolean(active)} siteId={siteId} pageId={pageId} readOnly={readOnly} />
         </main>
-        <aside className="w-80 shrink-0 overflow-y-auto border-l bg-background xl:w-96" aria-label={t('builder.inspector')}>
-          {inspector}
-        </aside>
+        {simple ? (
+          // Simple mode: the inspector is a drawer that opens from a block's Content / Design buttons.
+          inspectorOpen && (
+            <aside className="relative w-80 shrink-0 overflow-y-auto border-l bg-background shadow-xl xl:w-96" aria-label={t('builder.inspector')}>
+              <button type="button" aria-label={t('simple.closePanel')} title={t('simple.closePanel')} onClick={closeInspector} className="absolute right-2 top-1.5 z-20 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+              {inspector}
+            </aside>
+          )
+        ) : (
+          <aside className="w-80 shrink-0 overflow-y-auto border-l bg-background xl:w-96" aria-label={t('builder.inspector')}>
+            {inspector}
+          </aside>
+        )}
       </div>
+      <BlockLibrary siteId={siteId} locale={locale} theme={theme} />
       <DragOverlay dropAnimation={null} className="pointer-events-none">{active && <div className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium shadow-lg">{L.name(active.type)}</div>}</DragOverlay>
     </DndContext>
   );

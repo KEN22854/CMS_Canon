@@ -22,6 +22,8 @@ export interface DraftNode {
   hidden?: boolean;
   locked?: boolean;
   styles?: Record<string, Record<string, string>>;
+  /** One JSON value in Yjs: an animation is edited as a whole, so last write wins per block. */
+  animation?: object;
 }
 
 const NODE_FLAGS = ['name', 'hidden', 'locked'] as const;
@@ -73,6 +75,7 @@ function blockMap(n: DraftNode): Y.Map<unknown> {
   const styles = new Y.Map<string>();
   for (const [k, v] of flatStyles(n.styles)) styles.set(k, v);
   m.set('styles', styles);
+  if (n.animation) m.set('animation', JSON.stringify(n.animation));
   return m;
 }
 
@@ -119,6 +122,14 @@ export function yDocToDraft(doc: Y.Doc): CollabDraft | null {
     if (m.get('locked') === true) node.locked = true;
     const styles = nestStyles((m.get('styles') as Y.Map<unknown> | undefined)?.toJSON() ?? {});
     if (styles) node.styles = styles;
+    const animation = m.get('animation');
+    if (typeof animation === 'string' && animation) {
+      try {
+        node.animation = JSON.parse(animation) as DraftNode['animation'];
+      } catch {
+        // A malformed value from a peer is dropped; the server validates whatever is saved anyway.
+      }
+    }
     return node;
   };
   const root = build(rootId, 0);
@@ -168,6 +179,10 @@ export function applyDraftDiff(doc: Y.Doc, prev: CollabDraft, next: CollabDraft,
         const now = flatStyles(n.styles);
         for (const k of was.keys()) if (!now.has(k)) styles.delete(k);
         for (const [k, v] of now) if (was.get(k) !== v) styles.set(k, v);
+      }
+      if (!same(old.animation, n.animation)) {
+        if (n.animation) m.set('animation', JSON.stringify(n.animation));
+        else m.delete('animation');
       }
       const oldIds = old.children.map((c) => c.id);
       const newIds = n.children.map((c) => c.id);

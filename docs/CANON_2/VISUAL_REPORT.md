@@ -109,3 +109,33 @@ reply is recorded; the planner's checks run on the server in the integration tes
 Site → SEO shows the site score and, per page, what to fix — each issue with a block links into
 the builder with that block selected. Redirects can be typed in, imported from CSV, and appear
 automatically (marked "automatic") when a published page moves.
+
+---
+
+# Iteration 6 — templates, media, animation, the board
+
+| Board: two elements selected, align tools | Animation on a selected element |
+|---|---|
+| ![board](screenshots/after/builder/simple-board-1440.png) | ![animation](screenshots/after/builder/simple-animation-1440.png) |
+
+| Hero with a background video | Library: converted heroes |
+|---|---|
+| ![video](screenshots/after/builder/simple-video-hero-1440.png) | ![library](screenshots/after/library/library-hero-1440.png) |
+
+| Library: shop | Library: features |
+|---|---|
+| ![shop](screenshots/after/library/library-shop-1440.png) | ![features](screenshots/after/library/library-features-1440.png) |
+
+# Iteration 5 — the simple editor
+
+| Page with the block bar | Block library |
+|---|---|
+| ![page](screenshots/after/builder/simple-page-1440.png) | ![library](screenshots/after/builder/simple-library-1440.png) |
+
+| Free-form block | Page template |
+|---|---|
+| ![free-form](screenshots/after/builder/simple-freeform-1440.png) | ![template](screenshots/after/builder/simple-template-1440.png) |
+
+The page is edited where it is: hover a block for its bar, "+" to add a block exactly there,
+double-click text to change it. In a free-form block, elements are dragged and resized directly;
+the size shows under the element and positions snap to an 8 px grid.

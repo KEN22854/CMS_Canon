@@ -36,6 +36,15 @@ export interface BuilderState {
   breakpoint: Breakpoint;
   /** Canvas zoom (1 = 100 %). */
   zoom: number;
+  /**
+   * "simple": a clean page of blocks — add from the library between blocks, edit texts in place,
+   * open Content/Settings per block. "pro": palette, layers and the inspector always visible.
+   */
+  mode: EditorMode;
+  /** The inspector drawer in simple mode, and which tab to show (counter: re-open the same tab). */
+  inspector: { open: boolean; panel: InspectorPanel; n: number };
+  /** The block library, inserting at this index of the page's top level. */
+  library: { index: number } | null;
   /** Set while a collaboration session owns undo/redo (Y.UndoManager: only your own edits). */
   collabHistory: CollabHistory | null;
   /** Blocks collaborators have selected (drawn as coloured outlines on the canvas). */
@@ -82,6 +91,22 @@ export interface BuilderState {
   hover: (id: string | null) => void;
   setBreakpoint: (b: Breakpoint) => void;
   setZoom: (z: number) => void;
+  setMode: (m: EditorMode) => void;
+  openInspector: (panel: InspectorPanel) => void;
+  closeInspector: () => void;
+  openLibrary: (index: number) => void;
+  closeLibrary: () => void;
+}
+
+export type EditorMode = 'simple' | 'pro';
+export type InspectorPanel = 'block' | 'style' | 'ai';
+const MODE_KEY = 'canon.builder.mode';
+function initialMode(): EditorMode {
+  try {
+    return window.localStorage.getItem(MODE_KEY) === 'pro' ? 'pro' : 'simple';
+  } catch {
+    return 'simple';
+  }
 }
 
 export interface LoggedOperation {
@@ -189,6 +214,9 @@ export function createBuilderStore(initial: Draft) {
           hoverId: null,
           breakpoint: 'base',
           zoom: 1,
+          mode: typeof window === 'undefined' ? 'simple' : initialMode(),
+          inspector: { open: false, panel: 'block', n: 0 },
+          library: null,
           collabHistory: null,
           remoteSelections: [],
 
@@ -306,6 +334,18 @@ export function createBuilderStore(initial: Draft) {
           hover: (id) => (get().hoverId === id ? undefined : set({ hoverId: id })),
           setBreakpoint: (breakpoint) => set({ breakpoint }),
           setZoom: (zoom) => set({ zoom: Math.min(2, Math.max(0.25, zoom)) }),
+          setMode: (mode) => {
+            try {
+              window.localStorage.setItem(MODE_KEY, mode);
+            } catch {
+              // Not remembered: the next visit starts in simple mode.
+            }
+            set({ mode });
+          },
+          openInspector: (panel) => set({ inspector: { open: true, panel, n: get().inspector.n + 1 } }),
+          closeInspector: () => set({ inspector: { ...get().inspector, open: false } }),
+          openLibrary: (index) => set({ library: { index } }),
+          closeLibrary: () => set({ library: null }),
         };
       },
       {

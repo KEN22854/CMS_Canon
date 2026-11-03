@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { cookies, draftMode } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { jsonLd, structuredData } from '@canon/blocks';
-import { BlockRenderer, PageStyles } from '@canon/ui-blocks';
+import { BlockRenderer, PageStyles, usesScrollAnimation } from '@canon/ui-blocks';
+import { AnimationObserver } from '@/components/animations';
 import { FormEnhancer } from '@/components/forms';
 import { Tracker } from '@/components/tracker';
 import { PREVIEW_COOKIE } from '@/lib/preview';
@@ -122,6 +123,7 @@ export default async function SitePage({ params }: { params: Params }) {
         />
       </main>
       {Object.keys(data.forms ?? {}).length > 0 && <FormEnhancer />}
+      {usesScrollAnimation(page.content.root) && <AnimationObserver />}
       {!data.draft && (
         <Tracker
           siteId={site.id}

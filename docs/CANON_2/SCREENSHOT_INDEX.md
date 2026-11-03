@@ -45,6 +45,19 @@ Stages 1–2 (design system, Builder 2.0 foundation).
 | after/cms/components-list-1440.png | 3 | 1440 | Site → Components list |
 | after/builder/builder-ru-1440.png | 2 | 1440 | The builder in Russian: palette, tabs, Style panel |
 | after/ai/canon-ai-plan-1440.png | 5 | 1440 | Canon AI tab: a proposed plan as a diff, one operation rejected with its reason (model reply recorded) |
+| after/builder/simple-page-1440.png | 2 | 1440 | Simple mode: the page without side panels, block bar and "+" inserters |
+| after/builder/simple-block-bar-1440.png | 2 | 1440 | Content opened from the block bar as a drawer |
+| after/builder/simple-library-1440.png | 4 | 1440 | Block library: categories, live previews, tones |
+| after/builder/simple-freeform-1440.png | 2 | 1440 | Free-form block: selected element with move/resize handles, size, add-element bar, height handle |
+| after/builder/simple-template-1440.png | 4 | 1440 | A whole-page template applied |
+| after/builder/simple-board-1440.png | 2 | 1440 | Board: two free-form elements selected, align/order tools, rotate handle |
+| after/builder/simple-animation-1440.png | 11 | 1440 | Design → Animation for a selected element, playing |
+| after/builder/simple-video-hero-1440.png | 4 | 1440 | Hero with a background video from the library |
+| after/library/library-hero-1440.png | 4 | 1440 | Block library, heroes: own media heroes and converted ones with source badges |
+| after/library/library-features-1440.png | 4 | 1440 | Block library, features |
+| after/library/library-shop-1440.png | 4 | 1440 | Block library, shop (product cards and collections) |
+| after/library/library-navigation-1440.png | 4 | 1440 | Block library, headers and footers |
+| after/library/library-content-1440.png | 4 | 1440 | Block library, content |
 | after/seo/seo-audit-1440.png | 9 | 1440 | Site → SEO → Audit: score, totals, issues per page (the default home page links to pages a new site does not have) |
 | after/seo/seo-redirects-1440.png | 9 | 1440 | Redirects imported from CSV (exact, prefix, temporary) |
 | after/ai/canon-ai-plan-applied-1440.png | 5 | 1440 | The canvas after applying three operations |

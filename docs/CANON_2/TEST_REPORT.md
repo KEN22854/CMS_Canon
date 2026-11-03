@@ -1,21 +1,57 @@
 # Canon 2.0 — test report
 
-Run on 2026-11-03 against the local stack (Postgres 16, Redis, S3, Mailpit; API :4000, admin :3010,
+Run on 2026-11-04 against the local stack (Postgres 16, Redis, S3, Mailpit; API :4000, admin :3010,
 renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations and global components (9), section library (4), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 46 / 46 ✅ |
-| `@canon/collab` unit | 8 / 8 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 53 / 53 ✅ |
+| `@canon/collab` unit (incl. animation through Yjs) | 9 / 9 ✅ |
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
 | API unit | 56 / 56 ✅ |
 | API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO | 147 / 147 ✅ |
-| Playwright E2E | 19 / 19 ✅ (+6 opt-in: 4 screenshot specs, 2 performance specs) |
+| Playwright E2E | 20 / 20 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
-| ESLint (`--max-warnings=0`) | clean ✅ |
+| ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **352** (339 after iteration 3, 331 after iteration 2, 308 after iteration 1).
+Total automated tests: **361** (355 after iteration 5).
+
+## Iteration 6 — templates, media, animation, the board
+
+- `vendor.test.ts`: all 257 sections converted from Tailblocks and HyperUI validate as page
+  content in English and Russian, keep no unfilled placeholder, use only allowlisted media hosts,
+  and get fresh ids on every insert.
+- `animation.test.ts`: the schema refuses unknown types and out-of-range numbers, defaults are
+  dropped, the CSS rule carries the timing; collab keeps `animation` through a Yjs round trip.
+- `edit.test.ts`: an edit that sets what is already there returns the same tree.
+- `simple.spec.ts` (E2E) now also: Shift+click a second element, Align left, one Ctrl+Z restores
+  only that; select one element (no text gets selected), its own Design → Animation, slide-up with
+  200 ms delay, play it; insert a video hero from the library; the live HTML has `data-anim` on the
+  headline, the delay variable, the Mixkit video and its own poster frame.
+
+Bugs found by it: undo after a no-op align undid the previous step (a no-op still created a new
+tree; in co-editing Yjs saw no change, so Ctrl+Z went one step further back); the block bar's
+Design opened the whole free-form block, not the selected element (elements now have their own
+Content / Design buttons); Shift+click extended the browser's text selection; two buttons named
+"Preview" on one screen. Screenshots showed that several video heroes shared one cover photo —
+each now uses its clip's own frame.
+
+## Iteration 5 — the simple editor
+
+`apps/admin/e2e/simple.spec.ts` runs the whole flow in a real browser, without mocks: the page
+opens without side panels; double-click the hero title, type, Enter → canvas and inspector agree;
+the block bar's Content opens the drawer; Add block → library → Pricing → insert; "+" at the top
+of the hero inserts a free-form collage above it; drag its headline (the new left is on the 8 px
+grid), Ctrl+Z restores it; on Mobile L, Arrange stacks the elements and desktop is unchanged;
+save and publish: the live HTML has the free-form frame with absolute positions, the edited title,
+and no editing attributes; a page template replaces the page; Pro brings back the palette.
+Existing specs run in Pro mode (the helper sets it), so they keep testing the full builder.
+
+Bugs found by it: the toolbar buttons (block bar and the older element toolbar) never received
+clicks because their container stopped propagation in the capture phase; moving the mouse onto the
+builder's own controls reset the hovered block, so the "+" disappeared before it could be clicked;
+the API process must restart after new block types (it validates with the registry it loaded).
 
 ## Iteration 4 — SEO platform
 

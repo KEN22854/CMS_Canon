@@ -24,7 +24,9 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 
 ## P1
 
-- 🟡 Section library: 29 layouts × 4 tones, EN/RU copy, searchable palette (Stage 4). Next: more layouts, thumbnails, block variants.
+- 🟡 Section library: 114 own layouts × 4 tones + 257 converted from Tailblocks and HyperUI (MIT), 21 page templates with photos and video, live previews (Stage 4). Next: copy media into the site's own storage on insert, block variants.
+- ✅ Simple editor: block bar, "+" inserters, block library, in-place text editing, free-form block with drag/resize per breakpoint, arrange for mobile.
+- ⬜ Free-form next: multi-select and align/distribute, rotation handle, smart guides, z-order buttons, drag from the library onto a position.
 - ✅ AI planner → typed operations → diff → approve per operation, one undo step (Stage 5, first part).
 - ⬜ Stage 5: live canvas preview of a plan, multi-page plans, plans as review requests.
 - ⬜ CMS dynamic pages, table/grid views, bulk actions (Stage 6).
@@ -37,7 +39,7 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 
 - ⬜ CRM and workflow builder (Stage 8).
 - ⬜ Themes marketplace (Stage 10).
-- ⬜ Animation studio (Stage 11).
+- 🟡 Animation studio (Stage 11): entrance and hover animations, scroll trigger, preview. Next: timeline, parallax, per-breakpoint settings.
 - ⬜ Heatmaps, funnels (Stage 12).
 - 🟡 Remaining admin screens in Russian (builder done); server-side notification i18n.
 

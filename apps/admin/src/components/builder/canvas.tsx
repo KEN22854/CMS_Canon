@@ -1,6 +1,6 @@
 'use client';
 
-import { compileStyles, expandComponents, STYLE_BREAKPOINTS, type BlockNode } from '@canon/blocks';
+import { ANIMATION_CSS, compileStyles, expandComponents, STYLE_BREAKPOINTS, type BlockNode } from '@canon/blocks';
 import { BlockRenderer, DEFAULT_RENDER_LABELS, siteThemeStyle, type BlockRendererProps, type RenderContext, type RenderLabels, type RenderMedia, type SiteThemeInput } from '@canon/ui-blocks';
 import { useDraggable } from '@dnd-kit/core';
 import { ArrowDown, ArrowUp, ArrowUpLeft, Copy, Group, GripVertical, Lock, Minus, Plus, Trash2 } from 'lucide-react';
@@ -8,6 +8,7 @@ import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type Rea
 import { cn } from '@/lib/utils';
 import { findNode, findParent } from '../editor/tree-ops';
 import { BlockAiMenu } from './block-ai';
+import { SimpleOverlay, useInlineEditing } from './simple';
 import type { DropTarget } from './drop';
 import { useBlockLabels } from './labels';
 import { useBuilder, ZOOM_STEPS, type Breakpoint, type RemoteSelection } from './store';
@@ -40,6 +41,7 @@ function CanvasStyles({ root }: { root: BlockNode }) {
   const own = useMemo(() => compileStyles({ ...root, children: [] }), [root]);
   return (
     <>
+      <style data-canon-anim="" dangerouslySetInnerHTML={{ __html: ANIMATION_CSS }} />
       {own && <style data-canon-styles="" dangerouslySetInnerHTML={{ __html: own }} />}
       {root.children.map((c) => (
         <SectionStyles key={c.id} node={c} />
@@ -122,6 +124,10 @@ export function Canvas({
   const select = useBuilder((s) => s.select);
   const toggleSelect = useBuilder((s) => s.toggleSelect);
   const hover = useBuilder((s) => s.hover);
+  const mode = useBuilder((s) => s.mode);
+  const openLibrary = useBuilder((s) => s.openLibrary);
+  const simple = mode === 'simple';
+  useInlineEditing(hostRef, readOnly);
   const [rects, setRects] = useState<{
     sel: Rect | null;
     /** Other blocks of a multi-selection. */
@@ -188,12 +194,26 @@ export function Canvas({
             if (id && id !== root.id && (e.ctrlKey || e.metaKey || e.shiftKey)) toggleSelect(id);
             else select(id && id !== root.id ? id : null);
           }}
-          onMouseOver={(e) => !dragging && hover(idAt(e.target))}
+          // A modifier click adds to the selection; it must not also extend the browser's text selection.
+          onMouseDown={(e) => {
+            if ((e.shiftKey || e.ctrlKey || e.metaKey) && !(e.target as HTMLElement).isContentEditable) e.preventDefault();
+          }}
+          // Moving onto the builder's own controls (block bar, "+") keeps the block they belong to.
+          onMouseOver={(e) => !dragging && !(e.target as Element).closest('[data-builder-ui]') && hover(idAt(e.target))}
         >
           <div style={{ ...siteThemeStyle(theme), zoom: scale }} className="font-site text-site-fg [&_[data-hidden]]:opacity-30">
             <CanvasStyles root={styledRoot} />
             <BlockRenderer node={root} ctx={renderCtx} isRoot />
           </div>
+          {simple && !readOnly && (
+            // Tilda-style: the page ends with a big "add block" that opens the library.
+            <div data-builder-ui className="flex flex-col items-center gap-2 border-t border-dashed border-border/60 bg-muted/20 py-8">
+              <button type="button" onClick={(e) => (e.stopPropagation(), openLibrary(root.children.length))} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md transition hover:scale-[1.02]">
+                <Plus className="h-4 w-4" /> {t('simple.addBlock')}
+              </button>
+              <p className="text-xs text-muted-foreground">{root.children.length ? t('simple.editHint') : t('simple.emptyPage')}</p>
+            </div>
+          )}
 
           {/* Overlay: never intercepts the pointer except for the toolbar itself. */}
           <div className="pointer-events-none absolute inset-0">
@@ -209,7 +229,8 @@ export function Canvas({
               <Outline key={i} rect={r} className="border-2 border-primary/70" />
             ))}
             {rects.sel && <Outline rect={rects.sel} className="border-2 border-primary" />}
-            {rects.sel && selectedId && !dragging && !readOnly && (selectedIds.length > 1 ? <MultiToolbar rect={union([rects.sel, ...rects.more])} count={selectedIds.length} /> : <Toolbar rect={rects.sel} id={selectedId} siteId={siteId} pageId={pageId} />)}
+            {rects.sel && selectedId && !dragging && !readOnly && (selectedIds.length > 1 ? <MultiToolbar rect={union([rects.sel, ...rects.more])} count={selectedIds.length} /> : simple && root.children.some((c) => c.id === selectedId) ? null : <Toolbar rect={rects.sel} id={selectedId} siteId={siteId} pageId={pageId} />)}
+            {simple && !dragging && <SimpleOverlay hostRef={hostRef} scale={scale} readOnly={readOnly} />}
             {drop && (drop.box ? <Outline rect={drop.line} className="border-2 border-dashed border-primary bg-primary/10" /> : <div className="absolute rounded-full bg-primary" style={{ left: drop.line.x, top: drop.line.y, width: drop.line.w, height: drop.line.h }} />)}
           </div>
         </div>
@@ -269,7 +290,7 @@ function MultiToolbar({ rect, count }: { rect: Rect; count: number }) {
   const remove = useBuilder((s) => s.removeSelection);
   const top = rect.y >= 34 ? rect.y - 32 : rect.y + 4;
   return (
-    <div data-builder-ui className="pointer-events-auto absolute z-10 flex items-center gap-0.5 rounded-md bg-primary px-1 py-0.5 text-primary-foreground shadow-md" style={{ left: Math.max(4, rect.x), top }} onClickCapture={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+    <div data-builder-ui className="pointer-events-auto absolute z-10 flex items-center gap-0.5 rounded-md bg-primary px-1 py-0.5 text-primary-foreground shadow-md" style={{ left: Math.max(4, rect.x), top }} onClick={(e) => e.stopPropagation()}>
       <span className="px-1 text-[11px] font-medium">{t('builder.selectedCount', { count })}</span>
       <Btn label={t('builder.group')} onClick={() => void (group() || toast.error(t('builder.cantGroup')))}>
         <Group className="h-3.5 w-3.5" />
@@ -303,7 +324,6 @@ function Toolbar({ rect, id, siteId, pageId }: { rect: Rect; id: string; siteId:
       data-builder-ui
       className="pointer-events-auto absolute z-10 flex items-center gap-0.5 rounded-md bg-primary px-1 py-0.5 text-primary-foreground shadow-md"
       style={{ left: Math.max(4, rect.x), top }}
-      onClickCapture={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
       <span ref={drag.setNodeRef} {...drag.listeners} {...drag.attributes} className="cursor-grab rounded p-0.5 hover:bg-white/15" aria-label={t('builder.dragToMove')} title={t('builder.dragToMove')}>

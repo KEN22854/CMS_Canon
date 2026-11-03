@@ -115,6 +115,9 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
   const setBreakpoint = useBuilder((s) => s.setBreakpoint);
   const setDraftMeta = useBuilder((s) => s.setMeta);
   const selectedCount = useBuilder((s) => s.selectedIds.length);
+  const mode = useBuilder((s) => s.mode);
+  const setMode = useBuilder((s) => s.setMode);
+  const inspectorRequest = useBuilder((s) => s.inspector);
   const L = useBlockLabels();
   const t = L.t;
   const bpTitle = (b: Breakpoint) => {
@@ -235,6 +238,9 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
     if (selectedId) setPanel((p) => (p === 'review' || p === 'style' || p === 'ai' ? p : 'block'));
   }, [selectedId]);
   const selectBlock = useBuilder((s) => s.select);
+  useEffect(() => {
+    if (inspectorRequest.n) setPanel(inspectorRequest.panel);
+  }, [inspectorRequest.n, inspectorRequest.panel]);
   const focusBlock = params.get('block');
   useEffect(() => {
     if (focusBlock && findNode(store.getState().draft.content.root, focusBlock)) {
@@ -325,6 +331,13 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
             </ToolBtn>
           </div>
         )}
+        <div className="flex items-center rounded-md border p-0.5 text-xs" role="radiogroup" aria-label={t('simple.mode')} title={t('simple.modeHint')}>
+          {(['simple', 'pro'] as const).map((m) => (
+            <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)} className={cn('rounded px-2 py-1', mode === m ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+              {t(`simple.mode.${m}`)}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center rounded-md border p-0.5" role="radiogroup" aria-label={t('builder.previewWidth')}>
           {BREAKPOINTS.map(([b, Icon]) => (
             <button key={b} type="button" role="radio" aria-checked={breakpoint === b} aria-label={bpTitle(b)} title={bpTitle(b)} onClick={() => setBreakpoint(b)} className={cn('rounded p-1', breakpoint === b ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}>

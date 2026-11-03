@@ -62,6 +62,25 @@ type ResponsiveStyles = Partial<Record<Breakpoint, StyleProps>>;
   property, like content edits.
 - Co-editing: the Yjs document carries the full tree, so styles sync with no protocol change.
 
+## Simple editor (`apps/admin/src/components/builder/simple.tsx`, `block-library.tsx`)
+
+- `mode: 'simple' | 'pro'` in the builder store (remembered per browser). Simple mode hides the
+  palette and layers and turns the inspector into a drawer opened by `openInspector(panel)`.
+- The overlay measures DOM rects (any zoom, any breakpoint) for the hovered top-level block: its
+  bar, "+" inserters (`openLibrary(index)`), and for free-form blocks the add-element bar and
+  height handle.
+- **In-place text**: the renderer marks text elements with `data-field="title"` /
+  `"items.2.q"` only when `ctx.editing`; a double-click makes the element `contenteditable`
+  (plain text) and commits one `PROPS_UPDATE` on Enter/blur.
+- **Free-form**: `canvas` renders a frame (centred 1200 px or the window); children carry
+  `position:absolute` + left/top/width(/height) in the style layer, so positions are per
+  breakpoint with desktop-first inheritance. Dragging previews with a CSS transform and commits
+  `STYLE_SET` left/top (or width/height) at the current breakpoint through `applyMany` — one undo
+  step. Height on desktop is the `height` prop (a CSS variable, so a per-breakpoint min-height
+  override still wins).
+- **Library previews** render each preset with the real `BlockRenderer` and the site theme at
+  1200 px, scaled with CSS zoom to the card's measured width.
+
 ## Typed operations (`packages/blocks/src/edit.ts`)
 
 Every change to a page tree is an `EditorOperation`:
@@ -138,6 +157,31 @@ The model can't lock, replace or ungroup; ids of existing blocks must come from 
 29 layouts × 4 tones built only from registry blocks and the style layer (so everything stays
 editable and validated), copy in EN/RU picked by the page locale. Tones are styles on the
 section root (`token:` colours), so they follow the site theme.
+
+## Converted templates (`packages/blocks/src/vendor`)
+
+`scripts/import-vendor-templates.cjs <download-dir>` turns Tailblocks (JSX) and HyperUI (HTML)
+files into Canon block trees with a small markup parser — the sources are read as text, never
+executed. Tailwind classes become style-layer values (largest breakpoint → base, unprefixed →
+Mobile L), accent colours become theme tokens, copy becomes `[[h1|p|btn…]]` placeholders.
+The output, `sections-data.ts`, is generated (do not edit) and loaded with a dynamic import, so
+the ~0.9 MB stays out of the builder's first bundle; `fill(locale)` replaces placeholders from
+per-category pools and gives fresh ids. Re-run the script after updating the downloads.
+
+## Animation (`packages/blocks/src/animation.ts`)
+
+`node.animation` = {type, trigger, duration, delay, easing, hover}, strict schema, defaults
+dropped. The renderer marks the block (`data-anim`, `data-anim-trigger`, `data-hover`), the
+style compiler writes its timing as CSS variables, `ANIMATION_CSS` holds the keyframes. Scroll
+entrances are hidden only after `html.canon-anim` is set by the observer, so without JS (or with
+reduced motion) content is simply visible. Collab stores the object as a JSON string per block.
+
+## No-op edits
+
+Edits return the same tree object when nothing changes (also for props/meta/styles set to the
+value they already have). The store treats "same object" as "skip": no undo step, no log entry,
+no Yjs transaction. Keep this when adding an operation — otherwise an undo step that changes
+nothing appears, and in co-editing Ctrl+Z jumps over it to the step before.
 
 ## Canvas rendering
 

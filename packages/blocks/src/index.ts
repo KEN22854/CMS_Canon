@@ -8,3 +8,4 @@ export * from './components';
 export * from './sections';
 export * from './plan';
 export * from './seo';
+export * from './animation';

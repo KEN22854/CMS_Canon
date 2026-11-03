@@ -1,5 +1,6 @@
 import { builderRu } from './builder-ru';
 import { seoRu } from './seo-ru';
+import { simpleRu } from './simple-ru';
 import type { MessageKey } from './en';
 
 /** Russian UI strings. Typed as the full key set, so a missing translation fails the build. */
@@ -300,4 +301,5 @@ export const ru: Record<MessageKey, string> = {
   'scim.revoked': 'Токен отозван — синхронизация с ним остановлена',
   ...builderRu,
   ...seoRu,
+  ...simpleRu,
 };

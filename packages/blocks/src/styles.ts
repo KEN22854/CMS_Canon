@@ -1,3 +1,4 @@
+import { animationRule, type BlockAnimation } from './animation';
 /**
  * Responsive style layer for page nodes (Canon 2.0 Builder).
  *
@@ -215,10 +216,13 @@ export function styleSource(styles: ResponsiveStyles | undefined, bp: StyleBreak
 
 /** Returns a copy with one property set (or removed when value is empty) at one breakpoint. */
 export function setStyle(styles: ResponsiveStyles | undefined, bp: StyleBreakpoint, prop: StyleProperty, value: string | undefined): ResponsiveStyles | undefined {
+  const v = value === undefined || value.trim() === '' ? undefined : value.trim();
+  // Setting what is already there returns the same object, so callers see "no change".
+  if (styles?.[bp]?.[prop] === v) return styles;
   const next: ResponsiveStyles = { ...(styles ?? {}) };
   const layer: StyleProps = { ...(next[bp] ?? {}) };
-  if (value === undefined || value.trim() === '') delete layer[prop];
-  else layer[prop] = value.trim();
+  if (v === undefined) delete layer[prop];
+  else layer[prop] = v;
   if (Object.keys(layer).length) next[bp] = layer;
   else delete next[bp];
   return Object.keys(next).length ? next : undefined;
@@ -253,6 +257,7 @@ const rule = (id: string, decls: Map<string, string>) => `[data-cn="${id}"][data
 interface StyledNode {
   id: string;
   styles?: ResponsiveStyles;
+  animation?: BlockAnimation;
   hidden?: boolean;
   children: StyledNode[];
 }
@@ -268,6 +273,10 @@ export function compileStyles(root: StyledNode, isPageRoot = true): string {
   const byBp = new Map<StyleBreakpoint, string[]>();
   const walk = (n: StyledNode, isRoot: boolean) => {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(n.id)) return;
+    if (n.animation?.type) {
+      const r = animationRule(n.id, n.animation);
+      if (r) base.push(r);
+    }
     if (n.styles) {
       const c = compiledNode(n.id, n.styles, isRoot);
       if (c.base) base.push(c.base);
