@@ -73,6 +73,31 @@ Accepted operations apply in order to the content that was sent (`applyOperation
 nothing; 400 `INVALID_CONTENT` when the sent page is invalid. Requires the `builder.plan_edits`
 prompt (`pnpm --dir packages/db seed` adds it to an existing database).
 
+## Redirects
+
+| Method | Path | Permission | What it does |
+|---|---|---|---|
+| GET | `/sites/:siteId/redirects` | read Page | List rules |
+| POST | `/sites/:siteId/redirects` | update Site | `{ fromPath, toPath, statusCode?: 301\|302\|307\|308, note? }` |
+| POST | `/sites/:siteId/redirects/import` | update Site | `{ csv }` "from,to[,status]" → `{ imported, errors: [{ line, message }] }` |
+| PATCH | `/redirects/:id` | update Site | Change a rule |
+| DELETE | `/redirects/:id` | update Site | Remove a rule |
+
+`fromPath`: a path (normalised: lower case, no trailing slash) or a prefix `/old/*`. `toPath`: a path,
+`/new/*` (only from a prefix) or an http(s) URL. 400 `INVALID_REDIRECT` / `REDIRECT_LOOP`, 409 for a
+duplicate source. Automatic rules (`automatic: true`) are created when a published page moves.
+
+## SEO audit
+
+`GET /sites/:siteId/seo/audit` (read Page) → `{ score, totals: { error, warning, info }, pages: [{ id,
+title, path, locale, published, score, words, issues: [{ code, severity, blockId?, detail? }] }],
+checkedAt }`. Issue codes are listed in `packages/blocks/src/seo.ts` (`SeoIssueCode`).
+
+## Delivery additions
+
+- `GET /v1/delivery/sites/:siteId/runtime` includes `redirects: [{ from, to, status }]`.
+- `GET /v1/delivery/sites/:siteId/page` includes `breadcrumbs: [{ title, path }]`.
+
 ## Typed operations (library)
 
 Not an HTTP endpoint yet: `applyOperation` / `applyOperations` / `describeOperation` are exported

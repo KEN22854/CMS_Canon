@@ -66,6 +66,18 @@ The inline script in `apps/admin/src/app/layout.tsx` is a static string that onl
   normal page validation and permissions.
 - Calls are metered and attributed in the AI ledger (feature `LAYOUT`), with the tenant quotas.
 
+## SEO platform (iteration 4)
+
+- **Open redirects**: a target is a same-site path or an explicit http(s) URL typed by a site
+  manager (`update Site`); `javascript:`, `data:` and protocol-relative `//host` sources are
+  refused. Visitors can't create rules; the query string is copied only to same-site targets'
+  missing query.
+- **Loops** are refused on save (cycle detection over exact rules); a rule can't point at itself.
+- Redirects table: RLS `tenant_isolation`, a CHECK on the status code, unique per site and source.
+- **JSON-LD** is generated from published content only and escaped (`<` → `\u003c`) so a page
+  text can't break out of the script element; noindex pages and previews get none.
+- The 404 route handler validates the host header before using it.
+
 ## Clipboard
 
 Copied blocks are stored in the browser's `localStorage` (same origin as the admin) and are

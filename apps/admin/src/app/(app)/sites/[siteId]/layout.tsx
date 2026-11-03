@@ -25,6 +25,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
     { href: `/sites/${siteId}/reviews`, label: t('site.reviews') },
     { href: `/sites/${siteId}/media`, label: t('site.media') },
     ...(ability.can('read', 'Form') ? [{ href: `/sites/${siteId}/forms`, label: t('site.forms') }] : []),
+    { href: `/sites/${siteId}/seo`, label: t('site.seo') },
     { href: `/sites/${siteId}/search`, label: t('site.search') },
     ...(ability.can('read', 'Analytics')
       ? [{ href: `/sites/${siteId}/analytics`, label: t('site.analytics') }]

@@ -1,4 +1,5 @@
 import { builderEn } from './builder-en';
+import { seoEn } from './seo-en';
 
 /**
  * English UI strings — the source of truth for keys. Plural messages hold "one|other" forms
@@ -308,6 +309,7 @@ export const en = {
     'Revoke “{name}”? Your identity provider stops provisioning until you give it a new token.',
   'scim.revoked': 'Token revoked — provisioning with it stops now',
   ...builderEn,
+  ...seoEn,
 } as const;
 
 export type MessageKey = keyof typeof en;

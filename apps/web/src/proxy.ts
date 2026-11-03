@@ -1,4 +1,4 @@
-import { deviceFromUserAgent, encodeVariantKey, isBot, primaryLanguage, referrerDomain, selectVariants, type VisitorContext } from '@canon/edge';
+import { deviceFromUserAgent, encodeVariantKey, isBot, matchRedirect, primaryLanguage, referrerDomain, selectVariants, type VisitorContext } from '@canon/edge';
 import { NextResponse, type NextRequest } from 'next/server';
 import { hostInfo, runtimeConfig } from './lib/runtime';
 import { SESSION_COOKIE, UTM_COOKIE, VISITOR_COOKIE, VISITS_COOKIE } from './lib/visitor';
@@ -23,6 +23,23 @@ export async function proxy(request: NextRequest) {
   const path = url.pathname === '/' ? '' : url.pathname;
   const ua = request.headers.get('user-agent');
   const preview = request.cookies.has('__prerender_bypass');
+
+  // Redirects come first and apply to bots too: that is how search engines learn a page moved.
+  const isRead = request.method === 'GET' || request.method === 'HEAD';
+  const site = isRead && !path.startsWith('/~') ? await hostInfo(host) : null;
+  const cfg = site ? await runtimeConfig(site.id) : null;
+  const hit = cfg?.redirects?.length ? matchRedirect(cfg.redirects, url.pathname) : null;
+  if (hit) {
+    const target = new URL(hit.to, request.nextUrl.origin);
+    // A path target keeps the query string (campaign tags survive the move).
+    if (hit.to.startsWith('/') && !target.search) target.search = request.nextUrl.search;
+    if (target.origin === request.nextUrl.origin) {
+      target.protocol = request.headers.get('x-forwarded-proto') === 'https' ? 'https:' : request.nextUrl.protocol;
+      target.host = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? target.host;
+    }
+    return NextResponse.redirect(target, hit.status);
+  }
+
   if (request.method !== 'GET' || preview || isBot(ua) || path.startsWith('/~')) {
     url.pathname = `/s/${host}${path}`;
     return NextResponse.rewrite(url);
@@ -37,8 +54,6 @@ export async function proxy(request: NextRequest) {
   const utm = firstTouchUtm(request);
 
   let variant: string | null = null;
-  const site = await hostInfo(host);
-  const cfg = site ? await runtimeConfig(site.id) : null;
   if (site && cfg && (cfg.experiments.length || cfg.personalization.length)) {
     const { locale, path: pagePath } = splitLocale(site, url.pathname);
     const ctx: VisitorContext = {

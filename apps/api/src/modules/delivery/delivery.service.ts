@@ -30,6 +30,7 @@ const INVALIDATING_EVENTS = [
   'PersonalizationChanged',
   'FormUpdated',
   'ComponentPublished',
+  'RedirectsChanged',
 ];
 
 /**
@@ -136,6 +137,7 @@ export class DeliveryService implements OnModuleInit {
       experiments: tests.map((t) => ({ id: t.id, pageId: t.pageId, path: publicPath(t.page), locale: t.page.locale, trafficAllocation: t.trafficAllocation, variants: (t.variants as { id: string; weight: number }[]).map((v) => ({ id: v.id, weight: v.weight })) })),
       personalization: [...byPage.values()],
       segments: segments.map((s) => ({ id: s.id, rules: s.rules as RuntimeConfig['segments'][number]['rules'] })),
+      redirects: (await this.system.redirect.findMany({ where: { siteId }, select: { fromPath: true, toPath: true, statusCode: true } })).map((r) => ({ from: r.fromPath, to: r.toPath, status: r.statusCode as 301 | 302 | 307 | 308 })),
     };
     await this.redis.set(cacheKey, JSON.stringify(config), 'EX', CACHE_TTL_SEC).catch(() => undefined);
     return config;
@@ -161,7 +163,8 @@ export class DeliveryService implements OnModuleInit {
     return {
       site: presentSite(site),
       pages: pages
-        .filter((p) => !(p.seo as { noindex?: boolean }).noindex)
+        // The site's 404 page is a template, not a destination.
+        .filter((p) => !(p.seo as { noindex?: boolean }).noindex && p.fullPath !== '/404')
         .map((p) => ({ id: p.id, title: p.title, path: p.fullPath, locale: p.locale, parentId: p.parentId, position: p.position, updatedAt: p.publishedAt ?? p.updatedAt, translationGroupId: p.translationGroupId })),
     };
   }
@@ -175,7 +178,10 @@ export class DeliveryService implements OnModuleInit {
     const factKeys = collectPageFactKeys(content);
     const formIds = collectFormIds(content.root);
 
-    const [mediaRows, factRows, alternates, nav, formRows] = await Promise.all([
+    // Ancestors for the breadcrumb (Schema.org BreadcrumbList): "/a/b/c" → "/a", "/a/b".
+    const parts = page.fullPath.split('/').filter(Boolean);
+    const ancestorPaths = parts.slice(0, -1).map((_, i) => `/${parts.slice(0, i + 1).join('/')}`);
+    const [mediaRows, factRows, alternates, nav, formRows, ancestors] = await Promise.all([
       mediaIds.length
         ? this.system.media.findMany({
             where: { id: { in: mediaIds }, siteId: site.id, deletedAt: null, status: 'READY' },
@@ -191,13 +197,16 @@ export class DeliveryService implements OnModuleInit {
         ? this.system.page.findMany({ where: { translationGroupId: page.translationGroupId, siteId: site.id, deletedAt: null, publishedVersion: { not: null } }, select: { locale: true, fullPath: true } })
         : [],
       this.system.page.findMany({
-        where: { siteId: site.id, locale: page.locale, parentId: null, deletedAt: null, publishedVersion: { not: null }, NOT: { fullPath: '/' } },
+        where: { siteId: site.id, locale: page.locale, parentId: null, deletedAt: null, publishedVersion: { not: null }, fullPath: { notIn: ['/', '/404'] } },
         select: { title: true, fullPath: true },
         orderBy: [{ position: 'asc' }, { fullPath: 'asc' }],
         take: 8,
       }),
       formIds.length
         ? this.system.form.findMany({ where: { id: { in: formIds }, siteId: site.id, deletedAt: null } })
+        : [],
+      ancestorPaths.length
+        ? this.system.page.findMany({ where: { siteId: site.id, locale: page.locale, fullPath: { in: ancestorPaths }, deletedAt: null, publishedVersion: { not: null } }, select: { title: true, fullPath: true } })
         : [],
     ]);
 
@@ -210,6 +219,7 @@ export class DeliveryService implements OnModuleInit {
       media: Object.fromEntries(mediaRows.map((m) => [m.id, this.media.present(m)])),
       facts: Object.fromEntries(factRows.map((f) => [f.key, f.displayValue])),
       forms: Object.fromEntries(formRows.map((f) => [f.id, publicForm(f)])),
+      breadcrumbs: ancestorPaths.flatMap((p) => ancestors.filter((a) => a.fullPath === p).map((a) => ({ title: a.title, path: a.fullPath }))),
     };
   }
 

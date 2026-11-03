@@ -55,6 +55,8 @@ export interface DeliveryPage {
     publishedAt: string | null;
   };
   alternates: { locale: string; path: string }[];
+  /** Published ancestors, root first (Schema.org BreadcrumbList). */
+  breadcrumbs?: { title: string; path: string }[];
   nav: { title: string; path: string }[];
   media: Record<string, DeliveryMedia>;
   facts: Record<string, string>;

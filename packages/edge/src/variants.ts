@@ -1,3 +1,4 @@
+import type { RedirectRule } from './redirects';
 import { assignVariant, type AssignableTest } from './assignment';
 import type { VisitorContext } from './context';
 import { matchesSegment, type SegmentRules } from './segments';
@@ -39,6 +40,8 @@ export interface RuntimeConfig {
   experiments: (AssignableTest & { pageId: string; path: string; locale: string })[];
   personalization: { pageId: string; path: string; locale: string; segmentIds: string[] }[];
   segments: { id: string; rules: SegmentRules }[];
+  /** Site redirects (exact and prefix rules), checked by the proxy before routing. */
+  redirects?: RedirectRule[];
 }
 
 /**

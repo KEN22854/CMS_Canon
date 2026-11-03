@@ -29,7 +29,8 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - ⬜ Stage 5: live canvas preview of a plan, multi-page plans, plans as review requests.
 - ⬜ CMS dynamic pages, table/grid views, bulk actions (Stage 6).
 - ⬜ E-commerce: products, variants, cart, checkout, orders, payment adapters with webhook verification (Stage 7).
-- ⬜ Redirects, SEO audit, Schema.org, per-site 404 (Stage 9).
+- ✅ Redirects (manual, CSV, automatic on page move), SEO audit with scores, Schema.org JSON-LD, per-site 404 (Stage 9).
+- ⬜ Stage 9 next: redirect hit counts, keyword/SERP preview, Core Web Vitals per page from analytics, hreflang audit.
 - ⬜ Site releases: atomic publish of many pages, history, rollback (Stage 13).
 
 ## P2

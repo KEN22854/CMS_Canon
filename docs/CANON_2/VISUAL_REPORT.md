@@ -97,3 +97,15 @@ The Canon AI tab sends the request with the draft and selection. The plan comes 
 operations with a before → after diff; an unsafe style is shown as rejected with its reason and
 can't be chosen. "Apply" runs the kept operations as one undo step. (For the screenshot the model
 reply is recorded; the planner's checks run on the server in the integration tests.)
+
+---
+
+# Iteration 4 — SEO platform (Stage 9)
+
+| Audit | Redirects |
+|---|---|
+| ![audit](screenshots/after/seo/seo-audit-1440.png) | ![redirects](screenshots/after/seo/seo-redirects-1440.png) |
+
+Site → SEO shows the site score and, per page, what to fix — each issue with a block links into
+the builder with that block selected. Redirects can be typed in, imported from CSV, and appear
+automatically (marked "automatic") when a published page moves.

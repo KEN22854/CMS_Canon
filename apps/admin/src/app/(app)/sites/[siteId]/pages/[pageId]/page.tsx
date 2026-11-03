@@ -235,6 +235,14 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
     if (selectedId) setPanel((p) => (p === 'review' || p === 'style' || p === 'ai' ? p : 'block'));
   }, [selectedId]);
   const selectBlock = useBuilder((s) => s.select);
+  const focusBlock = params.get('block');
+  useEffect(() => {
+    if (focusBlock && findNode(store.getState().draft.content.root, focusBlock)) {
+      selectBlock(focusBlock);
+      // Wait for the canvas to lay out, then bring the block into view.
+      requestAnimationFrame(() => document.querySelector(`[data-block-id="${CSS.escape(focusBlock)}"]`)?.scrollIntoView({ block: 'center' }));
+    }
+  }, [focusBlock, selectBlock, store]);
   const blockLabel = useCallback(
     (id: string) => {
       const n = findNode(store.getState().draft.content.root, id);

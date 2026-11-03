@@ -5,17 +5,42 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations and global components (9), section library (4), AI plans (4), tree (16) | 41 / 41 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations and global components (9), section library (4), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 46 / 46 ✅ |
 | `@canon/collab` unit | 8 / 8 ✅ |
-| fields · ai-gateway · edge · sdk | 19 · 30 · 8 · 4 ✅ |
+| fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
 | API unit | 56 / 56 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans | 143 / 143 ✅ |
-| Playwright E2E | 18 / 18 ✅ (+5 opt-in: 3 screenshot specs, 2 performance specs) |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO | 147 / 147 ✅ |
+| Playwright E2E | 19 / 19 ✅ (+6 opt-in: 4 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ |
 
-Total automated tests: **339** (331 after iteration 2, 308 after iteration 1).
+Total automated tests: **352** (339 after iteration 3, 331 after iteration 2, 308 after iteration 1).
+
+## Iteration 4 — SEO platform
+
+- `packages/edge/test/redirects.test.ts`: normalisation, exact before longest prefix, `*`
+  substitution, external targets, validation (home page, `javascript:`, same target), loop detection.
+- `packages/blocks/test/seo.test.ts`: a clean page scores 100; every issue type is found on a
+  bad page (links without a label are ignored, broken links report their href); duplicates
+  across the site; JSON-LD types per page, hidden FAQ blocks left out, `</script>` escaped.
+- `apps/api/test/integration/seo.test.ts`: validation, 409 on duplicates, loops refused, rules in
+  the renderer's runtime config, permissions and tenant isolation; CSV import with per-line
+  errors; a published page moving creates `/about` and `/about/*` rules, and publishing a page at
+  `/about` removes the rule that would hide it; the audit with redirects counted as valid link
+  targets, worst pages first; breadcrumbs in delivery; /404 out of nav and sitemap.
+- `apps/admin/e2e/seo.spec.ts` (real renderer, no mocks): a redirect added in the UI answers 301
+  on the live host with the query string kept; CSV import errors shown; the audit renders; the
+  published home page carries Organization/WebSite JSON-LD; an unknown path is a 404; after
+  publishing a page at /404 the visitor sees its content with status 404.
+
+## Bugs found in iteration 4
+
+- **Every page returned 500** in an intermediate version: reading the host with `headers()` in the
+  site's not-found page turned all ISR pages of the segment dynamic. Found by the E2E run, fixed
+  by loading the custom 404 content on the client from a route handler.
+- The audit found that the **default home page of a new site links to /contact and /pricing**,
+  which new sites don't have. Left as is (it is a template choice), but now visible in the audit.
 
 ## Iteration 3 — Canon AI plans
 

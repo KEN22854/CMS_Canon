@@ -84,6 +84,21 @@ The builder store applies every edit through `apply(op)` and keeps an operation 
 Canon AI (Stage 5) will propose operations in the same vocabulary, so a plan can be shown as a
 diff and approved per operation. The API can apply the same functions.
 
+## SEO platform
+
+- **Redirects** live in `redirects` and travel to the renderer in the runtime config (cached per
+  site version; `RedirectsChanged` bumps it). The proxy matches them before anything else
+  (`matchRedirect` in `@canon/edge`: exact, then longest prefix), so bots follow moves too.
+  `PageMoved` → automatic old → new rules (and `old/*`), older automatic rules re-pointed so
+  there are no chains; `PagePublished` removes a rule from the page's own path.
+- **Audit** is a pure function over one page plus site context; the API supplies the context
+  (published paths, redirect sources/prefixes, title/description counts of indexable pages, media
+  alt texts).
+- **JSON-LD** is built from the published content (`structuredData`) and printed with `jsonLd`
+  (escapes `<`, U+2028/2029).
+- **404**: `app/s/[host]/not-found.tsx` stays static; `/api/not-found` (route handler, may read the
+  host) returns the site's /404 page for the client to render.
+
 ## Canon AI plans (`packages/blocks/src/plan.ts`)
 
 ```

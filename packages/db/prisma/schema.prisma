@@ -501,6 +501,7 @@ model Site {
   kgEntities  KgEntity[]
   facts       Fact[]
   components  SiteComponent[]
+  redirects   Redirect[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -1927,4 +1928,27 @@ model SiteComponent {
   @@index([siteId, deletedAt])
   @@index([tenantId])
   @@map("site_components")
+}
+
+/// A site redirect, applied by the renderer's proxy before routing. fromPath is a normalised
+/// public path or a prefix ending in "/*"; toPath a path (may use * from a prefix) or an http(s) URL.
+model Redirect {
+  id          String   @id @default(cuid())
+  tenantId    String
+  siteId      String
+  fromPath    String
+  toPath      String
+  statusCode  Int      @default(301)
+  /// Created by Canon when a published page moved (not typed in by someone).
+  automatic   Boolean  @default(false)
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, fromPath])
+  @@index([tenantId])
+  @@map("redirects")
 }

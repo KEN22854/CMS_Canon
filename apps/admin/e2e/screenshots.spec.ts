@@ -201,3 +201,23 @@ test('capture the Canon AI plan panel (recorded model reply)', async ({ page }) 
   await page.getByRole('button', { name: /^Apply 3 change/ }).click();
   await shot(page, join('ai', 'canon-ai-plan-applied-1440.png'));
 });
+
+test('capture the SEO screen: audit and redirects', async ({ page }) => {
+  await signUp(page, { workspace: 'Northwind Studio' });
+  const { siteId } = await createSite(page, 'Northwind');
+  // A few redirects, including one created from CSV.
+  await page.goto(`/sites/${siteId}/seo?tab=redirects`);
+  await page.getByLabel('Import from CSV').fill('from,to,status\n/old-pricing,/pricing,301\n/blog/*,/news/*,308\n/summer-sale,/offers,302');
+  await page.getByRole('button', { name: 'Import', exact: true }).click();
+  await expect(page.getByText('Imported 3 redirect(s)')).toBeVisible();
+  await shot(page, join('seo', 'seo-redirects-1440.png'));
+  // Publish the home page so the site has a score.
+  await page.goto(`/sites/${siteId}/pages`);
+  await page.getByRole('link', { name: 'Home' }).first().click();
+  await expect(page.getByRole('application', { name: 'Page canvas' })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Published — the site updates within seconds')).toBeVisible();
+  await page.goto(`/sites/${siteId}/seo`);
+  await expect(page.getByLabel('SEO score')).toBeVisible();
+  await shot(page, join('seo', 'seo-audit-1440.png'));
+});

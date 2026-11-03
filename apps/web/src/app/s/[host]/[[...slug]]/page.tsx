@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { cookies, draftMode } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { jsonLd, structuredData } from '@canon/blocks';
 import { BlockRenderer, PageStyles } from '@canon/ui-blocks';
 import { FormEnhancer } from '@/components/forms';
 import { Tracker } from '@/components/tracker';
@@ -97,6 +98,21 @@ export default async function SitePage({ params }: { params: Params }) {
           </nav>
         </div>
       </header>
+      {!data.draft && !page.seo.noindex && (
+        // Schema.org from the page's own published content (organisation, breadcrumb, FAQ).
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: jsonLd(
+              structuredData({
+                site: { name: site.name, url: `https://${site.host}`, logoUrl: site.logo, locale: page.locale },
+                page: { title: page.title, path: localizedHref(site, page.locale, page.path), description: page.description, content: page.content, isHome: page.path === '/' },
+                breadcrumbs: (data.breadcrumbs ?? []).map((b) => ({ title: b.title, path: localizedHref(site, page.locale, b.path) })),
+              }),
+            ),
+          }}
+        />
+      )}
       <main>
         <PageStyles root={page.content.root} />
         <BlockRenderer

@@ -2,7 +2,27 @@
 
 Last update: 2026-11-03.
 
-## Iteration 3 (this one) — Stage 5, Canon AI edits the page
+## Iteration 4 (this one) — Stage 9, SEO platform
+
+- **Redirects**: exact and prefix rules (`/blog/*` → `/news/*`), 301/302/307/308, created in
+  Site → SEO, imported from CSV (per-line errors), or **automatically** when a published page
+  moves (old path and old/* → new). A live page always wins: publishing at a redirected path
+  removes the rule. Loops are refused on save. The renderer's proxy applies them first, to bots
+  too, keeping the query string. Table `redirects` with RLS and a status check constraint.
+- **SEO audit** (`packages/blocks/src/seo.ts`): title and description length and duplicates,
+  h1 missing/multiple, heading level jumps, image alt texts (block or library), empty and
+  **broken internal links** (against published pages and redirects), noindex, thin content, social
+  image, long slugs. Score per page and for the site; issues link straight to the block in the
+  builder (`?block=<id>`). Checks run on drafts so problems are fixed before publishing.
+- **Schema.org JSON-LD** on published pages: Organization + WebSite on the home page,
+  BreadcrumbList (from published ancestors) below it, FAQPage from visible FAQ blocks; escaped so
+  content can't close the script tag.
+- **Site 404**: a published page at /404 replaces the default message; the 404 status stays (the
+  content is swapped in on the client, because reading the host on the server would make every
+  cached page dynamic). /404 is kept out of the navigation and the sitemap.
+- Tests: +5 SEO unit, +3 redirect unit, +4 API integration, +1 E2E (352 automated).
+
+## Iteration 3 — Stage 5, Canon AI edits the page
 
 - **Planner** (`packages/blocks/src/plan.ts`): the model's answer becomes checked typed
   operations. Shape, catalog fields, style grammar, locks, nesting and page validity are checked

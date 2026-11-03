@@ -1,0 +1,22 @@
+import Link from 'next/link';
+import { SiteNotFoundPage } from '@/components/not-found-page';
+
+/**
+ * 404 for a site. The status always comes from the server; when the site has published a page at
+ * /404 (built in the builder like any page), the client swaps it in for the default message.
+ * Reading the host here (headers) would turn every cached page of the segment dynamic.
+ */
+export default function SiteNotFound() {
+  return (
+    <SiteNotFoundPage>
+      <main className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center px-6 text-center">
+        <p className="text-sm font-semibold text-site-primary">404</p>
+        <h1 className="mt-2 text-3xl font-bold">Page not found</h1>
+        <p className="mt-4 opacity-70">The page you are looking for does not exist or is no longer published.</p>
+        <Link href="/" className="mt-8 rounded-site bg-site-primary px-5 py-2.5 font-semibold text-white">
+          Go to the home page
+        </Link>
+      </main>
+    </SiteNotFoundPage>
+  );
+}

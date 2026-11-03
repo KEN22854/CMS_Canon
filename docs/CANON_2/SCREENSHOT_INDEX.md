@@ -45,6 +45,8 @@ Stages 1–2 (design system, Builder 2.0 foundation).
 | after/cms/components-list-1440.png | 3 | 1440 | Site → Components list |
 | after/builder/builder-ru-1440.png | 2 | 1440 | The builder in Russian: palette, tabs, Style panel |
 | after/ai/canon-ai-plan-1440.png | 5 | 1440 | Canon AI tab: a proposed plan as a diff, one operation rejected with its reason (model reply recorded) |
+| after/seo/seo-audit-1440.png | 9 | 1440 | Site → SEO → Audit: score, totals, issues per page (the default home page links to pages a new site does not have) |
+| after/seo/seo-redirects-1440.png | 9 | 1440 | Redirects imported from CSV (exact, prefix, temporary) |
 | after/ai/canon-ai-plan-applied-1440.png | 5 | 1440 | The canvas after applying three operations |
 
 Recapture iteration 2 only: add `-g "iteration 2"` to the command above.

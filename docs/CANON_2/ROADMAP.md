@@ -9,13 +9,13 @@ real screenshots and updated docs.
 | 0 | Audit | — | ✅ |
 | 1 | Design system | — | 🟡 first iteration |
 | 2 | Visual Builder 2.0 | 1, 3 | 🟡 style layer, style panel, layers, zoom |
-| 3 | Page document engine | — | 🟡 node fields + styles; typed operations next |
-| 4 | Component library (100+ sections, variants) | 2 | ⬜ |
-| 5 | AI Website Builder (planner → operations → diff → approve) | 3, 4 | ⬜ |
+| 3 | Page document engine | — | 🟡 node fields, styles, typed operations, components |
+| 4 | Component library (100+ sections, variants) | 2 | 🟡 29 layouts × 4 tones |
+| 5 | AI Website Builder (planner → operations → diff → approve) | 3, 4 | 🟡 planner, diff, approve, one undo step |
 | 6 | CMS 2.0 (dynamic pages, views, bulk) | — | ⬜ |
 | 7 | E-commerce | 6 | ⬜ |
 | 8 | CRM and automation | 7 (orders), forms | ⬜ |
-| 9 | SEO platform (redirects, audit, schema) | — | ⬜ |
+| 9 | SEO platform (redirects, audit, schema) | — | 🟡 redirects, audit, JSON-LD, 404 |
 | 10 | Themes and marketplace | 1, 4 | ⬜ |
 | 11 | Animation studio | 2 | ⬜ |
 | 12 | Analytics and growth (heatmaps, funnels) | — | ⬜ |
