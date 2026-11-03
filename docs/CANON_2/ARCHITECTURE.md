@@ -84,6 +84,23 @@ The builder store applies every edit through `apply(op)` and keeps an operation 
 Canon AI (Stage 5) will propose operations in the same vocabulary, so a plan can be shown as a
 diff and approved per operation. The API can apply the same functions.
 
+## Canon AI plans (`packages/blocks/src/plan.ts`)
+
+```
+editor draft + selection + instruction
+  → POST /ai/plan → prompt: catalog, operation vocabulary, style properties, facts, page outline
+  → model JSON {summary, operations}
+  → buildPlan: per operation — shape (zod) → prepare (materialise new blocks, coerce props via
+    the catalog, check style grammar) → applyOperation (locks, nesting) → validatePageContent
+  → accepted / rejected-with-reason
+  → (nothing accepted) one repair round with the reasons
+  → editor: diff per operation, person keeps/drops each → store.applyMany → one undo step
+```
+
+The model can't lock, replace or ungroup; ids of existing blocks must come from the outline
+(invented ids are rejected because the operation doesn't apply). The page outline is capped at
+400 blocks for the prompt.
+
 ## Global components (`packages/blocks/src/components.ts`, `apps/api/src/modules/components`)
 
 - `SiteComponent` (table `site_components`, RLS by tenant): `tree` (working copy) and

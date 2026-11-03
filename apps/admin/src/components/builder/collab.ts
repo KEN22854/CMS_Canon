@@ -139,7 +139,9 @@ export function useCollab({ store, pageId, canEdit, onVersion }: { store: Builde
       mirrored = s.draft;
       // A new operation (not more typing into the same field) is its own undo step, however fast
       // it follows the previous one; captureTimeout only merges keystrokes.
-      if (s.opLog !== prev.opLog && s.opLog.at(-2) === prev.opLog.at(-1)) undo.stopCapturing();
+      // Coalesced typing replaces only the last log entry; anything else (one op or a batch) is new.
+      const coalesced = s.opLog.length === prev.opLog.length && s.opLog.at(-2) === prev.opLog.at(-2);
+      if (s.opLog !== prev.opLog && !coalesced) undo.stopCapturing();
       applyDraftDiff(doc, asCollab(before), asCollab(s.draft));
     });
     const unsubSel = store.subscribe((s, prev) => s.selectedId !== prev.selectedId && provider.awareness.setLocalStateField('selectedId', s.selectedId));

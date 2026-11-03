@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { bearer, createTestApp, signUp, startFakeOllama, type SignedIn, type TestApp } from './harness';
+import { bearer, createTestApp, invited, signUp, startFakeOllama, type SignedIn, type TestApp } from './harness';
 
 let t: TestApp;
 let ollama: Awaited<ReturnType<typeof startFakeOllama>>;
@@ -129,5 +129,46 @@ describe('AI page builder', () => {
     expect(text.body.block.props.doc.content[0].content).toEqual([{ type: 'text', text: 'BOLD', marks: [{ type: 'bold' }] }, { type: 'text', text: ' COSTS ' }, { type: 'factRef', attrs: { factKey: 'pro.price' } }]);
 
     await t.http.post(`/v1/sites/${site.id}/ai/improve-block`).set(bearer(owner.accessToken)).send({ block: { id: 'x', type: 'spacer', props: {} }, action: 'rewrite' }).expect(400);
+  });
+});
+
+describe('AI edit plans', () => {
+  const page = { root: { id: 'root', type: 'section', props: {}, children: [{ id: 'band', type: 'section', props: {}, children: [{ id: 'title', type: 'heading', props: { text: 'Old title', level: 2 }, children: [] }] }] } };
+
+  it('returns checked typed operations: accepted ones apply, unsafe and invented ones carry a reason', async () => {
+    const owner = await signUp(t);
+    const site = await siteWithFact(owner);
+    const res = await t.http.post(`/v1/sites/${site.id}/ai/plan`).set(bearer(owner.accessToken)).send({ instruction: 'Make the headline punchier and add an FAQ', content: page, selectedIds: ['title'] }).expect(200);
+    expect(res.body.summary).toBe('A sharper headline and an FAQ about pricing.');
+    expect(res.body.repaired).toBe(false);
+    const ops = res.body.operations as { operation: { op: string; patch?: { text?: string }; nodes?: { id: string; type: string }[] }; status: string; reason?: string; label: string }[];
+    expect(ops.map((o) => [o.operation.op, o.status])).toEqual([
+      ['PROPS_UPDATE', 'ok'],
+      ['STYLE_SET', 'ok'],
+      ['STYLE_SET', 'rejected'],
+      ['NODE_INSERT', 'ok'],
+      ['NODE_REMOVE', 'rejected'],
+    ]);
+    // Facts resolve, the injection is refused, new blocks get fresh ids.
+    expect(ops[0]!.operation.patch!.text).toBe('Ship faster with $59');
+    expect(ops[2]!.reason).toBe('Invalid value for color');
+    expect(ops[3]!.operation.nodes![0]!.type).toBe('faq');
+    expect(ops[3]!.operation.nodes![0]!.id).toMatch(/^[a-z0-9]{8,}$/);
+    expect(ops[4]!.reason).toMatch(/Does not apply/);
+    const ledger = await t.system.aiGeneration.findMany({ where: { tenantId: owner.tenantId, feature: 'LAYOUT' } });
+    expect(ledger).toHaveLength(1);
+  });
+
+  it('repairs once when nothing applies, and refuses invalid pages and roles without AI', async () => {
+    const owner = await signUp(t);
+    const site = await siteWithFact(owner);
+    const res = await t.http.post(`/v1/sites/${site.id}/ai/plan`).set(bearer(owner.accessToken)).send({ instruction: 'Do it [nothing-valid]', content: page }).expect(200);
+    expect(res.body.repaired).toBe(true);
+    expect(res.body.operations).toMatchObject([{ status: 'ok', operation: { op: 'PROPS_UPDATE', id: 'title', patch: { text: 'Fixed by repair' } } }]);
+
+    const bad = await t.http.post(`/v1/sites/${site.id}/ai/plan`).set(bearer(owner.accessToken)).send({ instruction: 'Anything', content: { root: { id: 'r', type: 'section', props: {}, children: [{ id: 'x', type: 'heading', props: { level: 9 }, children: [] }] } } }).expect(400);
+    expect(bad.body.error.code).toBe('INVALID_CONTENT');
+    const viewer = await invited(t, owner, 'VIEWER');
+    await t.http.post(`/v1/sites/${site.id}/ai/plan`).set(bearer(viewer.accessToken)).send({ instruction: 'Anything', content: page }).expect(403);
   });
 });

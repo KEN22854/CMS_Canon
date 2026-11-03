@@ -21,6 +21,7 @@ import {
   Undo2,
   Laptop,
   Paintbrush,
+  Wand2,
 } from 'lucide-react';
 import { STYLE_BREAKPOINTS } from '@canon/blocks';
 import Link from 'next/link';
@@ -28,6 +29,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useCollab } from '@/components/builder/collab';
+import { AiPlanPanel } from '@/components/builder/ai-plan';
 import { GeneratePageDialog } from '@/components/builder/generate-page';
 import { Inspector } from '@/components/builder/inspector';
 import { useBlockLabels } from '@/components/builder/labels';
@@ -47,7 +49,7 @@ import { useTenantId } from '@/lib/queries';
 import { translate, currentLocale, useT } from '@/lib/i18n';
 import { cn, formatUsd, relativeTime } from '@/lib/utils';
 
-type Panel = 'block' | 'style' | 'page' | 'versions' | 'translate' | 'review';
+type Panel = 'block' | 'style' | 'ai' | 'page' | 'versions' | 'translate' | 'review';
 const AUTOSAVE_MS = 5_000;
 /** The five style breakpoints of @canon/blocks; editing one only overrides it and smaller ones. */
 const BREAKPOINTS = [
@@ -230,7 +232,7 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
   // Selecting a block on the canvas or in Layers brings its inspector forward.
   const selectedId = selected?.id;
   useEffect(() => {
-    if (selectedId) setPanel((p) => (p === 'review' || p === 'style' ? p : 'block'));
+    if (selectedId) setPanel((p) => (p === 'review' || p === 'style' || p === 'ai' ? p : 'block'));
   }, [selectedId]);
   const selectBlock = useBuilder((s) => s.select);
   const blockLabel = useCallback(
@@ -372,6 +374,7 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
                 [
                   ['block', Settings2],
                   ['style', Paintbrush],
+                  ...(canEdit && canAi ? ([['ai', Wand2]] as const) : []),
                   ['page', Sparkles],
                   ['versions', History],
                   ['translate', Languages],
@@ -400,6 +403,7 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
                 ) : (
                   <p className="text-sm text-muted-foreground">{t('builder.selectToStyle')}</p>
                 ))}
+              {panel === 'ai' && <AiPlanPanel siteId={siteId} pageId={initial.id} locale={meta.locale} />}
               {panel === 'page' && (
                 <PagePanel
                   readOnly={!canEdit}

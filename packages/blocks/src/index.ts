@@ -6,3 +6,4 @@ export * from './styles';
 export * from './edit';
 export * from './components';
 export * from './sections';
+export * from './plan';

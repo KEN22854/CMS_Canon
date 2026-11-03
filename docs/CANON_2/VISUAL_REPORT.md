@@ -84,3 +84,16 @@ draft/live status and a publish button. Site → Components lists them:
 | Builder in Russian | Theme chips in the site colours |
 |---|---|
 | ![ru](screenshots/after/builder/builder-ru-1440.png) | ![chips](screenshots/after/builder/builder-style-theme-chips-1440.png) |
+
+---
+
+# Iteration 3 — Canon AI edits the page (Stage 5)
+
+| Proposed plan | Applied |
+|---|---|
+| ![plan](screenshots/after/ai/canon-ai-plan-1440.png) | ![applied](screenshots/after/ai/canon-ai-plan-applied-1440.png) |
+
+The Canon AI tab sends the request with the draft and selection. The plan comes back as typed
+operations with a before → after diff; an unsafe style is shown as rejected with its reason and
+can't be chosen. "Apply" runs the kept operations as one undo step. (For the screenshot the model
+reply is recorded; the planner's checks run on the server in the integration tests.)

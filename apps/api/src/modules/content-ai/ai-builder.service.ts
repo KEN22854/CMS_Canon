@@ -1,5 +1,5 @@
 import { AiGateway, type CompletionResult, type ChatMessage, type ContentPart } from '@canon/ai-gateway';
-import { BLOCKS, blockCatalogForPrompt, mapBlockText, materializeBlocks, validatePageContent, type BlockNode, type MaterializeResult } from '@canon/blocks';
+import { BLOCKS, PLAN_OPERATIONS_FOR_PROMPT, STYLE_PROPERTIES_FOR_PROMPT, blockCatalogForPrompt, buildPlan, mapBlockText, materializeBlocks, outlineForPlan, validatePageContent, type BlockNode, type EditPlan, type MaterializeResult } from '@canon/blocks';
 import { Injectable } from '@nestjs/common';
 import type { TenantPrincipal } from '../../common/auth/principal';
 import { ApiError, badRequest } from '../../common/http/api-error';
@@ -9,7 +9,7 @@ import { MediaService } from '../media/media.service';
 import { PagesService } from '../pages/pages.service';
 import { SitesService } from '../sites/sites.service';
 import { AiContentService, GOALS, ctx, meta, parseJson, withForbidden } from './ai-content.service';
-import type { GenerateBlockBody, GeneratePageBody, ImproveBlockBody } from './content-ai.dto';
+import type { GenerateBlockBody, GeneratePageBody, ImproveBlockBody, PlanEditsBody } from './content-ai.dto';
 
 /** Facts the model may cite as tokens; more than this and the prompt gets noisy for little gain. */
 const MAX_PROMPT_FACTS = 80;
@@ -164,6 +164,62 @@ export class AiBuilderService {
     const block: BlockNode | undefined = best.result.content.root.children[0];
     if (!block) throw new ApiError('AI_BAD_OUTPUT', 'The model did not return a usable block — try rephrasing', 502, { dropped: summarizeDropped(best) });
     return { block, repaired, ai: summarize(calls) };
+  }
+
+  /**
+   * "Ask Canon AI to edit this page": the model gets the page outline (ids, types, key texts), the
+   * selection and the operation vocabulary, and answers with typed operations. buildPlan checks
+   * every one against the page (shape, catalog fields, style grammar, locks, nesting, page
+   * validity); rejected ones come back with a reason. When nothing usable came back, one repair
+   * round shows the model what was rejected. Nothing is applied here — the editor shows a diff
+   * and the person approves operations one by one.
+   */
+  async planEdits(p: TenantPrincipal, siteId: string, body: PlanEditsBody) {
+    const site = await this.sites.get(p.tenantId, siteId);
+    const locale = body.locale ?? site.defaultLocale;
+    const input = validatePageContent(body.content);
+    if (!input.ok) throw badRequest('INVALID_CONTENT', 'Page content is invalid', { issues: input.issues });
+    const content = input.content;
+    const [voice, facts, prompt] = await Promise.all([this.content.voice(p.tenantId, siteId), this.facts(p.tenantId, siteId), this.prompts.get(p.tenantId, 'builder.plan_edits')]);
+    const { system, user } = this.prompts.render(prompt, {
+      siteName: voice.siteName,
+      brandVoice: voice.brandVoice || 'clear, confident and helpful',
+      locale,
+      catalog: blockCatalogForPrompt(PAGE_TYPES.concat('column')),
+      operations: PLAN_OPERATIONS_FOR_PROMPT,
+      styleProperties: STYLE_PROPERTIES_FOR_PROMPT,
+      facts: formatFacts(facts),
+      outline: outlineForPlan(content.root),
+      selection: body.selectedIds.length ? body.selectedIds.join(', ') : '(nothing selected — the whole page)',
+      instruction: body.instruction,
+    });
+
+    const calls: CompletionResult[] = [];
+    const call = async (messages: ChatMessage[]) => {
+      const res = await this.gateway.complete(
+        { system: withForbidden(system, voice), messages, preferModel: prompt.modelKey, responseFormat: 'json', maxTokens: 6_000, timeoutMs: 120_000 },
+        ctx(p, 'LAYOUT', prompt.id, body.pageId ? { type: 'PAGE', id: body.pageId } : undefined),
+      );
+      calls.push(res);
+      return { text: res.text, plan: buildPlan(parseJson(res.text), content, { facts: factMap(facts) }) };
+    };
+    const usable = (pl: EditPlan) => pl.operations.filter((o) => o.status === 'ok').length;
+
+    const first = await call([{ role: 'user', content: user }]);
+    let best = first.plan;
+    let repaired = false;
+    if (usable(best) === 0) {
+      const problems = best.operations.length ? best.operations.map((o, i) => `${i + 1}. ${o.label}: ${o.reason ?? 'rejected'}`) : ['The response was not JSON {"summary", "operations"}.'];
+      const second = await call([
+        { role: 'user', content: user },
+        { role: 'assistant', content: first.text.slice(0, 20_000) },
+        { role: 'user', content: ['None of your operations could be applied:', ...problems, '', 'Return corrected JSON {"summary", "operations"} using only ids from the outline, catalog fields and the listed operations.'].join('\n') },
+      ]);
+      repaired = true;
+      if (usable(second.plan) > usable(best)) best = second.plan;
+    }
+    if (best.operations.length === 0) throw new ApiError('AI_BAD_OUTPUT', 'The model did not propose any change — try describing it differently', 502);
+    return { summary: best.summary, operations: best.operations, repaired, ai: summarize(calls) };
   }
 
   /**

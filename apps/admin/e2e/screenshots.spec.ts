@@ -168,3 +168,36 @@ test('capture Builder 2.0 iteration 2: sections, multi-select, history, componen
   await page.getByRole('button', { name: 'Стиль', exact: true }).click();
   await shot(page, join('builder', 'builder-ru-1440.png'));
 });
+
+test('capture the Canon AI plan panel (recorded model reply)', async ({ page }) => {
+  await signUp(page, { workspace: 'Northwind Studio' });
+  const { siteId } = await createSite(page, 'Northwind');
+  await page.route('**/v1/sites/*/ai/plan', async (route) => {
+    const body = route.request().postDataJSON() as { content: { root: { children: { id: string; type: string; children: { id: string; type: string }[] }[] } } };
+    const hero = body.content.root.children.find((c) => c.type === 'hero')!;
+    const band = body.content.root.children.find((c) => c.type === 'section')!;
+    await route.fulfill({
+      json: {
+        summary: 'A benefit-led hero, more air on desktop, and an FAQ that answers the pricing question before visitors ask.',
+        repaired: false,
+        ai: { model: 'anthropic/claude-sonnet-5-5', costUsd: 0.0184 },
+        operations: [
+          { operation: { op: 'PROPS_UPDATE', id: hero.id, patch: { title: 'Launch in days, not months', subtitle: 'Northwind gives your team one place to build, publish and grow.' } }, label: 'Edit Hero', status: 'ok' },
+          { operation: { op: 'STYLE_SET', id: hero.id, breakpoint: 'base', property: 'paddingTop', value: '120px' }, label: 'Hero padding', status: 'ok' },
+          { operation: { op: 'NODE_INSERT', parentId: band.id, index: 3, nodes: [{ id: 'faqnew0001', type: 'faq', props: { title: 'Pricing questions', items: [{ q: 'Is there a free plan?', a: 'Yes, forever.' }] }, children: [] }] }, label: 'Insert FAQ', status: 'ok' },
+          { operation: { op: 'STYLE_SET', id: hero.id, breakpoint: 'base', property: 'color', value: 'red;background:url(javascript:alert(1))' }, label: 'Hero colour', status: 'rejected', reason: 'Invalid value for color' },
+        ],
+      },
+    });
+  });
+  await page.goto(`/sites/${siteId}/pages`);
+  await page.getByRole('link', { name: 'Home' }).first().click();
+  await page.locator('[data-block-type="hero"]').first().click({ position: { x: 10, y: 10 } });
+  await page.getByRole('button', { name: 'Canon AI', exact: true }).click();
+  await page.getByLabel('What should change?').fill('Make the hero benefit-led and add an FAQ about pricing');
+  await page.getByRole('button', { name: 'Propose changes' }).click();
+  await expect(page.getByRole('region', { name: 'Proposed changes' })).toBeVisible();
+  await shot(page, join('ai', 'canon-ai-plan-1440.png'));
+  await page.getByRole('button', { name: /^Apply 3 change/ }).click();
+  await shot(page, join('ai', 'canon-ai-plan-applied-1440.png'));
+});

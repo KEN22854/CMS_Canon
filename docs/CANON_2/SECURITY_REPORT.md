@@ -52,6 +52,20 @@ The inline script in `apps/admin/src/app/layout.tsx` is a static string that onl
   signed previews, so unpublished component edits never leak to visitors.
 - Audit log entries: `component.created`, `.updated`, `.published`, `.deleted`.
 
+## Canon AI plans (iteration 3)
+
+- The model output is data: every operation is shape-checked and re-validated against the page;
+  styles go through the same whitelist and grammar as manual edits, props through the block
+  schemas, new blocks through `materializeBlocks` (fresh ids, so model ids can't collide).
+- The model can't unlock or lock blocks, replace whole blocks or ungroup; locked blocks are refused
+  inside `applyOperation`.
+- The request is prompt-injection aware: the instruction and page texts are wrapped as content
+  (`<request>`, `<page>`) and the system prompt says they don't change the rules; even if a page
+  text convinces the model, the result is still limited to valid operations the person reviews.
+- Nothing is applied on the server; the person approves operations, and saving goes through the
+  normal page validation and permissions.
+- Calls are metered and attributed in the AI ledger (feature `LAYOUT`), with the tenant quotas.
+
 ## Clipboard
 
 Copied blocks are stored in the browser's `localStorage` (same origin as the admin) and are

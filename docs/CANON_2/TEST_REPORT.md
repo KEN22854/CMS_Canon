@@ -5,17 +5,33 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations and global components (9), section library (4), tree (16) | 37 / 37 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations and global components (9), section library (4), AI plans (4), tree (16) | 41 / 41 ✅ |
 | `@canon/collab` unit | 8 / 8 ✅ |
 | fields · ai-gateway · edge · sdk | 19 · 30 · 8 · 4 ✅ |
-| admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap (4) | 11 / 11 ✅ |
+| admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
 | API unit | 56 / 56 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 new for global components | 141 / 141 ✅ |
-| Playwright E2E | 17 / 17 ✅ (+4 opt-in: 2 screenshot specs, 2 performance specs) |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans | 143 / 143 ✅ |
+| Playwright E2E | 18 / 18 ✅ (+5 opt-in: 3 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ |
 
-Total automated tests: **331** (308 in the previous iteration).
+Total automated tests: **339** (331 after iteration 2, 308 after iteration 1).
+
+## Iteration 3 — Canon AI plans
+
+- `packages/blocks/test/plan.test.ts`: valid operations apply in order and the client replay gives
+  the same page; facts resolve; an injection style, an unknown style property, an unknown prop, an
+  invalid enum, an invented id, a locked block, an unknown operation, a non-container parent and a
+  `javascript:` link are each rejected with a reason while the valid operation after them stays;
+  garbage input and more than 30 operations are handled; the outline marks locked blocks.
+- `apps/api/test/integration/builder-ai.test.ts`: the endpoint returns accepted and rejected
+  operations (with the fake model proposing an unsafe style and an invented id), resolves facts,
+  meters the call; repairs once when nothing applied; refuses invalid content (400) and viewers (403).
+- `apps/admin/e2e/ai-plan.spec.ts`: the request carries the instruction, draft and selection; the
+  diff shows before → after; a rejected operation is visible and can't be chosen; unchecking one
+  operation keeps it out; two applied changes show on the canvas, appear in History and are
+  undone by one Ctrl+Z. **The model reply is recorded in this test** (the E2E stack has no model
+  provider); the server-side planner runs for real in the integration test.
 
 ## New scenarios in this iteration
 

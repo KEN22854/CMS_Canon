@@ -46,11 +46,38 @@ Put an instance block in the page content:
 expanded blocks (`i1` becomes the component root, inner ids become `i1-<id>`); headless consumers
 of `/v1/delivery/...` therefore never see `component` blocks.
 
+## Canon AI edit plans
+
+`POST /sites/:siteId/ai/plan` — permission `invoke Ai`. Nothing is saved.
+
+```json
+{ "instruction": "Make the hero punchier and add an FAQ", "content": { "root": { … } }, "selectedIds": ["hero1"], "locale": "en", "pageId": "cmw…" }
+```
+
+Response:
+
+```json
+{
+  "summary": "A sharper headline and an FAQ about pricing.",
+  "operations": [
+    { "operation": { "op": "PROPS_UPDATE", "id": "hero1", "patch": { "title": "Ship faster" } }, "label": "Edit Hero: title", "status": "ok" },
+    { "operation": { "op": "STYLE_SET", "id": "hero1", "breakpoint": "base", "property": "color", "value": "red;…" }, "label": "…", "status": "rejected", "reason": "Invalid value for color" }
+  ],
+  "repaired": false,
+  "ai": { "model": "anthropic/claude-sonnet-5-5", "costUsd": 0.018, "calls": 1 }
+}
+```
+
+Accepted operations apply in order to the content that was sent (`applyOperations` from
+`@canon/blocks` gives the same result on the client). 502 `AI_BAD_OUTPUT` when the model proposed
+nothing; 400 `INVALID_CONTENT` when the sent page is invalid. Requires the `builder.plan_edits`
+prompt (`pnpm --dir packages/db seed` adds it to an existing database).
+
 ## Typed operations (library)
 
 Not an HTTP endpoint yet: `applyOperation` / `applyOperations` / `describeOperation` are exported
 by `@canon/blocks` for the builder, the API and Canon AI. See ARCHITECTURE.md for the operation
-list. Stage 5 will add an endpoint that returns an AI plan as operations.
+list. AI plans (above) return operations in this vocabulary.
 
 ## Section library (library)
 

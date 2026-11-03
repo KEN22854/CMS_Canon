@@ -43,6 +43,11 @@ export interface BuilderState {
 
   /** Applies one typed operation; every other edit method goes through here. False = no change. */
   apply: (op: EditorOperation, coalesceKey?: string | null) => boolean;
+  /**
+   * Applies several operations as one edit (one undo step, each logged), e.g. an approved AI plan.
+   * Operations that no longer fit the page (it changed meanwhile) are skipped and counted.
+   */
+  applyMany: (ops: EditorOperation[]) => { applied: number; skipped: number };
   setMeta: (patch: Partial<Omit<Draft, 'content'>>, coalesceKey?: string) => void;
   updateProps: (id: string, patch: Record<string, unknown>, coalesceKey?: string) => void;
   /** Name, visibility, lock and styles; style edits coalesce per property like typing. */
@@ -192,6 +197,23 @@ export function createBuilderStore(initial: Draft) {
             set({ draft: { ...get().draft, ...patch } });
           },
           apply,
+          applyMany: (ops) => {
+            const d = get().draft;
+            let content = d.content;
+            const entries: LoggedOperation[] = [];
+            let skipped = 0;
+            for (const op of ops) {
+              const next = applyOperation(content, op);
+              if (next === content || ((op.op === 'NODE_INSERT' || op.op === 'NODE_DUPLICATE') && countNodes(next.root) > MAX_NODES)) {
+                skipped += 1;
+                continue;
+              }
+              entries.push({ op: op.op, label: describeOperation(op, content.root), at: Date.now() });
+              content = next;
+            }
+            if (entries.length) commit(content, null, { opLog: [...get().opLog, ...entries].slice(-LOG_LIMIT) });
+            return { applied: entries.length, skipped };
+          },
           updateProps: (id, patch, key) => void apply({ op: 'PROPS_UPDATE', id, patch }, key ?? null),
           updateNode: (id, patch, key) => void apply({ op: 'NODE_META', id, patch }, key ?? null),
           insert: (block, at) => {

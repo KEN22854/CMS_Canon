@@ -147,4 +147,19 @@ describe('Builder 2.0 store: selection, clipboard, groups, operation log', () =>
     s.getState().duplicate('h1');
     expect(s.getState().draft.content.root.children).toHaveLength(2999);
   });
+
+  it('applies an approved plan as one undo step and skips operations that no longer fit', () => {
+    const s = createBuilderStore(draft());
+    const res = s.getState().applyMany([
+      { op: 'PROPS_UPDATE', id: 'h', patch: { text: 'New' } },
+      { op: 'STYLE_SET', id: 'h', breakpoint: 'base', property: 'fontSize', value: '40px' },
+      { op: 'NODE_REMOVE', ids: ['gone'] },
+    ]);
+    expect(res).toEqual({ applied: 2, skipped: 1 });
+    expect(findNode(s.getState().draft.content.root, 'h')).toMatchObject({ props: { text: 'New' }, styles: { base: { fontSize: '40px' } } });
+    expect(s.getState().opLog.map((e) => e.op)).toEqual(['PROPS_UPDATE', 'STYLE_SET']);
+    s.temporal.getState().undo();
+    expect(findNode(s.getState().draft.content.root, 'h')!.props.text).toBe('A');
+    expect(findNode(s.getState().draft.content.root, 'h')!.styles).toBeUndefined();
+  });
 });

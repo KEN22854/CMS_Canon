@@ -12,7 +12,7 @@ import { PagesModule } from '../pages/pages.module';
 import { SitesModule } from '../sites/sites.module';
 import { AiBuilderService } from './ai-builder.service';
 import { AiContentService } from './ai-content.service';
-import { altBody, generateBlockBody, generatePageBody, improveBlockBody, textBody, translateBody, translatePageBody, type GenerateBlockBody, type GeneratePageBody, type ImproveBlockBody, type TextBody, type TranslateBody } from './content-ai.dto';
+import { altBody, generateBlockBody, generatePageBody, improveBlockBody, planEditsBody, textBody, translateBody, translatePageBody, type GenerateBlockBody, type GeneratePageBody, type ImproveBlockBody, type PlanEditsBody, type TextBody, type TranslateBody } from './content-ai.dto';
 
 @ApiTags('ai')
 @ApiBearerAuth()
@@ -38,6 +38,14 @@ export class ContentAiController {
   @ApiOperation({ summary: 'Generate one validated block that fits the page outline' })
   generateBlock(@Param('siteId') siteId: string, @Body(new ZodBody(generateBlockBody)) body: GenerateBlockBody, @TenantScope() p: TenantPrincipal) {
     return this.builder.generateBlock(p, siteId, body);
+  }
+
+  @Post('sites/:siteId/ai/plan')
+  @HttpCode(200)
+  @RequirePermission('invoke', 'Ai')
+  @ApiOperation({ summary: 'Propose edits to the current page as typed operations (each checked; rejected ones carry a reason). Nothing is saved.' })
+  planEdits(@Param('siteId') siteId: string, @Body(new ZodBody(planEditsBody)) body: PlanEditsBody, @TenantScope() p: TenantPrincipal) {
+    return this.builder.planEdits(p, siteId, body);
   }
 
   @Post('sites/:siteId/ai/improve-block')

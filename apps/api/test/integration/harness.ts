@@ -221,6 +221,24 @@ function builderReply(user: string, hasImage: boolean, transcript: string): stri
     const blocks = user.includes('[broken]') ? [...good, { type: 'button', props: { label: 'Bad', href: 'javascript:alert(1)' } }] : good;
     return JSON.stringify({ title: 'Pricing that scales', description: 'Plans for teams.', blocks });
   }
+  if (user.includes('None of your operations could be applied')) return JSON.stringify({ summary: 'Retitled.', operations: [{ op: 'PROPS_UPDATE', id: transcript.match(/- (\w+) heading/)![1], patch: { text: 'Fixed by repair' } }] });
+  if (user.includes('<page>') && user.includes('<request>')) {
+    // Ids from the outline the server sent ("- <id> <type> …"): edit the first heading, restyle it,
+    // add an FAQ to the first section; plus one unsafe and one invented operation to be rejected.
+    if (user.includes('[nothing-valid]')) return JSON.stringify({ summary: 'Oops', operations: [{ op: 'PROPS_UPDATE', id: 'made-up-id', patch: { text: 'x' } }] });
+    const heading = user.match(/- (\w+) heading/)?.[1] ?? 'none';
+    const section = user.match(/^ {2}- (\w+) section/m)?.[1] ?? 'none';
+    return JSON.stringify({
+      summary: 'A sharper headline and an FAQ about pricing.',
+      operations: [
+        { op: 'PROPS_UPDATE', id: heading, patch: { text: 'Ship faster with {{fact:pro.price}}' } },
+        { op: 'STYLE_SET', id: heading, breakpoint: 'base', property: 'fontSize', value: '48px' },
+        { op: 'STYLE_SET', id: heading, property: 'color', value: 'red;background:url(javascript:alert(1))' },
+        { op: 'NODE_INSERT', parentId: section, index: 99, nodes: [{ type: 'faq', props: { title: 'Pricing questions', items: [{ q: 'How much?', a: 'Pro is {{fact:pro.price}}.' }] } }] },
+        { op: 'NODE_REMOVE', ids: ['invented'] },
+      ],
+    });
+  }
   if (user.includes('<request>')) {
     if (user.includes('Use block type "stats"')) return JSON.stringify({ block: { type: 'stats', props: { items: [{ value: '{{fact:pro.price}}', label: 'Pro plan' }] } } });
     return JSON.stringify({ block: { type: 'faq', props: { title: 'Questions', items: [{ q: 'Is it fast?', a: 'Yes.' }] } } });

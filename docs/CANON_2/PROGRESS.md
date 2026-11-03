@@ -2,7 +2,23 @@
 
 Last update: 2026-11-03.
 
-## Iteration 2 (this one)
+## Iteration 3 (this one) — Stage 5, Canon AI edits the page
+
+- **Planner** (`packages/blocks/src/plan.ts`): the model's answer becomes checked typed
+  operations. Shape, catalog fields, style grammar, locks, nesting and page validity are checked
+  operation by operation on a working copy; rejected ones keep a reason. New blocks are
+  materialised (fresh ids, Canon facts bound). The model gets a compact outline of the page
+  (ids, types, key texts) and may not lock, replace or ungroup.
+- **API** `POST /v1/sites/:siteId/ai/plan` (`invoke Ai`): draft + selection + instruction →
+  summary and operations; one repair round when nothing applies; metered in the AI ledger like the
+  other builder features. New prompt `builder.plan_edits` in the seed.
+- **Builder**: a "Canon AI" inspector tab. The plan is shown as a diff (before → after per field
+  and style), each operation can be dropped, rejected ones show why, hovering highlights the
+  block; "Apply" runs the kept ones as **one undo step** (also in co-editing) and logs them in
+  History. If the page changed meanwhile, operations that no longer fit are skipped and counted.
+- Tests: +4 planner unit, +1 store unit, +2 API integration, +1 E2E (339 automated).
+
+## Iteration 2
 
 **Builder 2.0 — editing model.**
 - Typed operations in `@canon/blocks` (`edit.ts`): `NODE_INSERT/REMOVE/MOVE/REORDER/DUPLICATE/
@@ -41,7 +57,8 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 
 ## Not done yet (next)
 
-1. Stage 5: AI planner that proposes typed operations, a diff view, approve/reject per operation.
+1. Stage 5, next steps: streaming plans, canvas preview before applying, multi-page plans
+   ("update the price on every page"), plans as review requests for approval by someone else.
 2. Stage 4: more layouts (target 100+ distinct layouts, today 29 × 4 tones), block variants,
    section thumbnails in the palette.
 3. Operation-based undo (today undo is still snapshot-based with structural sharing; the

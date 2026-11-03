@@ -25,7 +25,8 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 ## P1
 
 - 🟡 Section library: 29 layouts × 4 tones, EN/RU copy, searchable palette (Stage 4). Next: more layouts, thumbnails, block variants.
-- ⬜ AI planner → typed operations → diff → approve (Stage 5).
+- ✅ AI planner → typed operations → diff → approve per operation, one undo step (Stage 5, first part).
+- ⬜ Stage 5: live canvas preview of a plan, multi-page plans, plans as review requests.
 - ⬜ CMS dynamic pages, table/grid views, bulk actions (Stage 6).
 - ⬜ E-commerce: products, variants, cart, checkout, orders, payment adapters with webhook verification (Stage 7).
 - ⬜ Redirects, SEO audit, Schema.org, per-site 404 (Stage 9).

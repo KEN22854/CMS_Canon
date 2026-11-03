@@ -62,3 +62,15 @@ export const improveBlockBody = z.object({
   pageId: z.string().max(40).optional(),
 });
 export type ImproveBlockBody = z.infer<typeof improveBlockBody>;
+
+export const planEditsBody = z.object({
+  /** What to change, in the editor's words ("make the hero punchier and add an FAQ"). */
+  instruction: z.string().trim().min(3).max(2_000),
+  /** The page as it is in the editor (unsaved edits included); validated before planning. */
+  content: z.object({ root: z.unknown() }),
+  /** Blocks the person has selected: the plan should focus on them. */
+  selectedIds: z.array(z.string().max(64)).max(50).default([]),
+  locale: z.string().regex(LOCALE_RE).optional(),
+  pageId: z.string().max(40).optional(),
+});
+export type PlanEditsBody = z.infer<typeof planEditsBody>;
