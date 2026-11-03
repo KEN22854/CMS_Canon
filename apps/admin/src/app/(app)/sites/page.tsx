@@ -114,7 +114,7 @@ export default function SitesPage() {
                       {s.name}
                     </Link>
                   </CardTitle>
-                  <CardDescription className="truncate">{s.domain ?? s.internalDomain}</CardDescription>
+                  <CardDescription className="truncate">{s.domainStatus === 'VERIFIED' && s.domain ? s.domain : s.internalDomain}</CardDescription>
                 </div>
                 {s.isPublished ? <Badge className="border-success/40 text-success">live</Badge> : <Badge>draft</Badge>}
               </div>

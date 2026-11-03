@@ -223,6 +223,7 @@ Stripe and SAML, scaling, backups, upgrades and a security checklist.
 | [docs/deployment.md](docs/deployment.md) | production deployment and operations |
 | [docs/phases.md](docs/phases.md) | build log: what each phase delivered, checklists, manual checks |
 | [docs/roadmap.md](docs/roadmap.md) | what comes next and how Canon differs from other CMSs |
+| [docs/CANON_2/](docs/CANON_2/PROGRESS.md) | Canon 2.0: audit, architecture, design system, progress, test/performance/security reports, screenshots |
 
 ## Build history
 

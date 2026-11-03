@@ -107,3 +107,24 @@ export function Progress({ value, tone = 'default' }: { value: number; tone?: 'd
     </div>
   );
 }
+
+/** Placeholder with a shimmer while data loads; size it with className (h-4 w-32…). */
+export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div aria-hidden className={cn('relative overflow-hidden rounded-md bg-muted', className)} {...props}>
+      <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-foreground/5 to-transparent" />
+    </div>
+  );
+}
+
+/** Empty list or first-run state: an icon, one sentence of why, and the next action. */
+export function EmptyState({ icon, title, description, action, className }: { icon?: React.ReactNode; title: string; description?: string; action?: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('flex flex-col items-center gap-2 rounded-lg border border-dashed px-6 py-10 text-center', className)}>
+      {icon && <div className="mb-1 grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-primary [&>svg]:h-5 [&>svg]:w-5">{icon}</div>}
+      <p className="text-sm font-medium">{title}</p>
+      {description && <p className="max-w-sm text-sm text-muted-foreground">{description}</p>}
+      {action && <div className="mt-2">{action}</div>}
+    </div>
+  );
+}

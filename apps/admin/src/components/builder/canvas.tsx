@@ -1,18 +1,22 @@
 'use client';
 
-import { getBlock } from '@canon/blocks';
-import { BlockRenderer, siteThemeStyle, type RenderMedia, type SiteThemeInput } from '@canon/ui-blocks';
+import { getBlock, STYLE_BREAKPOINTS } from '@canon/blocks';
+import { BlockRenderer, PageStyles, siteThemeStyle, type RenderMedia, type SiteThemeInput } from '@canon/ui-blocks';
 import { useDraggable } from '@dnd-kit/core';
-import { ArrowDown, ArrowUp, ArrowUpLeft, Copy, GripVertical, Trash2 } from 'lucide-react';
-import { useCallback, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpLeft, Copy, GripVertical, Lock, Minus, Plus, Trash2 } from 'lucide-react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { findParent } from '../editor/tree-ops';
+import { findNode, findParent } from '../editor/tree-ops';
 import { BlockAiMenu } from './block-ai';
 import type { DropTarget } from './drop';
-import { useBuilder, type Breakpoint, type RemoteSelection } from './store';
+import { useBuilder, ZOOM_STEPS, type Breakpoint, type RemoteSelection } from './store';
 import { toRenderForms, useForms } from '@/lib/forms';
 
-const WIDTH: Record<Breakpoint, string> = { desktop: '100%', tablet: '768px', mobile: '390px' };
+/**
+ * Every breakpoint renders at its real CSS width (Desktop 1280 px) so container queries see the size
+ * the visitor will; the frame is scaled down to fit the workspace and the zoom controls scale on top.
+ */
+const PREVIEW: Record<Breakpoint, number> = Object.fromEntries(STYLE_BREAKPOINTS.map((b) => [b.id, b.preview])) as Record<Breakpoint, number>;
 
 interface Rect {
   x: number;
@@ -55,6 +59,26 @@ export function Canvas({
   const formsQ = useForms(siteId);
   const forms = useMemo(() => toRenderForms(formsQ.data), [formsQ.data]);
   const breakpoint = useBuilder((s) => s.breakpoint);
+  const zoom = useBuilder((s) => s.zoom);
+  const setZoom = useBuilder((s) => s.setZoom);
+  const selectedNode = useBuilder((s) => (s.selectedId ? findNode(s.draft.content.root, s.selectedId) : null));
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [avail, setAvail] = useState(0);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => {
+      const cs = getComputedStyle(el);
+      setAvail(el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const preview = PREVIEW[breakpoint];
+  const fit = avail > 0 ? Math.min(1, avail / preview) : 1;
+  const scale = zoom * fit;
   const select = useBuilder((s) => s.select);
   const hover = useBuilder((s) => s.hover);
   const [rects, setRects] = useState<{
@@ -92,13 +116,20 @@ export function Canvas({
     const ro = new ResizeObserver(() => measure());
     ro.observe(host);
     return () => ro.disconnect();
-  }, [measure, hostRef, breakpoint]);
+  }, [measure, hostRef, breakpoint, scale]);
 
-  const idAt = (target: EventTarget | null) => ((target as Element | null)?.closest?.('[data-block-id]') as HTMLElement | null)?.dataset.blockId ?? null;
+  // Locked blocks are skipped: a click selects the nearest unlocked ancestor.
+  const idAt = (target: EventTarget | null) => ((target as Element | null)?.closest?.('[data-block-id]:not([data-locked])') as HTMLElement | null)?.dataset.blockId ?? null;
+  const zoomBy = (dir: -1 | 1) => {
+    const i = ZOOM_STEPS.findIndex((z) => z >= zoom - 0.001);
+    setZoom(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, (i < 0 ? ZOOM_STEPS.length - 1 : i) + dir))]!);
+  };
 
   return (
-    <div className="h-full overflow-auto bg-muted/40 p-4 md:p-8" onMouseLeave={() => hover(null)}>
-      <div className="mx-auto transition-[max-width] duration-200" style={{ maxWidth: WIDTH[breakpoint] }}>
+    <div className="flex h-full flex-col">
+    <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-muted/40 p-4 md:p-8" onMouseLeave={() => hover(null)}>
+      {/* Zoom scales the frame; the content inside keeps the breakpoint's CSS width, so container queries see the real size. */}
+      <div className="mx-auto transition-[width] duration-200" style={{ width: preview * scale }}>
         <div
           ref={hostRef}
           role="application"
@@ -113,7 +144,8 @@ export function Canvas({
           }}
           onMouseOver={(e) => !dragging && hover(idAt(e.target))}
         >
-          <div style={siteThemeStyle(theme)} className="font-site text-site-fg">
+          <div style={{ ...siteThemeStyle(theme), zoom: scale }} className="font-site text-site-fg [&_[data-hidden]]:opacity-30">
+            <PageStyles root={root} />
             <BlockRenderer node={root} ctx={{ media, facts, forms, draft: true, editing: true }} isRoot />
           </div>
 
@@ -134,8 +166,38 @@ export function Canvas({
         </div>
       </div>
     </div>
+      {/* Bottom bar: zoom, viewport and selection. */}
+      <div className="flex h-9 shrink-0 items-center gap-3 border-t bg-card px-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-0.5" role="group" aria-label="Zoom">
+          <button type="button" aria-label="Zoom out" disabled={zoom <= ZOOM_STEPS[0]} onClick={() => zoomBy(-1)} className="rounded p-1 hover:bg-muted hover:text-foreground disabled:opacity-40">
+            <Minus className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" aria-label="Reset zoom to 100%" title={fit < 1 ? 'Scaled to fit the window. Click for 100% of the fitted size.' : 'Reset to 100%'} onClick={() => setZoom(1)} className="w-12 rounded px-1 py-0.5 text-center tabular-nums hover:bg-muted hover:text-foreground">
+            {Math.round(scale * 100)}%
+          </button>
+          <button type="button" aria-label="Zoom in" disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]!} onClick={() => zoomBy(1)} className="rounded p-1 hover:bg-muted hover:text-foreground disabled:opacity-40">
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <span className="tabular-nums" aria-label="Viewport">
+          {STYLE_BREAKPOINTS.find((b) => b.id === breakpoint)?.label} · {preview} px{fit < 1 ? ' · fit' : ''}
+        </span>
+        <span className="ml-auto flex min-w-0 items-center gap-1 truncate" aria-live="polite">
+          {selectedNode ? (
+            <>
+              {selectedNode.locked && <Lock className="h-3 w-3" aria-label="Locked" />}
+              {selectedNode.name ?? getBlock(selectedNode.type)?.name ?? selectedNode.type}
+              {selectedNode.styles && <span className="rounded bg-primary/15 px-1 text-[10px] text-primary">styled</span>}
+            </>
+          ) : (
+            'Nothing selected'
+          )}
+        </span>
+      </div>
+    </div>
   );
 }
+
 
 function Outline({ rect, className }: { rect: Rect; className: string }) {
   return <div className={cn('absolute rounded-sm', className)} style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }} />;

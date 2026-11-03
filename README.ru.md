@@ -226,6 +226,7 @@ CI (`.github/workflows/ci.yml`) запускает сборку, линт, пр�
 | [docs/deployment.md](docs/deployment.md) | развёртывание и эксплуатация в production |
 | [docs/phases.md](docs/phases.md) | журнал разработки: что сделано в каждой фазе, чек-листы, ручные проверки |
 | [docs/roadmap.ru.md](docs/roadmap.ru.md) | что дальше и чем Canon отличается от других CMS (на русском) |
+| [docs/CANON_2/](docs/CANON_2/PROGRESS.md) | Canon 2.0: аудит, архитектура, дизайн-система, прогресс, отчёты о тестах, производительности и безопасности, скриншоты (на английском) |
 
 ## История разработки
 

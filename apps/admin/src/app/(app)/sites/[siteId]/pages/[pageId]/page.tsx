@@ -19,8 +19,10 @@ import {
   Sparkles,
   Tablet,
   Undo2,
+  Laptop,
+  Paintbrush,
 } from 'lucide-react';
-import { getBlock } from '@canon/blocks';
+import { getBlock, STYLE_BREAKPOINTS } from '@canon/blocks';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,6 +33,7 @@ import { Inspector } from '@/components/builder/inspector';
 import { Presence } from '@/components/builder/presence';
 import { useFacts } from '@/components/builder/rich-text-editor';
 import { BuilderContext, createBuilderStore, selectedNode, useBuilder, useBuilderStore, useHistory, type Breakpoint, type Draft } from '@/components/builder/store';
+import { StylePanel } from '@/components/builder/style-panel';
 import { Workspace } from '@/components/builder/workspace';
 import { findNode } from '@/components/editor/tree-ops';
 import { ReviewPanel } from '@/components/review-panel';
@@ -43,13 +46,17 @@ import { useTenantId } from '@/lib/queries';
 import { translate, currentLocale } from '@/lib/i18n';
 import { cn, formatUsd, relativeTime } from '@/lib/utils';
 
-type Panel = 'block' | 'page' | 'versions' | 'translate' | 'review';
+type Panel = 'block' | 'style' | 'page' | 'versions' | 'translate' | 'review';
 const AUTOSAVE_MS = 5_000;
+/** The five style breakpoints of @canon/blocks; editing one only overrides it and smaller ones. */
 const BREAKPOINTS = [
-  ['desktop', Monitor],
+  ['base', Monitor],
+  ['laptop', Laptop],
   ['tablet', Tablet],
-  ['mobile', Smartphone],
+  ['mobileL', Smartphone],
+  ['mobileS', Smartphone],
 ] as const;
+const BP_TITLE = Object.fromEntries(STYLE_BREAKPOINTS.map((b) => [b.id, b.max === null ? b.label : `${b.label} (≤ ${b.max}px)`])) as Record<Breakpoint, string>;
 
 export default function PageEditor() {
   const { siteId, pageId } = useParams<{ siteId: string; pageId: string }>();
@@ -205,7 +212,7 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
   // Selecting a block on the canvas or in Layers brings its inspector forward.
   const selectedId = selected?.id;
   useEffect(() => {
-    if (selectedId) setPanel((p) => (p === 'review' ? p : 'block'));
+    if (selectedId) setPanel((p) => (p === 'review' || p === 'style' ? p : 'block'));
   }, [selectedId]);
   const selectBlock = useBuilder((s) => s.select);
   const blockLabel = useCallback(
@@ -292,8 +299,8 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
         )}
         <div className="flex items-center rounded-md border p-0.5" role="radiogroup" aria-label="Preview width">
           {BREAKPOINTS.map(([b, Icon]) => (
-            <button key={b} type="button" role="radio" aria-checked={breakpoint === b} aria-label={b} title={b} onClick={() => setBreakpoint(b as Breakpoint)} className={cn('rounded p-1', breakpoint === b ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}>
-              <Icon className="h-4 w-4" />
+            <button key={b} type="button" role="radio" aria-checked={breakpoint === b} aria-label={BP_TITLE[b]} title={BP_TITLE[b]} onClick={() => setBreakpoint(b)} className={cn('rounded p-1', breakpoint === b ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+              <Icon className={b === 'mobileS' ? 'h-3 w-3' : 'h-4 w-4'} />
             </button>
           ))}
         </div>
@@ -346,13 +353,14 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
               {(
                 [
                   ['block', 'Block', Settings2],
+                  ['style', 'Style', Paintbrush],
                   ['page', 'Page & SEO', Sparkles],
                   ['versions', 'Versions', History],
                   ['translate', 'Translate', Languages],
                   ['review', 'Review', MessageSquare],
                 ] as const
               ).map(([id, label, Icon]) => (
-                <button key={id} type="button" onClick={() => setPanel(id)} className={cn('flex flex-1 items-center justify-center gap-1 px-1 py-2 text-xs', panel === id ? 'border-b-2 border-primary font-medium' : 'text-muted-foreground')}>
+                <button key={id} type="button" onClick={() => setPanel(id)} aria-pressed={panel === id} className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] leading-tight', panel === id ? 'border-b-2 border-primary font-medium text-foreground' : 'text-muted-foreground hover:text-foreground')}>
                   <Icon className="h-3.5 w-3.5" aria-hidden /> {label}
                 </button>
               ))}
@@ -363,6 +371,12 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
                   <Inspector node={selected} siteId={siteId} pageId={initial.id} readOnly={!canEdit} facts={facts} />
                 ) : (
                   <p className="text-sm text-muted-foreground">Select a block on the canvas or in Layers. Drag blocks in from the palette, or generate the page with AI.</p>
+                ))}
+              {panel === 'style' &&
+                (selected && selected.id !== draft.content.root.id ? (
+                  <StylePanel node={selected} readOnly={!canEdit} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">Select a block to style it. Styles are saved per breakpoint: pick Desktop, Tablet or Mobile in the toolbar first.</p>
                 ))}
               {panel === 'page' && (
                 <PagePanel

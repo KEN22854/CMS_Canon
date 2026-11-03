@@ -4,18 +4,42 @@ import * as Y from 'yjs';
  * A page draft as a Yjs document, shared by the collaboration server and the builder.
  *
  *   meta:   Y.Map  title, slug, description, seo, root (block id), saved {version, hash, by}
- *   blocks: Y.Map  blockId → Y.Map { type, props: Y.Map<prop → JSON value>, children: Y.Array<id> }
+ *   blocks: Y.Map  blockId → Y.Map { type, props: Y.Map<prop → JSON value>, children: Y.Array<id>,
+ *                  name?, hidden?, locked?, styles: Y.Map<"breakpoint:property" → value> }
  *
  * Granularity is the block *prop*: two people editing a hero's title and its button at the same
  * time both win; the same prop is last-writer-wins. Rich text is one prop value (a TipTap JSON
  * doc), so concurrent edits of the *same* text block resolve per field, not per character —
  * a deliberate trade for a model the existing renderer, validators and Canon all understand.
+ * Styles are keyed per breakpoint and property, so two people styling one block both win too.
  */
 export interface DraftNode {
   id: string;
   type: string;
   props: Record<string, unknown>;
   children: DraftNode[];
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  styles?: Record<string, Record<string, string>>;
+}
+
+const NODE_FLAGS = ['name', 'hidden', 'locked'] as const;
+
+/** Responsive styles ⇄ flat "breakpoint:property" keys (one Yjs entry per property). */
+function flatStyles(styles: DraftNode['styles']): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [bp, props] of Object.entries(styles ?? {})) for (const [k, v] of Object.entries(props)) out.set(`${bp}:${k}`, v);
+  return out;
+}
+
+function nestStyles(flat: Record<string, unknown>): DraftNode['styles'] {
+  const out: Record<string, Record<string, string>> = {};
+  for (const [key, v] of Object.entries(flat)) {
+    const [bp, prop] = key.split(':');
+    if (bp && prop && typeof v === 'string') (out[bp] ??= {})[prop] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 export interface CollabDraft {
@@ -45,6 +69,10 @@ function blockMap(n: DraftNode): Y.Map<unknown> {
   const children = new Y.Array<string>();
   children.push(n.children.map((c) => c.id));
   m.set('children', children);
+  for (const k of NODE_FLAGS) if (n[k] !== undefined) m.set(k, n[k]);
+  const styles = new Y.Map<string>();
+  for (const [k, v] of flatStyles(n.styles)) styles.set(k, v);
+  m.set('styles', styles);
   return m;
 }
 
@@ -84,7 +112,14 @@ export function yDocToDraft(doc: Y.Doc): CollabDraft | null {
     seen.add(id);
     const props = (m.get('props') as Y.Map<unknown> | undefined)?.toJSON() ?? {};
     const childIds = (m.get('children') as Y.Array<string> | undefined)?.toArray() ?? [];
-    return { id, type: String(m.get('type')), props: props as Record<string, unknown>, children: childIds.map((c) => build(c, depth + 1)).filter((c): c is DraftNode => c !== null) };
+    const node: DraftNode = { id, type: String(m.get('type')), props: props as Record<string, unknown>, children: childIds.map((c) => build(c, depth + 1)).filter((c): c is DraftNode => c !== null) };
+    const name = m.get('name');
+    if (typeof name === 'string' && name) node.name = name;
+    if (m.get('hidden') === true) node.hidden = true;
+    if (m.get('locked') === true) node.locked = true;
+    const styles = nestStyles((m.get('styles') as Y.Map<unknown> | undefined)?.toJSON() ?? {});
+    if (styles) node.styles = styles;
+    return node;
   };
   const root = build(rootId, 0);
   if (!root) return null;
@@ -121,6 +156,19 @@ export function applyDraftDiff(doc: Y.Doc, prev: CollabDraft, next: CollabDraft,
       const props = m.get('props') as Y.Map<unknown>;
       for (const k of Object.keys(old.props)) if (!(k in n.props)) props.delete(k);
       for (const [k, v] of Object.entries(n.props)) if (!same(old.props[k], v)) props.set(k, v);
+      for (const k of NODE_FLAGS) {
+        if (same(old[k], n[k])) continue;
+        if (n[k] === undefined) m.delete(k);
+        else m.set(k, n[k]);
+      }
+      if (!same(old.styles, n.styles)) {
+        let styles = m.get('styles') as Y.Map<string> | undefined;
+        if (!styles) m.set('styles', (styles = new Y.Map<string>()));
+        const was = flatStyles(old.styles);
+        const now = flatStyles(n.styles);
+        for (const k of was.keys()) if (!now.has(k)) styles.delete(k);
+        for (const [k, v] of now) if (was.get(k) !== v) styles.set(k, v);
+      }
       const oldIds = old.children.map((c) => c.id);
       const newIds = n.children.map((c) => c.id);
       if (!same(oldIds, newIds)) {

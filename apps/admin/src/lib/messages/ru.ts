@@ -13,6 +13,11 @@ export const ru: Record<MessageKey, string> = {
   'common.loadMore': 'Показать ещё',
   'common.or': 'или',
   'common.language': 'Язык',
+  'common.retry': 'Повторить',
+  'theme.label': 'Тема: {name}',
+  'theme.dark': 'Тёмная',
+  'theme.light': 'Светлая',
+  'theme.system': 'Как в системе',
 
   'nav.main': 'Основное',
   'nav.dashboard': 'Обзор',

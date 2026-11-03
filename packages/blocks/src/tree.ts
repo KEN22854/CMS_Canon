@@ -1,15 +1,25 @@
 import { z } from 'zod';
 import { getBlock, type FieldMeta } from './definitions';
 import { collectFactKeys, mapRichText, type RichTextDoc } from './rich-text';
+import { validateStyles, type ResponsiveStyles } from './styles';
 
-export const MAX_DEPTH = 6;
-export const MAX_NODES = 500;
+export const MAX_DEPTH = 10;
+/** Large landing pages reach ~1–2k nodes; the cap keeps documents and saves bounded. */
+export const MAX_NODES = 3000;
 
 export interface BlockNode {
   id: string;
   type: string;
   props: Record<string, unknown>;
   children: BlockNode[];
+  /** Label in the Layers panel. */
+  name?: string;
+  /** Not rendered on the site; the builder shows it dimmed. */
+  hidden?: boolean;
+  /** Cannot be selected on the canvas, moved or deleted until unlocked. */
+  locked?: boolean;
+  /** Visual overrides per breakpoint (see styles.ts). */
+  styles?: ResponsiveStyles;
 }
 
 export interface PageContent {
@@ -21,7 +31,11 @@ const nodeSchema: z.ZodType<BlockNode> = z.lazy(() =>
     id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
     type: z.string().regex(/^[a-z0-9-]+(:[a-z0-9/_-]+)?$/).max(80),
     props: z.record(z.string(), z.unknown()).default({}),
-    children: z.array(nodeSchema).max(200).default([]),
+    children: z.array(nodeSchema).max(500).default([]),
+    name: z.string().trim().max(60).optional(),
+    hidden: z.boolean().optional(),
+    locked: z.boolean().optional(),
+    styles: z.unknown().optional(),
   }),
 ) as z.ZodType<BlockNode>;
 
@@ -73,7 +87,15 @@ export function validatePageContent(input: unknown, opts: ValidateOptions = {}):
       if (res.success) props = res.data as Record<string, unknown>;
       else for (const i of res.error.issues.slice(0, 5)) issues.push({ path: `${path}.props.${i.path.join('.')}`, message: i.message });
     }
-    return { ...node, props, children: node.children.map((c, i) => walk(c, `${path}.children[${i}]`, depth + 1, false)) };
+    const st = validateStyles(node.styles, `${path}.styles`);
+    issues.push(...st.issues);
+    const out: BlockNode = { ...node, props, children: node.children.map((c, i) => walk(c, `${path}.children[${i}]`, depth + 1, false)) };
+    if (st.styles) out.styles = st.styles;
+    else delete out.styles;
+    if (!node.name) delete out.name;
+    if (!node.hidden) delete out.hidden;
+    if (!node.locked) delete out.locked;
+    return out;
   };
 
   const root = walk(parsed.data.root, 'root', 1, true);

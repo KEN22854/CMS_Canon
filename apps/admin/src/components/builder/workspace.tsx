@@ -5,7 +5,7 @@ import type { RenderMedia, SiteThemeInput } from '@canon/ui-blocks';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragMoveEvent, type DragStartEvent } from '@dnd-kit/core';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { findParent, newBlock } from '../editor/tree-ops';
+import { findNode, findParent, newBlock } from '../editor/tree-ops';
 import { Canvas } from './canvas';
 import { resolveCanvasDrop, resolveLayerDrop, type DragItem, type DropTarget } from './drop';
 import { Layers } from './layers';
@@ -76,7 +76,7 @@ export function Workspace({ siteId, pageId, locale, theme, media, facts, readOnl
                 </button>
               ))}
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">{tab === 'blocks' ? <Palette siteId={siteId} pageId={pageId} locale={locale} /> : <Layers hostRef={layersRef} drop={drop?.zone === 'layers' ? drop.target : null} />}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto">{tab === 'blocks' ? <Palette siteId={siteId} pageId={pageId} locale={locale} /> : <Layers hostRef={layersRef} drop={drop?.zone === 'layers' ? drop.target : null} readOnly={readOnly} />}</div>
           </aside>
         )}
         <main className="min-w-0 flex-1">
@@ -98,7 +98,8 @@ const editable = (t: EventTarget | null) => {
 
 /**
  * Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y) drive the builder history everywhere except inside the rich-text
- * editor, which has its own; block shortcuts only apply when focus is not in a form field.
+ * editor, which has its own; block shortcuts only apply when focus is not in a form field:
+ * Delete, Ctrl+D duplicate, Alt+↑/↓ reorder, Ctrl+Shift+H hide, Ctrl+Shift+L lock, Ctrl+=/−/0 zoom, Esc parent.
  */
 function useShortcuts(readOnly: boolean) {
   const store = useBuilderStore();
@@ -117,6 +118,12 @@ function useShortcuts(readOnly: boolean) {
       }
       if (editable(e.target)) return;
       const s = store.getState();
+      // Canvas zoom: Ctrl/Cmd + = / - / 0 (the browser zoom stays on the browser menu).
+      if (mod && (k === '=' || k === '+' || k === '-' || k === '0')) {
+        e.preventDefault();
+        s.setZoom(k === '0' ? 1 : s.zoom + (k === '-' ? -0.1 : 0.1));
+        return;
+      }
       const id = s.selectedId;
       if (!id) return;
       const act = (fn: () => void) => {
@@ -125,6 +132,8 @@ function useShortcuts(readOnly: boolean) {
       };
       if (e.key === 'Delete' || e.key === 'Backspace') act(() => s.remove(id));
       else if (mod && k === 'd') act(() => s.duplicate(id));
+      else if (mod && e.shiftKey && k === 'h') act(() => s.updateNode(id, { hidden: !findNode(s.draft.content.root, id)?.hidden || undefined }));
+      else if (mod && e.shiftKey && k === 'l') act(() => s.updateNode(id, { locked: !findNode(s.draft.content.root, id)?.locked || undefined }));
       else if (e.altKey && e.key === 'ArrowUp') act(() => s.nudge(id, -1));
       else if (e.altKey && e.key === 'ArrowDown') act(() => s.nudge(id, 1));
       else if (e.key === 'Escape') {

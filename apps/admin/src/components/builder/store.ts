@@ -1,10 +1,10 @@
-import type { BlockNode, PageContent } from '@canon/blocks';
+import type { BlockNode, PageContent, StyleBreakpoint } from '@canon/blocks';
 import { useStore } from 'zustand';
 import { temporal } from 'zundo';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { createContext, useContext } from 'react';
 import type { PageDetail } from '@/lib/content';
-import { cloneWithIds, duplicateBlock, findNode, findParent, insertBlock, insertNear, moveBlock, moveTo, removeBlock, replaceBlock, updateProps } from '../editor/tree-ops';
+import { cloneWithIds, duplicateBlock, findNode, findParent, insertBlock, insertNear, moveBlock, moveTo, removeBlock, replaceBlock, updateNodeMeta, updateProps, type NodeMeta } from '../editor/tree-ops';
 
 export interface Draft {
   title: string;
@@ -14,7 +14,10 @@ export interface Draft {
   content: PageContent;
 }
 
-export type Breakpoint = 'desktop' | 'tablet' | 'mobile';
+/** The style breakpoint being edited and previewed (see @canon/blocks STYLE_BREAKPOINTS). */
+export type Breakpoint = StyleBreakpoint;
+
+export const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5] as const;
 
 export interface BuilderState {
   /** The only undoable slice. Every edit replaces it immutably, so "dirty" is a reference check. */
@@ -24,6 +27,8 @@ export interface BuilderState {
   selectedId: string | null;
   hoverId: string | null;
   breakpoint: Breakpoint;
+  /** Canvas zoom (1 = 100 %). */
+  zoom: number;
   /** Set while a collaboration session owns undo/redo (Y.UndoManager: only your own edits). */
   collabHistory: CollabHistory | null;
   /** Blocks collaborators have selected (drawn as coloured outlines on the canvas). */
@@ -31,6 +36,8 @@ export interface BuilderState {
 
   setMeta: (patch: Partial<Omit<Draft, 'content'>>, coalesceKey?: string) => void;
   updateProps: (id: string, patch: Record<string, unknown>, coalesceKey?: string) => void;
+  /** Name, visibility, lock and styles; style edits coalesce per property like typing. */
+  updateNode: (id: string, patch: NodeMeta, coalesceKey?: string) => void;
   insert: (block: BlockNode, at?: { parentId: string; index: number }) => void;
   move: (id: string, parentId: string, index: number) => void;
   nudge: (id: string, delta: -1 | 1) => void;
@@ -48,6 +55,7 @@ export interface BuilderState {
   select: (id: string | null) => void;
   hover: (id: string | null) => void;
   setBreakpoint: (b: Breakpoint) => void;
+  setZoom: (z: number) => void;
 }
 
 export interface RemoteSelection {
@@ -81,12 +89,14 @@ export function createBuilderStore(initial: Draft) {
           pendingKey = key;
           set({ draft: { ...d, content } });
         };
+        const isLocked = (id: string) => Boolean(findNode(get().draft.content.root, id)?.locked);
         return {
           draft: initial,
           saved: initial,
           selectedId: initial.content.root.children[0]?.id ?? null,
           hoverId: null,
-          breakpoint: 'desktop',
+          breakpoint: 'base',
+          zoom: 1,
           collabHistory: null,
           remoteSelections: [],
 
@@ -95,15 +105,17 @@ export function createBuilderStore(initial: Draft) {
             set({ draft: { ...get().draft, ...patch } });
           },
           updateProps: (id, patch, key) => edit((c) => updateProps(c, id, patch), key ?? null),
+          updateNode: (id, patch, key) => edit((c) => updateNodeMeta(c, id, patch), key ?? null),
           insert: (block, at) => {
             edit((c) => (at ? insertBlock(c, at.parentId, at.index, block) : insertNear(c, get().selectedId, block)));
             set({ selectedId: block.id });
           },
-          move: (id, parentId, index) => edit((c) => moveTo(c, id, parentId, index)),
-          nudge: (id, delta) => edit((c) => moveBlock(c, id, delta)),
+          // Locked blocks stay where they are until unlocked.
+          move: (id, parentId, index) => (isLocked(id) ? undefined : edit((c) => moveTo(c, id, parentId, index))),
+          nudge: (id, delta) => (isLocked(id) ? undefined : edit((c) => moveBlock(c, id, delta))),
           remove: (id) => {
             const root = get().draft.content.root;
-            if (id === root.id) return;
+            if (id === root.id || isLocked(id)) return;
             const at = findParent(root, id);
             edit((c) => removeBlock(c, id));
             // Keep a sensible selection: next sibling, previous sibling, else the parent.
@@ -140,6 +152,7 @@ export function createBuilderStore(initial: Draft) {
           select: (id) => set({ selectedId: id }),
           hover: (id) => (get().hoverId === id ? undefined : set({ hoverId: id })),
           setBreakpoint: (breakpoint) => set({ breakpoint }),
+          setZoom: (zoom) => set({ zoom: Math.min(2, Math.max(0.25, zoom)) }),
         };
       },
       {

@@ -195,3 +195,18 @@ export function plainToDoc(text: string): RichTextDoc {
     }),
   };
 }
+
+/** Node-level fields edited by the Style panel and Layers (name, visibility, lock, styles). */
+export type NodeMeta = Partial<Pick<BlockNode, 'name' | 'hidden' | 'locked' | 'styles'>>;
+
+export function updateNodeMeta(content: PageContent, id: string, patch: NodeMeta): PageContent {
+  return {
+    root: mapTree(content.root, (n) => {
+      if (n.id !== id) return n;
+      const next: BlockNode = { ...n, ...patch };
+      // Unset fields are removed, so documents stay minimal and diffs readable.
+      for (const k of Object.keys(patch) as (keyof NodeMeta)[]) if (patch[k] === undefined || patch[k] === false || patch[k] === '') delete next[k];
+      return next;
+    }),
+  };
+}

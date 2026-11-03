@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { cookies, draftMode } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { BlockRenderer } from '@canon/ui-blocks';
+import { BlockRenderer, PageStyles } from '@canon/ui-blocks';
 import { FormEnhancer } from '@/components/forms';
 import { Tracker } from '@/components/tracker';
 import { PREVIEW_COOKIE } from '@/lib/preview';
@@ -98,6 +98,7 @@ export default async function SitePage({ params }: { params: Params }) {
         </div>
       </header>
       <main>
+        <PageStyles root={page.content.root} />
         <BlockRenderer
           node={page.content.root}
           ctx={{ media: data.media, facts: data.facts, draft: data.draft, forms: data.forms }}

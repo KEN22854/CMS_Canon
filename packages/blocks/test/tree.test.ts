@@ -13,6 +13,7 @@ import {
   richTextToPlain,
   validatePageContent,
   type BlockNode,
+  MAX_DEPTH,
 } from '../src';
 
 const node = (id: string, type: string, props: Record<string, unknown> = {}, children: BlockNode[] = []): BlockNode => ({ id, type, props, children });
@@ -58,9 +59,13 @@ describe('validatePageContent', () => {
   });
 
   it('limits depth', () => {
-    let leaf = node('n7', 'section');
-    for (let i = 6; i >= 1; i--) leaf = node(`n${i}`, 'section', {}, [leaf]);
-    expect(validatePageContent({ root: leaf }).ok).toBe(false);
+    const nest = (levels: number) => {
+      let leaf = node(`n${levels}`, 'section');
+      for (let i = levels - 1; i >= 1; i--) leaf = node(`n${i}`, 'section', {}, [leaf]);
+      return { root: leaf };
+    };
+    expect(validatePageContent(nest(MAX_DEPTH)).ok).toBe(true);
+    expect(validatePageContent(nest(MAX_DEPTH + 1)).ok).toBe(false);
   });
 });
 

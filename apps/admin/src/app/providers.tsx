@@ -26,7 +26,8 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       {children}
-      <Toaster richColors position="top-right" />
+      {/* Bottom: the top-right corner holds the builder's Publish button. */}
+      <Toaster richColors position="bottom-right" />
     </QueryClientProvider>
   );
 }

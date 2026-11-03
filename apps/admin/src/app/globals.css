@@ -2,51 +2,71 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Canon design tokens (docs/CANON_2/DESIGN_SYSTEM.md). Colours are HSL triplets consumed by
+ * Tailwind as hsl(var(--token) / alpha). Dark is the default; light is a complete theme chosen in
+ * the user menu (html[data-theme]) or by the OS when the user picked "system".
+ */
 @layer base {
-  :root {
+  :root,
+  :root[data-theme='dark'] {
+    --background: 223 24% 6%; /* #0B0D12 */
+    --foreground: 228 33% 97%; /* #F5F6FA */
+    --card: 223 28% 10%; /* surface #121620 */
+    --card-foreground: 228 33% 97%;
+    --muted: 220 26% 13%; /* surface-2 #191F2B */
+    --muted-foreground: 221 15% 63%; /* #929BAE */
+    --secondary: 220 26% 13%;
+    --secondary-foreground: 228 33% 97%;
+    --border: 220 21% 20%; /* #282F3D */
+    --input: 220 19% 24%;
+    --primary: 247 100% 74%; /* #8B7CFF */
+    --primary-foreground: 223 24% 6%; /* dark text keeps AA contrast on the light violet */
+    --ring: 247 100% 74%;
+    --accent: 192 78% 58%; /* #42C8E8 */
+    --accent-foreground: 223 24% 6%;
+    --success: 158 66% 47%; /* #29C58B */
+    --warning: 38 76% 64%; /* #E9B45B */
+    --destructive: 356 81% 68%; /* #EF6B73 */
+    --destructive-foreground: 223 24% 6%;
+    --overlay: 223 24% 3%;
+    --shadow-color: 223 40% 2%;
+    color-scheme: dark;
+  }
+
+  :root[data-theme='light'] {
     --background: 0 0% 100%;
-    --foreground: 224 71% 4%;
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 40%;
-    --card: 0 0% 100%;
-    --card-foreground: 224 71% 4%;
-    --border: 220 13% 91%;
-    --input: 220 13% 86%;
-    --ring: 243 75% 59%;
-    --primary: 243 75% 59%;
+    --foreground: 226 36% 9%; /* #0F1320 */
+    --card: 225 33% 98%; /* #F7F8FB */
+    --card-foreground: 226 36% 9%;
+    --muted: 223 27% 95%; /* #EEF0F5 */
+    --muted-foreground: 220 13% 41%; /* #5B6476 */
+    --secondary: 223 27% 95%;
+    --secondary-foreground: 226 36% 9%;
+    --border: 220 24% 90%; /* #DFE3EB */
+    --input: 220 20% 84%;
+    --primary: 246 70% 59%; /* #5B4BE0: white text passes AA */
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 39% 11%;
-    --destructive: 0 72% 51%;
+    --ring: 246 70% 59%;
+    --accent: 192 80% 38%;
+    --accent-foreground: 0 0% 100%;
+    --success: 158 70% 32%;
+    --warning: 34 80% 40%;
+    --destructive: 356 70% 50%;
     --destructive-foreground: 0 0% 100%;
-    --success: 142 71% 35%;
-    --warning: 38 92% 45%;
-    --radius: 0.5rem;
-    /* System stack: no font download at build or runtime, native rendering per OS. */
-    --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --overlay: 226 36% 9%;
+    --shadow-color: 223 30% 30%;
     color-scheme: light;
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme='light']) {
-      --background: 224 71% 4%;
-      --foreground: 210 20% 98%;
-      --muted: 215 28% 12%;
-      --muted-foreground: 217 10% 65%;
-      --card: 222 47% 7%;
-      --card-foreground: 210 20% 98%;
-      --border: 215 28% 17%;
-      --input: 215 28% 22%;
-      --ring: 243 80% 70%;
-      --primary: 243 80% 66%;
-      --primary-foreground: 0 0% 100%;
-      --secondary: 215 28% 15%;
-      --secondary-foreground: 210 20% 98%;
-      --destructive: 0 63% 52%;
-      --success: 142 60% 45%;
-      --warning: 38 92% 55%;
-      color-scheme: dark;
-    }
+  :root {
+    --radius: 0.625rem;
+    --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.18);
+    --shadow-md: 0 4px 12px -2px hsl(var(--shadow-color) / 0.24), 0 2px 4px -2px hsl(var(--shadow-color) / 0.16);
+    --shadow-lg: 0 16px 40px -8px hsl(var(--shadow-color) / 0.36), 0 4px 10px -4px hsl(var(--shadow-color) / 0.2);
+    /* System stack: no font download at build or runtime, native rendering per OS. */
+    --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Code', Menlo, Consolas, monospace;
   }
 
   * {
@@ -57,5 +77,16 @@
   }
   :focus-visible {
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.3);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

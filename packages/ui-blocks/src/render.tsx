@@ -1,4 +1,4 @@
-import { videoEmbedUrl, type BlockNode, type RichTextDoc } from '@canon/blocks';
+import { compileStyles, videoEmbedUrl, type BlockNode, type RichTextDoc } from '@canon/blocks';
 import type { CSSProperties, ReactNode } from 'react';
 import { FormView, type RenderForm } from './form';
 import { RichText } from './rich-text';
@@ -69,8 +69,14 @@ export function BlockRenderer({
   isRoot?: boolean;
   parent?: BlockNode;
 }): ReactNode {
+  // Hidden blocks never reach the site; the builder keeps them (dimmed) so they can be shown again.
+  if (node.hidden && !ctx.editing) return null;
   const p = node.props as P;
-  const a = ctx.editing ? { 'data-block-id': node.id, 'data-block-type': node.type, ...(CONTAINERS.has(node.type) ? { 'data-block-container': '' } : {}) } : {};
+  const a = {
+    ...(ctx.editing ? { 'data-block-id': node.id, 'data-block-type': node.type, ...(CONTAINERS.has(node.type) ? { 'data-block-container': '' } : {}), ...(node.hidden ? { 'data-hidden': '' } : {}), ...(node.locked ? { 'data-locked': '' } : {}) } : {}),
+    // Target of the compiled node styles (PageStyles); the block's own root element, no wrapper.
+    ...(node.styles ? { 'data-cn': node.id } : {}),
+  };
   const children = () =>
     node.children.length === 0 && ctx.editing ? (
       <EmptyContainer label={node.type === 'row' ? 'Add columns' : isRoot ? 'Drag blocks here, or generate a page with AI' : 'Drop blocks here'} />
@@ -388,4 +394,14 @@ function Placeholder({ a, label, tall = false }: { a: object; label: string; tal
 
 function EmptyContainer({ label }: { label: string }) {
   return <div className="flex min-h-24 items-center justify-center rounded border-2 border-dashed border-current/20 p-6 text-center text-sm opacity-50">{label}</div>;
+}
+
+/**
+ * The compiled responsive styles of every node in the tree, as one <style> element. Values were
+ * whitelisted by the style layer on save and are re-checked by the compiler, and none may contain
+ * '<', so the CSS cannot break out of the element.
+ */
+export function PageStyles({ root }: { root: BlockNode }): ReactNode {
+  const css = compileStyles(root);
+  return css ? <style data-canon-styles="" dangerouslySetInnerHTML={{ __html: css }} /> : null;
 }

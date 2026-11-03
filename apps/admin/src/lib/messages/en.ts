@@ -15,6 +15,11 @@ export const en = {
   'common.loadMore': 'Load more',
   'common.or': 'or',
   'common.language': 'Language',
+  'common.retry': 'Try again',
+  'theme.label': 'Theme: {name}',
+  'theme.dark': 'Dark',
+  'theme.light': 'Light',
+  'theme.system': 'System',
 
   // shell
   'nav.main': 'Main',

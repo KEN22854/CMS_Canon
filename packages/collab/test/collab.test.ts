@@ -108,3 +108,39 @@ describe('concurrent editing', () => {
     expect(draftHash(yDocToDraft(doc)!)).toBe(draftHash(a));
   });
 });
+
+describe('node meta and styles', () => {
+  it('round-trips names, flags and responsive styles, and diffs them', () => {
+    const doc = new Y.Doc();
+    const d0 = draft();
+    d0.content.root.children[0] = { ...d0.content.root.children[0]!, name: 'Main hero', locked: true, styles: { base: { paddingTop: '96px' }, mobileL: { paddingTop: '24px' } } };
+    draftToYDoc(doc, d0);
+    expect(yDocToDraft(doc)).toEqual(d0);
+
+    const d1: CollabDraft = JSON.parse(JSON.stringify(d0));
+    const hero = d1.content.root.children[0]!;
+    delete hero.locked;
+    hero.hidden = true;
+    hero.styles = { base: { paddingTop: '80px', color: '#222222' } }; // mobile override removed
+    applyDraftDiff(doc, d0, d1);
+    expect(yDocToDraft(doc)).toEqual(d1);
+  });
+
+  it('merges two people styling different properties of one block', () => {
+    const base = draft();
+    const a = new Y.Doc();
+    draftToYDoc(a, base);
+    const b = new Y.Doc();
+    Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+    const da: CollabDraft = JSON.parse(JSON.stringify(base));
+    da.content.root.children[0]!.styles = { base: { fontSize: '40px' } };
+    const db: CollabDraft = JSON.parse(JSON.stringify(base));
+    db.content.root.children[0]!.styles = { tablet: { marginTop: '8px' } };
+    applyDraftDiff(a, base, da);
+    applyDraftDiff(b, base, db);
+    Y.applyUpdate(a, Y.encodeStateAsUpdate(b));
+    Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+    expect(yDocToDraft(a)!.content.root.children[0]!.styles).toEqual({ base: { fontSize: '40px' }, tablet: { marginTop: '8px' } });
+    expect(yDocToDraft(b)).toEqual(yDocToDraft(a));
+  });
+});

@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { Bot, Braces, Building2, Globe, Check, ChevronsUpDown, CreditCard, Fingerprint, KeyRound, LayoutDashboard, Loader2, LogOut, Plug, Plus, ScrollText, Shield, Sparkles, Users } from 'lucide-react';
+import { Bot, Braces, Monitor, Moon, Sun, Building2, Globe, Check, ChevronsUpDown, CreditCard, Fingerprint, KeyRound, LayoutDashboard, Loader2, LogOut, Plug, Plus, ScrollText, Shield, Sparkles, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -10,6 +10,7 @@ import { api, errorMessage, refreshSession } from '@/lib/api';
 import { useAbility, useMe } from '@/lib/ability';
 import { useAuth, type AuthPayload } from '@/lib/auth-store';
 import { LOCALES, LOCALE_LABEL, useLocaleStore, useT, type Locale, type MessageKey } from '@/lib/i18n';
+import { NEXT_THEME, useTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import { NotificationBell } from './notification-bell';
 import { Badge } from './ui';
@@ -56,6 +57,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const ability = useAbility();
   const t = useT();
+  // The page builder is a full-bleed workspace with its own toolbar and a way back.
+  if (/^\/sites\/[^/]+\/pages\/[^/]+/.test(pathname)) return <main className="min-w-0">{children}</main>;
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-60 shrink-0 flex-col border-r bg-muted/30 md:flex">
@@ -210,6 +213,9 @@ function UserMenu() {
   const t = useT();
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
+  const theme = useTheme();
+  const ThemeIcon = theme.choice === 'dark' ? Moon : theme.choice === 'light' ? Sun : Monitor;
+  const themeLabel = t('theme.label', { name: t(`theme.${theme.choice}`) });
   const changeLocale = (l: Locale) => {
     setLocale(l);
     // Saved to the profile so other devices follow the choice.
@@ -239,11 +245,14 @@ function UserMenu() {
         className="rounded-md bg-transparent px-1 py-1 text-xs text-muted-foreground hover:bg-muted"
       >
         {LOCALES.map((l) => (
-          <option key={l} value={l}>
-            {LOCALE_LABEL[l]}
+          <option key={l} value={l} title={LOCALE_LABEL[l]}>
+            {l.toUpperCase()}
           </option>
         ))}
       </select>
+      <button type="button" onClick={() => theme.setChoice(NEXT_THEME[theme.choice])} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted" aria-label={themeLabel} title={themeLabel}>
+        <ThemeIcon className="h-4 w-4" />
+      </button>
       <button
         type="button"
         onClick={logout}
