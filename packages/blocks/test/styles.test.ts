@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compileStyles, isValidStyleValue, resolveStyles, setStyle, styleSource, validatePageContent, validateStyles } from '../src';
+import { compileStyles, isValidStyleValue, resolveStyles, setStyle, styleSource, validatePageContent, validateStyles, type ResponsiveStyles } from '../src';
 
 describe('style values', () => {
   it('accepts the grammar of each property', () => {
@@ -78,6 +78,16 @@ describe('compiler', () => {
     expect(css).toContain('@container (max-width: 767px){[data-cn="p"][data-cn]{display:none}}');
     // Unchanged properties are not repeated below.
     expect(css.match(/background-color/g)).toHaveLength(1);
+  });
+
+  it('reuses compiled rules but reflects every new styles object', () => {
+    const a: ResponsiveStyles = { base: { color: '#111111' } };
+    const tree = (s: typeof a) => ({ id: 'root', children: [{ id: 'x', styles: s, children: [] }, { id: 'y', styles: s, children: [] }] });
+    expect(compileStyles(tree(a))).toBe('[data-cn="x"][data-cn]{color:#111111}\n[data-cn="y"][data-cn]{color:#111111}');
+    // Same object, different node id and root position: cache keys keep them apart.
+    expect(compileStyles({ id: 'x', styles: a, children: [] })).toBe('[data-cn="x"][data-cn]{color:#111111}');
+    const b = setStyle(a, 'tablet', 'color', '#222222')!;
+    expect(compileStyles(tree(b))).toContain('@container (max-width: 991px){[data-cn="x"][data-cn]{color:#222222}');
   });
 });
 

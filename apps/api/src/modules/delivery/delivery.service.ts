@@ -1,4 +1,4 @@
-import { collectMediaIds, collectPageFactKeys, type PageContent } from '@canon/blocks';
+import { collectComponentIds, collectMediaIds, collectPageFactKeys, expandComponents, type BlockNode, type PageContent } from '@canon/blocks';
 import { applyBlockPatch, decodeVariantKey, mergePatches, type BlockPatch, type RuntimeConfig } from '@canon/edge';
 import type { Page, Site } from '@canon/db';
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
@@ -29,6 +29,7 @@ const INVALIDATING_EVENTS = [
   'ExperimentChanged',
   'PersonalizationChanged',
   'FormUpdated',
+  'ComponentPublished',
 ];
 
 /**
@@ -165,7 +166,9 @@ export class DeliveryService implements OnModuleInit {
     };
   }
 
-  private async assemble(site: Site, page: Page, content: PageContent, seo: Record<string, unknown>, draft: boolean) {
+  private async assemble(site: Site, page: Page, raw: PageContent, seo: Record<string, unknown>, draft: boolean) {
+    // Global components are expanded first, so their media, facts and forms load like the page's own.
+    const content = await this.withComponents(site.id, raw, draft);
     const mediaIds = collectMediaIds(content);
     const ogId = typeof seo.ogImageMediaId === 'string' ? seo.ogImageMediaId : undefined;
     if (ogId) mediaIds.push(ogId);
@@ -208,6 +211,19 @@ export class DeliveryService implements OnModuleInit {
       facts: Object.fromEntries(factRows.map((f) => [f.key, f.displayValue])),
       forms: Object.fromEntries(formRows.map((f) => [f.id, publicForm(f)])),
     };
+  }
+
+  /** Published component trees for live pages; previews show the working copies. */
+  private async withComponents(siteId: string, content: PageContent, draft: boolean): Promise<PageContent> {
+    const ids = collectComponentIds(content.root);
+    if (!ids.length) return content;
+    const rows = await this.system.siteComponent.findMany({ where: { id: { in: ids }, siteId, deletedAt: null }, select: { id: true, tree: true, publishedTree: true } });
+    const trees: Record<string, BlockNode> = {};
+    for (const r of rows) {
+      const tree = (draft ? r.tree : r.publishedTree) as BlockNode | null;
+      if (tree) trees[r.id] = tree;
+    }
+    return expandComponents(content, trees);
   }
 
   private async site(siteId: string): Promise<Site> {

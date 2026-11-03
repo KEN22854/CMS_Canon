@@ -14,14 +14,17 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - ✅ Style panel: layout, spacing, size, typography, background, border, effects, visibility per breakpoint, "reset override".
 - ✅ Layers: rename, hide, lock, duplicate, delete.
 - ✅ Workspace: full-bleed editor, zoom, five breakpoints, real-width preview with fit.
-- ⬜ Memoised style compilation (35 ms at 3000 nodes today); custom viewport width; rulers and grid guides.
-- ⬜ Multi-select, group/ungroup, copy/paste across pages.
-- ⬜ Typed editor operations log (NODE_INSERT/…) replacing snapshot history.
-- ⬜ Global components (symbols) with overrides.
+- ✅ Memoised style compilation and canvas rendering; browser measurements at 1–3k blocks.
+- ⬜ Custom viewport width; rulers and grid guides.
+- ✅ Multi-select, group/ungroup (Group block), copy/cut/paste across pages.
+- ✅ Typed editor operations (NODE_INSERT/…) shared by builder, API and AI; operation log (History tab).
+- ⬜ Operation-based undo (undo is still snapshot-based with structural sharing).
+- ✅ Global components with per-page overrides, detach, draft/published versions, component builder.
+- ✅ Builder strings in Russian; theme colour chips in the site colours.
 
 ## P1
 
-- ⬜ Block variants and 100+ section presets (Stage 4).
+- 🟡 Section library: 29 layouts × 4 tones, EN/RU copy, searchable palette (Stage 4). Next: more layouts, thumbnails, block variants.
 - ⬜ AI planner → typed operations → diff → approve (Stage 5).
 - ⬜ CMS dynamic pages, table/grid views, bulk actions (Stage 6).
 - ⬜ E-commerce: products, variants, cart, checkout, orders, payment adapters with webhook verification (Stage 7).
@@ -34,7 +37,7 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - ⬜ Themes marketplace (Stage 10).
 - ⬜ Animation studio (Stage 11).
 - ⬜ Heatmaps, funnels (Stage 12).
-- ⬜ Remaining admin screens in Russian; server-side notification i18n.
+- 🟡 Remaining admin screens in Russian (builder done); server-side notification i18n.
 
 ## P3
 

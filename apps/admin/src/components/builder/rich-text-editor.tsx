@@ -9,6 +9,7 @@ import { Bold, Braces, Heading2, Heading3, Italic, Link2, List, ListOrdered, Quo
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { useTenantId } from '@/lib/queries';
+import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { Input } from '../ui';
 
@@ -148,6 +149,7 @@ export function RichTextEditor({ id, value, onChange, readOnly, siteId, facts }:
 }
 
 function Toolbar({ editor, siteId }: { editor: Editor; siteId: string }) {
+  const t = useT();
   const [, force] = useState(0);
   useEffect(() => {
     const update = () => force((n) => n + 1);
@@ -167,23 +169,23 @@ function Toolbar({ editor, siteId }: { editor: Editor; siteId: string }) {
   const c = () => editor.chain().focus();
   const setLink = () => {
     const prev = editor.getAttributes('link').href as string | undefined;
-    const href = window.prompt('Link URL (https://…, /path, mailto:)', prev ?? '');
+    const href = window.prompt(t('rt.linkPrompt'), prev ?? '');
     if (href === null) return;
     if (!href) c().extendMarkRange('link').unsetLink().run();
     else if (/^(https?:|mailto:|tel:|\/|#)/i.test(href)) c().extendMarkRange('link').setLink({ href }).run();
   };
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-b px-1 py-0.5">
-      {btn('Bold', editor.isActive('bold'), () => c().toggleBold().run(), Bold)}
-      {btn('Italic', editor.isActive('italic'), () => c().toggleItalic().run(), Italic)}
-      {btn('Strikethrough', editor.isActive('strike'), () => c().toggleStrike().run(), Strikethrough)}
-      {btn('Link', editor.isActive('link'), setLink, Link2)}
+      {btn(t('rt.bold'), editor.isActive('bold'), () => c().toggleBold().run(), Bold)}
+      {btn(t('rt.italic'), editor.isActive('italic'), () => c().toggleItalic().run(), Italic)}
+      {btn(t('rt.strike'), editor.isActive('strike'), () => c().toggleStrike().run(), Strikethrough)}
+      {btn(t('rt.link'), editor.isActive('link'), setLink, Link2)}
       <span className="mx-1 h-4 w-px bg-border" />
-      {btn('Heading', editor.isActive('heading', { level: 2 }), () => c().toggleHeading({ level: 2 }).run(), Heading2)}
-      {btn('Subheading', editor.isActive('heading', { level: 3 }), () => c().toggleHeading({ level: 3 }).run(), Heading3)}
-      {btn('Bullet list', editor.isActive('bulletList'), () => c().toggleBulletList().run(), List)}
-      {btn('Numbered list', editor.isActive('orderedList'), () => c().toggleOrderedList().run(), ListOrdered)}
-      {btn('Quote', editor.isActive('blockquote'), () => c().toggleBlockquote().run(), Quote)}
+      {btn(t('rt.heading'), editor.isActive('heading', { level: 2 }), () => c().toggleHeading({ level: 2 }).run(), Heading2)}
+      {btn(t('rt.subheading'), editor.isActive('heading', { level: 3 }), () => c().toggleHeading({ level: 3 }).run(), Heading3)}
+      {btn(t('rt.bullets'), editor.isActive('bulletList'), () => c().toggleBulletList().run(), List)}
+      {btn(t('rt.numbers'), editor.isActive('orderedList'), () => c().toggleOrderedList().run(), ListOrdered)}
+      {btn(t('rt.quote'), editor.isActive('blockquote'), () => c().toggleBlockquote().run(), Quote)}
       <span className="mx-1 h-4 w-px bg-border" />
       <FactPicker siteId={siteId} onPick={(key) => c().insertContent({ type: 'factRef', attrs: { factKey: key } }).insertContent(' ').run()} />
     </div>
@@ -201,6 +203,7 @@ export function useFacts(siteId: string, q = '') {
 }
 
 function FactPicker({ siteId, onPick }: { siteId: string; onPick: (key: string) => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const facts = useFacts(siteId, q);
@@ -213,12 +216,12 @@ function FactPicker({ siteId, onPick }: { siteId: string; onPick: (key: string) 
   }, [open]);
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)} className="flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-primary hover:bg-primary/10" title="Insert a Canon fact (always shows its current value)">
-        <Braces className="h-3.5 w-3.5" /> Fact
+      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)} className="flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-primary hover:bg-primary/10" title={t('rt.factTitle')}>
+        <Braces className="h-3.5 w-3.5" /> {t('rt.fact')}
       </button>
       {open && (
         <div className="absolute left-0 z-40 mt-1 w-72 rounded-md border bg-card p-2 shadow-lg">
-          <Input autoFocus placeholder="Search facts (price, plan…)" value={q} onChange={(e) => setQ(e.target.value)} className="h-8 text-xs" />
+          <Input autoFocus placeholder={t('rt.factSearch')} value={q} onChange={(e) => setQ(e.target.value)} className="h-8 text-xs" />
           <ul className="mt-2 max-h-56 overflow-auto">
             {facts.data?.map((f) => (
               <li key={f.key}>
@@ -233,7 +236,7 @@ function FactPicker({ siteId, onPick }: { siteId: string; onPick: (key: string) 
                 </button>
               </li>
             ))}
-            {facts.data?.length === 0 && <li className="px-2 py-3 text-center text-xs text-muted-foreground">No facts found. Facts are managed in the Canon module.</li>}
+            {facts.data?.length === 0 && <li className="px-2 py-3 text-center text-xs text-muted-foreground">{t('rt.factNone')}</li>}
           </ul>
         </div>
       )}

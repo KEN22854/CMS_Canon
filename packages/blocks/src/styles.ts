@@ -260,33 +260,58 @@ interface StyledNode {
 /**
  * CSS for every styled node in the tree. Each breakpoint emits only what changes against the
  * level above, inside `@container (max-width: …)`. The root node is the query container itself,
- * so its own styles are desktop-only.
+ * so its own styles are desktop-only. Pass `isPageRoot = false` to compile one subtree of a page
+ * (the builder keeps one stylesheet per section, so an edit re-parses only that one).
  */
-export function compileStyles(root: StyledNode): string {
+export function compileStyles(root: StyledNode, isPageRoot = true): string {
   const base: string[] = [];
   const byBp = new Map<StyleBreakpoint, string[]>();
   const walk = (n: StyledNode, isRoot: boolean) => {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(n.id)) return;
     if (n.styles) {
-      let prev = declarations(resolveStyles(n.styles, 'base'));
-      if (prev.size) base.push(rule(n.id, prev));
-      if (!isRoot) {
-        for (const bp of BREAKPOINT_IDS.slice(1)) {
-          const cur = declarations(resolveStyles(n.styles, bp));
-          const diff = new Map([...cur].filter(([k, v]) => prev.get(k) !== v));
-          // A property removed at a smaller breakpoint cannot happen (overrides only add), so diff is enough.
-          if (diff.size) (byBp.get(bp) ?? byBp.set(bp, []).get(bp)!).push(rule(n.id, diff));
-          prev = cur;
-        }
-      }
+      const c = compiledNode(n.id, n.styles, isRoot);
+      if (c.base) base.push(c.base);
+      for (const [bp, r] of c.bps) (byBp.get(bp) ?? byBp.set(bp, []).get(bp)!).push(r);
     }
     for (const c of n.children) walk(c, false);
   };
-  walk(root, true);
+  walk(root, isPageRoot);
   const parts = [...base];
   for (const b of STYLE_BREAKPOINTS.slice(1)) {
     const rules = byBp.get(b.id);
     if (rules?.length) parts.push(`@container (max-width: ${b.max}px){${rules.join('')}}`);
   }
   return parts.join('\n');
+}
+
+interface CompiledNode {
+  base: string | null;
+  bps: [StyleBreakpoint, string][];
+}
+
+/**
+ * Rules per styles object. Editor updates are immutable and keep untouched `styles` objects by
+ * identity, so an edit recompiles one node instead of the whole page.
+ */
+const compiled = new WeakMap<ResponsiveStyles, Map<string, CompiledNode>>();
+
+function compiledNode(id: string, styles: ResponsiveStyles, isRoot: boolean): CompiledNode {
+  const key = `${isRoot ? 1 : 0}${id}`;
+  let byKey = compiled.get(styles);
+  const hit = byKey?.get(key);
+  if (hit) return hit;
+  let prev = declarations(resolveStyles(styles, 'base'));
+  const out: CompiledNode = { base: prev.size ? rule(id, prev) : null, bps: [] };
+  if (!isRoot) {
+    for (const bp of BREAKPOINT_IDS.slice(1)) {
+      const cur = declarations(resolveStyles(styles, bp));
+      // A property removed at a smaller breakpoint cannot happen (overrides only add), so diff is enough.
+      const diff = new Map([...cur].filter(([k, v]) => prev.get(k) !== v));
+      if (diff.size) out.bps.push([bp, rule(id, diff)]);
+      prev = cur;
+    }
+  }
+  if (!byKey) compiled.set(styles, (byKey = new Map()));
+  byKey.set(key, out);
+  return out;
 }

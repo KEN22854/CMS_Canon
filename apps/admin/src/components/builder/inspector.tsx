@@ -1,14 +1,17 @@
 'use client';
 
 import { getBlock, type BlockNode, type FieldMeta, type RichTextDoc } from '@canon/blocks';
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Plus, Trash2, Ungroup } from 'lucide-react';
 import { Alert, Button, Input, Label, Select } from '../ui';
 import { AiAssist } from '../editor/ai-assist';
 import { MediaPicker } from '../editor/media-picker';
 import { BlockAiMenu } from './block-ai';
+import { ComponentInspector, MakeComponent } from './component-panel';
+import { useBlockLabels } from './labels';
 import { RichTextEditor } from './rich-text-editor';
 import { useBuilder } from './store';
 import { useForms } from '@/lib/forms';
+import { useT } from '@/lib/i18n';
 
 interface Ctx {
   siteId: string;
@@ -20,17 +23,26 @@ interface Ctx {
 /** Form generated from the block definition's field metadata (the same registry the API validates with). */
 export function Inspector({ node, ...ctx }: { node: BlockNode } & Ctx) {
   const updateProps = useBuilder((s) => s.updateProps);
+  const ungroup = useBuilder((s) => s.ungroup);
+  const L = useBlockLabels();
+  const t = L.t;
   const def = getBlock(node.type);
-  if (!def) return <Alert>“{node.type}” has no editor. Its content is kept as-is.</Alert>;
+  if (!def) return <Alert>{t('inspector.noEditor', { type: node.type })}</Alert>;
+  if (node.type === 'component') return <ComponentInspector node={node} siteId={ctx.siteId} readOnly={ctx.readOnly} />;
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold">{def.name}</p>
-          <p className="text-xs text-muted-foreground">{def.description}</p>
+          <p className="text-sm font-semibold">{L.name(node.type)}</p>
+          <p className="text-xs text-muted-foreground">{L.description(node.type)}</p>
         </div>
         {!ctx.readOnly && <BlockAiMenu id={node.id} siteId={ctx.siteId} pageId={ctx.pageId} variant="inline" />}
       </div>
+      {!ctx.readOnly && node.type === 'group' && node.children.length > 0 && (
+        <Button size="sm" variant="outline" className="w-full" title={t('inspector.ungroupHint')} onClick={() => ungroup(node.id)}>
+          <Ungroup className="h-3.5 w-3.5" /> {t('inspector.ungroup')}
+        </Button>
+      )}
       {Object.entries(def.fields).map(([prop, meta]) => (
         <Field
           key={`${node.id}-${prop}`}
@@ -38,12 +50,16 @@ export function Inspector({ node, ...ctx }: { node: BlockNode } & Ctx) {
           blockId={node.id}
           prop={prop}
           meta={meta}
+          label={L.field(node.type, prop)}
+          itemLabel={(item) => L.item(node.type, prop, item)}
           value={node.props[prop] ?? (def.defaults() as Record<string, unknown>)[prop]}
           ctx={ctx}
           // Typing into one field coalesces into one undo step; switching fields starts a new one.
           onChange={(v) => updateProps(node.id, { [prop]: v }, `${node.id}.${prop}`)}
         />
       ))}
+      {/* Not inside the component builder (pageId ''): components can't nest. */}
+      {!ctx.readOnly && ctx.pageId && node.type !== 'column' && <MakeComponent node={node} siteId={ctx.siteId} />}
     </div>
   );
 }
@@ -53,6 +69,8 @@ function Field({
   blockId,
   prop,
   meta,
+  label: text,
+  itemLabel,
   value,
   ctx,
   onChange,
@@ -61,16 +79,19 @@ function Field({
   blockId: string;
   prop: string;
   meta: FieldMeta;
+  label: string;
+  itemLabel: (item: string) => string;
   value: unknown;
   ctx: Ctx;
   onChange: (v: unknown) => void;
 }) {
   const label = (extra?: React.ReactNode) => (
     <div className="flex min-h-6 items-center justify-between">
-      <Label htmlFor={id}>{meta.label}</Label>
+      <Label htmlFor={id}>{text}</Label>
       {extra}
     </div>
   );
+  const t = useT();
   const ai = (v: string) => (meta.ai && !ctx.readOnly ? <AiAssist value={v} onApply={onChange} siteId={ctx.siteId} pageId={ctx.pageId} /> : undefined);
 
   switch (meta.kind) {
@@ -80,7 +101,7 @@ function Field({
       return (
         <div className="space-y-1.5">
           {label(ai(v))}
-          <Input id={id} value={v} disabled={ctx.readOnly} placeholder={meta.kind === 'url' ? '/contact or https://…' : undefined} onChange={(e) => onChange(e.target.value)} />
+          <Input id={id} value={v} disabled={ctx.readOnly} placeholder={meta.kind === 'url' ? t('inspector.urlPlaceholder') : undefined} onChange={(e) => onChange(e.target.value)} />
         </div>
       );
     }
@@ -99,7 +120,7 @@ function Field({
           {/* Rich text is rewritten server-side leaf by leaf, so formatting and facts survive. */}
           {label(!ctx.readOnly ? <BlockAiMenu id={blockId} siteId={ctx.siteId} pageId={ctx.pageId} variant="inline" fields={[prop]} /> : undefined)}
           <RichTextEditor id={id} value={value as RichTextDoc | undefined} onChange={onChange} readOnly={ctx.readOnly} siteId={ctx.siteId} facts={ctx.facts} />
-          <p className="text-[11px] text-muted-foreground">Insert a Canon fact with “Fact” — it always renders the current value, everywhere.</p>
+          <p className="text-[11px] text-muted-foreground">{t('inspector.factHint')}</p>
         </div>
       );
     case 'select': {
@@ -127,7 +148,7 @@ function Field({
             checked={value !== false}
             onChange={(e) => onChange(e.target.checked)}
           />{' '}
-          {meta.label}
+          {text}
         </label>
       );
     case 'form':
@@ -151,7 +172,7 @@ function Field({
         </div>
       );
     case 'list':
-      return <ListField id={id} meta={meta} value={value} ctx={ctx} onChange={onChange} />;
+      return <ListField id={id} meta={meta} label={text} itemLabel={itemLabel} value={value} ctx={ctx} onChange={onChange} />;
     default:
       return null;
   }
@@ -161,26 +182,31 @@ function Field({
 function ListField({
   id,
   meta,
+  label,
+  itemLabel,
   value,
   ctx,
   onChange,
 }: {
   id: string;
   meta: FieldMeta;
+  label: string;
+  itemLabel: (item: string) => string;
   value: unknown;
   ctx: Ctx;
   onChange: (v: unknown) => void;
 }) {
+  const t = useT();
   const items = (Array.isArray(value) ? value : []) as Record<string, unknown>[];
   const fields = Object.entries(meta.itemFields ?? {});
   const max = meta.maxItems ?? 20;
   const set = (next: Record<string, unknown>[]) => onChange(next);
   // Required item fields can't be empty on save, so new items start with their labels as text.
-  const blank = () => Object.fromEntries(fields.map(([k, f]) => [k, f.label]));
+  const blank = () => Object.fromEntries(fields.map(([k]) => [k, itemLabel(k)]));
   return (
     <fieldset className="space-y-2">
       <legend className="mb-1 flex w-full items-center justify-between text-sm font-medium">
-        {meta.label}
+        {label}
         <span className="text-[11px] font-normal text-muted-foreground">
           {items.length}/{max}
         </span>
@@ -191,19 +217,20 @@ function ListField({
             <span className="text-[11px] font-medium text-muted-foreground">#{i + 1}</span>
             {!ctx.readOnly && (
               <span className="flex gap-0.5">
-                <IconBtn label="Move up" disabled={i === 0} onClick={() => set(swap(items, i, i - 1))}>
+                <IconBtn label={t('inspector.moveUp')} disabled={i === 0} onClick={() => set(swap(items, i, i - 1))}>
                   <ArrowUp className="h-3 w-3" />
                 </IconBtn>
-                <IconBtn label="Move down" disabled={i === items.length - 1} onClick={() => set(swap(items, i, i + 1))}>
+                <IconBtn label={t('inspector.moveDown')} disabled={i === items.length - 1} onClick={() => set(swap(items, i, i + 1))}>
                   <ArrowDown className="h-3 w-3" />
                 </IconBtn>
-                <IconBtn label="Remove" onClick={() => set(items.filter((_, j) => j !== i))}>
+                <IconBtn label={t('inspector.remove')} onClick={() => set(items.filter((_, j) => j !== i))}>
                   <Trash2 className="h-3 w-3" />
                 </IconBtn>
               </span>
             )}
           </div>
           {fields.map(([k, f]) => {
+            const fl = itemLabel(k);
             const v = typeof item[k] === 'string' ? (item[k] as string) : '';
             const fid = `${id}-${i}-${k}`;
             const change = (nv: string) => set(items.map((it, j) => (j === i ? { ...it, [k]: nv } : it)));
@@ -211,7 +238,7 @@ function ListField({
               <div key={k} className="space-y-1">
                 <div className="flex items-center justify-between">
                   <Label htmlFor={fid} className="text-xs">
-                    {f.label}
+                    {fl}
                   </Label>
                   {f.ai && !ctx.readOnly && <AiAssist value={v} onApply={change} siteId={ctx.siteId} pageId={ctx.pageId} />}
                 </div>
@@ -227,7 +254,7 @@ function ListField({
       ))}
       {!ctx.readOnly && items.length < max && (
         <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => set([...items, blank()])}>
-          <Plus className="h-3.5 w-3.5" /> Add
+          <Plus className="h-3.5 w-3.5" /> {t('inspector.add')}
         </Button>
       )}
     </fieldset>
@@ -272,6 +299,7 @@ function FormPicker({
   disabled: boolean;
   onChange: (v: unknown) => void;
 }) {
+  const t = useT();
   const forms = useForms(siteId);
   return (
     <div className="space-y-1">
@@ -282,11 +310,11 @@ function FormPicker({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
-        <option value="">Choose a form…</option>
+        <option value="">{t('inspector.chooseForm')}</option>
         {forms.data?.map((f) => (
           <option key={f.id} value={f.id}>
             {f.name}
-            {f.isActive ? '' : ' (inactive)'}
+            {f.isActive ? '' : t('inspector.inactive')}
           </option>
         ))}
       </Select>
@@ -296,7 +324,7 @@ function FormPicker({
         rel="noreferrer"
         className="text-[11px] text-primary hover:underline"
       >
-        {value ? 'Edit this form' : 'Create a form'}
+        {value ? t('inspector.editForm') : t('inspector.createForm')}
       </a>
     </div>
   );

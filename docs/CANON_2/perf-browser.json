@@ -1,0 +1,54 @@
+{
+  "1000": {
+    "blocks": 1000,
+    "insertMs": 239,
+    "insertLongTasks": {
+      "count": 1,
+      "totalMs": 229,
+      "maxMs": 229
+    },
+    "selectMs": 8,
+    "styleEditMs": 87,
+    "typeMs": 81,
+    "saveMs": 376,
+    "heapMB": 58,
+    "live": {
+      "ttfbMs": 9,
+      "fcpMs": 148,
+      "lcpMs": 148,
+      "cls": 0,
+      "tbtMs": 33,
+      "htmlKB": 69,
+      "htmlDecodedKB": 670,
+      "requests": 11,
+      "jsKB": 140,
+      "domNodes": 1959
+    }
+  },
+  "3000": {
+    "blocks": 3000,
+    "insertMs": 733,
+    "insertLongTasks": {
+      "count": 1,
+      "totalMs": 709,
+      "maxMs": 709
+    },
+    "selectMs": 17,
+    "styleEditMs": 149,
+    "typeMs": 157,
+    "saveMs": 844,
+    "heapMB": 169,
+    "live": {
+      "ttfbMs": 524,
+      "fcpMs": 848,
+      "lcpMs": 848,
+      "cls": 0,
+      "tbtMs": 0,
+      "htmlKB": 191,
+      "htmlDecodedKB": 1996,
+      "requests": 11,
+      "jsKB": 140,
+      "domNodes": 5787
+    }
+  }
+}

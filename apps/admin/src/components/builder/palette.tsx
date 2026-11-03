@@ -1,60 +1,93 @@
 'use client';
 
-import { BLOCKS, getBlock, richTextToPlain, type BlockNode, type RichTextDoc } from '@canon/blocks';
+import { BLOCKS, richTextToPlain, type BlockNode, type RichTextDoc } from '@canon/blocks';
 import { useDraggable } from '@dnd-kit/core';
 import { useQuery } from '@tanstack/react-query';
-import { Sparkles } from 'lucide-react';
+import { Boxes, Search, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { api, errorMessage } from '@/lib/api';
+import { useComponents } from '@/lib/components';
+import { useT, type MessageKey } from '@/lib/i18n';
 import { useTenantId } from '@/lib/queries';
 import { cn, formatUsd } from '@/lib/utils';
 import { Button, Select } from '../ui';
 import { cloneWithIds, newBlock } from '../editor/tree-ops';
+import { useBlockLabels } from './labels';
+import { SectionLibrary } from './sections';
 import { useBuilder, useBuilderStore } from './store';
 
-const CATEGORIES: { id: (typeof BLOCKS)[number]['category']; label: string }[] = [
-  { id: 'layout', label: 'Layout' },
-  { id: 'content', label: 'Content' },
-  { id: 'media', label: 'Media' },
-  { id: 'marketing', label: 'Marketing' },
-  { id: 'navigation', label: 'Navigation' },
-];
+const CATEGORIES: (typeof BLOCKS)[number]['category'][] = ['layout', 'content', 'media', 'marketing', 'navigation'];
+/** Columns only exist inside Columns; component instances come from the site's component list. */
+const HIDDEN = new Set(['column', 'component']);
 
 /** Click inserts next to the selection; drag drops anywhere on the canvas or into the layers list. */
 export function Palette({ siteId, pageId, locale }: { siteId: string; pageId: string; locale: string }) {
   const insert = useBuilder((s) => s.insert);
+  const L = useBlockLabels();
+  const t = L.t;
+  const [q, setQ] = useState('');
+  const needle = q.trim().toLowerCase();
+  const match = (...texts: string[]) => !needle || texts.some((x) => x.toLowerCase().includes(needle));
+  const groups = CATEGORIES.map((c) => ({ c, blocks: BLOCKS.filter((b) => b.category === c && !HIDDEN.has(b.type) && match(L.name(b.type), L.description(b.type), b.name)) })).filter((g) => g.blocks.length);
   return (
     <div className="space-y-5 p-3">
       <GenerateBlock siteId={siteId} pageId={pageId} locale={locale} />
-      {CATEGORIES.map((c) => {
-        const blocks = BLOCKS.filter((b) => b.category === c.id && b.type !== 'column');
-        if (!blocks.length) return null;
-        return (
-          <div key={c.id}>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{c.label}</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {blocks.map((b) => (
-                <PaletteItem key={b.type} type={b.type} name={b.name} description={b.description} onAdd={() => insert(newBlock(b.type))} />
-              ))}
-            </div>
+      <label className="relative block">
+        <Search className="pointer-events-none absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('palette.search')} aria-label={t('palette.search')} className="h-8 w-full rounded-md border border-input bg-background pl-7 pr-2 text-xs" />
+      </label>
+      {groups.map(({ c, blocks }) => (
+        <div key={c}>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t(`palette.${c}` as MessageKey)}</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {blocks.map((b) => (
+              <PaletteItem key={b.type} type={b.type} name={L.name(b.type)} description={L.description(b.type)} onAdd={() => insert(newBlock(b.type))} />
+            ))}
           </div>
-        );
-      })}
+        </div>
+      ))}
+      {pageId && <ComponentList siteId={siteId} filter={match} />}
+      <SectionLibrary locale={locale} filter={match} />
       <PluginBlocks />
+      {needle && !groups.length && <p className="text-center text-xs text-muted-foreground">{t('palette.noMatches', { q })}</p>}
+    </div>
+  );
+}
+
+/** The site's global components: click inserts an instance (one block that renders the component). */
+function ComponentList({ siteId, filter }: { siteId: string; filter: (...texts: string[]) => boolean }) {
+  const t = useT();
+  const insert = useBuilder((s) => s.insert);
+  const list = useComponents(siteId);
+  const items = (list.data ?? []).filter((c) => filter(c.name, c.description ?? ''));
+  if (!items.length) return null;
+  return (
+    <div>
+      <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('palette.components')}</p>
+      <p className="mb-1.5 text-[10px] text-muted-foreground">{t('palette.componentsHint')}</p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {items.map((c) => (
+          <button key={c.id} type="button" title={c.description ?? c.name} onClick={() => insert({ ...newBlock('component'), props: { componentId: c.id, overrides: {} } })} className="flex items-center gap-1.5 rounded-md border border-accent/40 bg-card px-2 py-2 text-left text-xs font-medium hover:border-accent hover:text-accent">
+            <Boxes className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{c.name}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
 /** Presets from installed plugins: subtrees of built-in blocks, inserted with fresh ids. */
 function PluginBlocks() {
+  const t = useT();
   const tid = useTenantId();
   const insert = useBuilder((s) => s.insert);
   const presets = useQuery({ queryKey: ['plugin-blocks', tid], queryFn: () => api<{ key: string; name: string; description: string; plugin: string; pluginName: string; tree: BlockNode }[]>('/plugins/blocks'), enabled: Boolean(tid), staleTime: 60_000 });
   if (!presets.data?.length) return null;
   return (
     <div>
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">From plugins</p>
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('palette.fromPlugins')}</p>
       <div className="grid grid-cols-2 gap-1.5">
         {presets.data.map((p) => (
           <button key={`${p.pluginName}:${p.key}`} type="button" title={`${p.description} — ${p.plugin}`} onClick={() => insert(cloneWithIds(p.tree))} className="rounded-md border border-dashed bg-card px-2 py-2 text-left text-xs font-medium hover:border-primary hover:text-primary">
@@ -85,6 +118,8 @@ function PaletteItem({ type, name, description, onAdd }: { type: string; name: s
 
 function GenerateBlock({ siteId, pageId, locale }: { siteId: string; pageId: string; locale: string }) {
   const store = useBuilderStore();
+  const L = useBlockLabels();
+  const t = L.t;
   const [open, setOpen] = useState(false);
   const [brief, setBrief] = useState('');
   const [type, setType] = useState('');
@@ -98,7 +133,7 @@ function GenerateBlock({ siteId, pageId, locale }: { siteId: string; pageId: str
         body: { brief, type: type || undefined, locale, outline: outlineOf(root.children), pageId },
       });
       store.getState().insert(cloneWithIds(res.block));
-      toast.success(`Added ${getBlock(res.block.type)?.name ?? res.block.type} · ${formatUsd(res.ai.costUsd)}`, { action: { label: 'Undo', onClick: () => store.temporal.getState().undo() } });
+      toast.success(t('palette.added', { name: L.name(res.block.type), cost: formatUsd(res.ai.costUsd) }), { action: { label: t('builder.undoAction'), onClick: () => store.temporal.getState().undo() } });
       setBrief('');
       setOpen(false);
     } catch (err) {
@@ -111,7 +146,7 @@ function GenerateBlock({ siteId, pageId, locale }: { siteId: string; pageId: str
   if (!open) {
     return (
       <Button size="sm" variant="outline" className="w-full" onClick={() => setOpen(true)}>
-        <Sparkles className="h-3.5 w-3.5 text-primary" /> Generate a block
+        <Sparkles className="h-3.5 w-3.5 text-primary" /> {t('palette.generateBlock')}
       </Button>
     );
   }
@@ -124,24 +159,24 @@ function GenerateBlock({ siteId, pageId, locale }: { siteId: string; pageId: str
         maxLength={2000}
         onChange={(e) => setBrief(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && brief.trim().length >= 3 && void generate()}
-        placeholder="e.g. Three reasons teams switch to us"
-        aria-label="Describe the block"
+        placeholder={t('palette.blockBrief')}
+        aria-label={t('palette.describeBlock')}
         className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm"
       />
-      <Select aria-label="Block type" value={type} onChange={(e) => setType(e.target.value)} className="h-8 w-full text-xs">
-        <option value="">Any block type</option>
-        {BLOCKS.filter((b) => b.type !== 'column' && b.type !== 'spacer' && b.type !== 'divider').map((b) => (
+      <Select aria-label={t('palette.blockType')} value={type} onChange={(e) => setType(e.target.value)} className="h-8 w-full text-xs">
+        <option value="">{t('palette.anyType')}</option>
+        {BLOCKS.filter((b) => !HIDDEN.has(b.type) && b.type !== 'spacer' && b.type !== 'divider' && b.type !== 'group').map((b) => (
           <option key={b.type} value={b.type}>
-            {b.name}
+            {L.name(b.type)}
           </option>
         ))}
       </Select>
       <div className="flex justify-end gap-1">
         <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <Button size="sm" loading={busy} disabled={brief.trim().length < 3} onClick={() => void generate()}>
-          Generate
+          {t('palette.generate')}
         </Button>
       </div>
     </div>

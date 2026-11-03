@@ -12,6 +12,7 @@ import { api, download, errorMessage } from '@/lib/api';
 import { entriesPath, qualityTone, useCollection, useEntries, type EntryDetail, type EntryQuery } from '@/lib/collections';
 import { STATUS_STYLE, useSite } from '@/lib/content';
 import { useTenantId } from '@/lib/queries';
+import { useT } from '@/lib/i18n';
 import { cn, relativeTime } from '@/lib/utils';
 
 const PAGE = 25;
@@ -27,6 +28,7 @@ interface ImportReport {
 }
 
 export default function CollectionEntries() {
+  const t = useT();
   const { siteId, collectionId } = useParams<{ siteId: string; collectionId: string }>();
   const router = useRouter();
   const qc = useQueryClient();
@@ -175,7 +177,7 @@ export default function CollectionEntries() {
                   <p className="truncate text-xs text-muted-foreground">{e.summary ?? `/${e.slug}`}</p>
                 </td>
                 <td className="px-3 py-2">
-                  <Badge className={STATUS_STYLE[e.status]}>{e.status.toLowerCase()}</Badge>
+                  <Badge className={STATUS_STYLE[e.status]}>{t(`status.${e.status}`)}</Badge>
                   {e.hasUnpublishedChanges && <Badge className="ml-1 border-warning/40 text-warning">changes</Badge>}
                   {(site.data?.locales.length ?? 0) > 1 && <span className="ml-1 text-xs uppercase text-muted-foreground">{e.locale}</span>}
                 </td>

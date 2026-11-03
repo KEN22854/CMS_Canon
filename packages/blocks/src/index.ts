@@ -3,3 +3,6 @@ export * from './definitions';
 export * from './tree';
 export * from './catalog';
 export * from './styles';
+export * from './edit';
+export * from './components';
+export * from './sections';

@@ -57,8 +57,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const ability = useAbility();
   const t = useT();
-  // The page builder is a full-bleed workspace with its own toolbar and a way back.
-  if (/^\/sites\/[^/]+\/pages\/[^/]+/.test(pathname)) return <main className="min-w-0">{children}</main>;
+  // The page and component builders are full-bleed workspaces with their own toolbar and a way back.
+  if (/^\/sites\/[^/]+\/(pages|components)\/[^/]+/.test(pathname)) return <main className="min-w-0">{children}</main>;
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-60 shrink-0 flex-col border-r bg-muted/30 md:flex">

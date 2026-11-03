@@ -1,4 +1,4 @@
-# Canon 2.0 — visual report (Stages 1–2)
+# Canon 2.0 — visual report
 
 ## Builder: before → after
 
@@ -44,3 +44,43 @@ Rename (double click), hide, lock, duplicate, delete, drag; styled blocks are ma
 Canon palette as tokens (background #0B0D12, surface #121620, accent #8B7CFF / #42C8E8), a full
 light theme, theme toggle in the user menu, shadow and radius scales, Skeleton and EmptyState
 primitives. See [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
+
+---
+
+# Iteration 2 — editing model, components, sections
+
+## Section library
+
+| Palette | On the page |
+|---|---|
+| ![sections palette](screenshots/after/builder/builder-sections-palette-1440.png) | ![sections inserted](screenshots/after/builder/builder-sections-inserted-1440.png) |
+
+Search across blocks and sections; 29 layouts in ten categories, each in four tones (light, soft,
+dark, brand). Inserted sections are ordinary blocks: the pricing cards are Groups with styles.
+
+## Multi-select, groups, operation log
+
+| Multi-selection | History |
+|---|---|
+| ![multi-select](screenshots/after/builder/builder-multiselect-1440.png) | ![history](screenshots/after/builder/builder-history-1440.png) |
+
+Ctrl/Shift+click selects several blocks; the toolbar sits above the whole selection (group,
+duplicate, delete). Every edit appears in History as a typed operation.
+
+## Global components
+
+| Instance and overrides | Component builder |
+|---|---|
+| ![instance](screenshots/after/builder/builder-component-instance-1440.png) | ![component editor](screenshots/after/builder/builder-component-editor-1440.png) |
+
+A header became a component: the inspector shows its live version, "Edit component", "Detach"
+and per-page overrides of its texts and links. The component opens in its own builder with
+draft/live status and a publish button. Site → Components lists them:
+
+![components list](screenshots/after/cms/components-list-1440.png)
+
+## Russian and theme colours
+
+| Builder in Russian | Theme chips in the site colours |
+|---|---|
+| ![ru](screenshots/after/builder/builder-ru-1440.png) | ![chips](screenshots/after/builder/builder-style-theme-chips-1440.png) |

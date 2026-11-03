@@ -5,43 +5,66 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit (incl. 7 new style-layer tests: grammar, injection, inheritance, compiler, document validation) | 23 / 23 ✅ |
-| `@canon/collab` unit (incl. 2 new: styles round-trip, concurrent style merge) | 8 / 8 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations and global components (9), section library (4), tree (16) | 37 / 37 ✅ |
+| `@canon/collab` unit | 8 / 8 ✅ |
 | fields · ai-gateway · edge · sdk | 19 · 30 · 8 · 4 ✅ |
-| admin unit | 7 / 7 ✅ |
+| admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap (4) | 11 / 11 ✅ |
 | API unit | 56 / 56 ✅ |
-| API integration (real Postgres/Redis/S3) | 139 / 139 ✅ |
-| Playwright E2E | 14 / 14 ✅ (+1 opt-in screenshot spec) |
+| API integration (real Postgres/Redis/S3) incl. 2 new for global components | 141 / 141 ✅ |
+| Playwright E2E | 17 / 17 ✅ (+4 opt-in: 2 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ |
 
-Total automated tests: **308**.
+Total automated tests: **331** (308 in the previous iteration).
 
-## New E2E scenarios (Builder 2.0)
+## New scenarios in this iteration
 
-`apps/admin/e2e/builder2.spec.ts`
+`apps/admin/e2e/builder3.spec.ts`
 
-1. Select the hero → Style → padding 96 px on Desktop → canvas shows 96 px. Switch to Mobile L →
-   the field shows the inherited 96 px as a hint → set 24 px → canvas 24 px. Back to Desktop →
-   still 96 px. An injection attempt (`96px;color:red`) is flagged invalid and not applied.
-   Rename the hero in Layers, hide the second section, save, **reload**: styles, name and
-   visibility come back. Publish: the live page HTML contains the compiled CSS
-   (`padding-top:96px`, the `@container (max-width: 767px)` override) and no hidden section.
-2. Zoom out/in/reset on the bottom bar; Desktop renders at 1280 px scaled to fit, Mobile S at
-   375 px at 100 %. Lock a block: Delete key and the Delete button do nothing; unlock → delete works.
+1. **Sections, multi-select, groups, clipboard, history.** Insert "Pricing · three plans" in the
+   dark tone. Ctrl+click two sections and press Ctrl+G → the builder explains that sections can't be
+   grouped. Ctrl+click the pricing title and subtitle → Ctrl+G groups them; Ctrl+C / Ctrl+V pastes
+   a copy right after; Ctrl+Shift+G ungroups it. The History tab lists `NODE_INSERT`, `NODE_GROUP`,
+   `NODE_UNGROUP`; Ctrl+Z undoes one step. Typing "48" digit by digit into Padding top gives
+   `padding-top:48px`. Ctrl+S → the server accepts the page.
+2. **Global components.** Insert a header section → "Make a component" → the block becomes an
+   instance. Override the brand text on this page → a second instance from the palette keeps the
+   original. Publish → the live HTML contains both. The component opens in its own builder; the
+   site's component list shows it.
+3. **Russian builder.** With the interface in Russian: canvas, tabs, the section library, the Style
+   panel ("Редактируется: Десктоп", "Внутренний сверху") are translated.
 
-## Bugs found and fixed by the tests
+`apps/api/test/integration/components.test.ts`
 
-- **Responsive preview was wrong on Desktop**: the desktop frame filled the workspace (~740 px), so
-  container queries applied the mobile overrides on "Desktop". Every breakpoint now renders at its
-  real CSS width and the frame scales to fit.
-- **Styles were lost on save**: the Yjs co-editing layer only carried `type/props/children`. It now
-  carries names, flags and styles (one Yjs key per breakpoint+property, so concurrent style edits
-  on one block merge).
-- **Error toasts covered the Publish button** and paused while hovered, so the button became
-  unreachable. Toasts moved to the bottom-right.
+1. Two instances (one with styles, one with an override) on a published page: before the
+   component is published they render nothing; after publishing, delivery expands them with unique
+   ids, the instance styles and the override. Editing the working copy doesn't change the live
+   page until it is published again; a stale version is refused (409); a preview shows the working
+   copy; deleting the component removes the instances from the live page.
+2. Invalid props, a component inside a component and a CSS-injection style are refused (400);
+   a viewer can read but not edit or publish (403); another workspace gets 404 (RLS).
+
+Unit tests (`packages/blocks/test/edit.test.ts`, `sections.test.ts`) cover every operation type,
+locked blocks, nesting rules, structural sharing, instance expansion, override validation, and
+every section layout × tone × language passing server validation.
+
+## Bugs found and fixed by the tests in this iteration
+
+- **Bare numbers in style fields were mangled while typing**: typing "77" produced "7px7", because
+  the field was rewritten to the stored "7px" after the first keystroke. (Found by the browser
+  performance run; the earlier E2E filled values in one go.)
+- **Undo merged several operations in co-editing mode**: `Y.UndoManager` joined every edit made
+  within 800 ms, so grouping, pasting and ungrouping in quick succession were undone together with
+  the section insert before them. Each new operation now closes the capture group; typing into one
+  field still merges.
+- **Ctrl+S during an autosave did nothing** (no save, no message). Saves now queue behind the one in
+  flight and use the version it produced.
+- **The builder let a page grow past the 3 000-block cap** and then failed on every save. Inserts
+  and duplicates beyond the cap are refused in the editor with an explanation.
+- **Duplicating a block dropped its name, styles and flags** (the copy helper only copied props).
+- **Grouping that wasn't allowed failed silently**; it now says why.
 
 ## Not covered yet
 
-- Editor performance at 1000–3000 nodes in the browser, Lighthouse of published pages.
-- Visual regression (screenshots are captured but not diffed automatically).
+- Visual regression (screenshots are captured, not diffed).
+- Lighthouse with mobile throttling (see PERFORMANCE_REPORT.md).

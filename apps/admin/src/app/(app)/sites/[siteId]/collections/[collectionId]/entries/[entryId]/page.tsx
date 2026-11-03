@@ -17,7 +17,7 @@ import { ApiError, api, errorMessage } from '@/lib/api';
 import { entriesPath, qualityTone, useCollection, useEntry, type Collection, type DuplicateHit, type EntryDetail } from '@/lib/collections';
 import { STATUS_STYLE } from '@/lib/content';
 import { useTenantId } from '@/lib/queries';
-import { translate, currentLocale } from '@/lib/i18n';
+import { translate, currentLocale, useT } from '@/lib/i18n';
 import { cn, formatUsd, relativeTime } from '@/lib/utils';
 
 const AUTOSAVE_MS = 5_000;
@@ -38,6 +38,7 @@ export default function EntryPage() {
 type Issues = Record<string, string>;
 
 function EntryEditor({ c, initial, siteId }: { c: Collection; initial: EntryDetail; siteId: string }) {
+  const t = useT();
   const router = useRouter();
   const qc = useQueryClient();
   const tid = useTenantId();
@@ -207,7 +208,7 @@ function EntryEditor({ c, initial, siteId }: { c: Collection; initial: EntryDeta
           <p className="truncate text-lg font-semibold">{server.title || 'Untitled'}</p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>{c.name}</span>·<span className="uppercase">{server.locale}</span>
-            <Badge className={STATUS_STYLE[server.status]}>{server.status.toLowerCase()}</Badge>
+            <Badge className={STATUS_STYLE[server.status]}>{t(`status.${server.status}`)}</Badge>
             {server.hasUnpublishedChanges && <Badge className="border-warning/40 text-warning">unpublished changes</Badge>}
             <span aria-live="polite">{dirty ? 'Unsaved…' : `Saved · v${server.version}`}</span>
           </div>

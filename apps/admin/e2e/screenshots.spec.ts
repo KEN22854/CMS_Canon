@@ -106,3 +106,65 @@ test('capture the main screens', async ({ page }) => {
     await shot(page, file);
   }
 });
+
+test('capture Builder 2.0 iteration 2: sections, multi-select, history, components, Russian', async ({ page }) => {
+  await signUp(page, { workspace: 'Northwind Studio' });
+  const { siteId } = await createSite(page, 'Northwind');
+  const site = `/sites/${siteId}`;
+  await page.goto(`${site}/pages`);
+  await page.getByRole('link', { name: 'Home' }).first().click();
+  await expect(page.getByRole('application', { name: 'Page canvas' })).toBeVisible();
+
+  // Section library in the palette, then a pricing section in the brand tone on the page.
+  await page.getByRole('radio', { name: 'Brand colour' }).click();
+  await shot(page, join('builder', 'builder-sections-palette-1440.png'));
+  await page.getByRole('button', { name: 'Pricing · three plans' }).click();
+  await page.getByRole('radio', { name: 'Light' }).click();
+  await page.getByRole('button', { name: 'Testimonials · grid' }).click();
+  await page.getByText('Simple, transparent pricing').scrollIntoViewIfNeeded();
+  await shot(page, join('builder', 'builder-sections-inserted-1440.png'));
+
+  // Multi-select two blocks inside the pricing section: the multi toolbar.
+  await page.getByRole('button', { name: /^layers$/i }).click();
+  const pricing = page.locator('[role="tree"] > [role="treeitem"][aria-label="Pricing"]');
+  const rows = pricing.locator(':scope > [role="treeitem"] > [data-layer-id]');
+  await rows.nth(0).click();
+  await rows.nth(1).click({ modifiers: ['Control'] });
+  await shot(page, join('builder', 'builder-multiselect-1440.png'));
+  await page.keyboard.press('Control+g');
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await shot(page, join('builder', 'builder-history-1440.png'));
+
+  // Style panel: theme chips in the site's own colours.
+  await page.locator('[data-block-type="heading"]').first().click();
+  await page.getByRole('button', { name: 'Style', exact: true }).click();
+  await page.getByRole('group', { name: 'Theme colours' }).first().scrollIntoViewIfNeeded({ timeout: 10_000 });
+  await shot(page, join('builder', 'builder-style-theme-chips-1440.png'));
+
+  // A header becomes a global component with a page-level override.
+  await page.getByRole('button', { name: 'Blocks', exact: true }).click();
+  await page.getByRole('button', { name: 'Header · navigation' }).click();
+  await page.getByRole('button', { name: 'Block', exact: true }).click();
+  await page.getByRole('button', { name: 'Make a component' }).click();
+  await page.getByLabel('Component name').fill('Site header');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.getByText('Instance of “Site header”')).toBeVisible();
+  await page.getByLabel(/Heading · Text/).first().fill('Northwind');
+  await shot(page, join('builder', 'builder-component-instance-1440.png'));
+  await page.keyboard.press('Control+s');
+  await page.getByRole('link', { name: 'Edit component' }).click();
+  await expect(page.getByLabel('Component name')).toHaveValue('Site header');
+  await shot(page, join('builder', 'builder-component-editor-1440.png'));
+  await page.goto(`${site}/components`);
+  await expect(page.getByText('Site header')).toBeVisible();
+  await shot(page, join('cms', 'components-list-1440.png'));
+
+  // The builder in Russian.
+  await page.evaluate(() => window.localStorage.setItem('canon.locale', 'ru'));
+  await page.goto(`${site}/pages`);
+  await page.getByRole('link', { name: /Home|Главная/ }).first().click();
+  await expect(page.getByRole('application', { name: 'Холст страницы' })).toBeVisible();
+  await page.locator('[data-block-type="hero"]').first().click({ position: { x: 10, y: 10 } });
+  await page.getByRole('button', { name: 'Стиль', exact: true }).click();
+  await shot(page, join('builder', 'builder-ru-1440.png'));
+});

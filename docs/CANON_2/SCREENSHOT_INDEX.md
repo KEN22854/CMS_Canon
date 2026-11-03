@@ -35,6 +35,17 @@ Stages 1–2 (design system, Builder 2.0 foundation).
 | after/analytics/* | 1 | 1440 | Analytics, A/B testing, audiences |
 | after/marketplace/integrations.png | 1 | 1440 | Plugin marketplace |
 | after/settings/* | 1 | 1440 | Team, site settings, billing, notifications |
+| after/builder/builder-sections-palette-1440.png | 4 | 1440 | Palette with search and the section library (tone picker) |
+| after/builder/builder-sections-inserted-1440.png | 4 | 1440 | Pricing (brand tone) and testimonials (light) sections on the page |
+| after/builder/builder-multiselect-1440.png | 2–3 | 1440 | Two blocks selected (Ctrl+click in Layers), multi-selection toolbar |
+| after/builder/builder-history-1440.png | 3 | 1440 | History tab: the typed operation log after grouping |
+| after/builder/builder-style-theme-chips-1440.png | 2 | 1440 | Style panel colour field with theme chips in the site colours |
+| after/builder/builder-component-instance-1440.png | 3 | 1440 | A header turned into a global component; instance inspector with overrides |
+| after/builder/builder-component-editor-1440.png | 3 | 1440 | The component builder (draft vs live version, publish) |
+| after/cms/components-list-1440.png | 3 | 1440 | Site → Components list |
+| after/builder/builder-ru-1440.png | 2 | 1440 | The builder in Russian: palette, tabs, Style panel |
+
+Recapture iteration 2 only: add `-g "iteration 2"` to the command above.
 
 Screens from the brief that do not exist yet (E-commerce, CRM, automation, SEO manager, theme
 marketplace, animation studio, AI website builder chat, AI inspector) have no screenshots: they will

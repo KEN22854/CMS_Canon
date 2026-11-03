@@ -85,3 +85,66 @@ describe('builder store', () => {
     expect(s.temporal.getState().pastStates).toHaveLength(0);
   });
 });
+
+describe('Builder 2.0 store: selection, clipboard, groups, operation log', () => {
+  it('multi-selects, groups siblings and ungroups them', () => {
+    const s = createBuilderStore(draft({ root: n('root', 'section', [n('a', 'heading', [], { text: 'A', level: 2 }), n('b', 'heading', [], { text: 'B', level: 2 }), n('c', 'heading', [], { text: 'C', level: 2 })]) }));
+    const st = () => s.getState();
+    st().select('a');
+    st().toggleSelect('c');
+    expect(st().selectedIds).toEqual(['a', 'c']);
+    expect(st().selectedId).toBe('c');
+    st().group();
+    const g = st().draft.content.root.children.find((x) => x.type === 'group')!;
+    expect(g.children.map((x) => x.id)).toEqual(['a', 'c']);
+    expect(st().selectedIds).toEqual([g.id]);
+    st().ungroup(g.id);
+    expect(st().draft.content.root.children.map((x) => x.id)).toEqual(['a', 'c', 'b']);
+    expect(st().opLog.map((e) => e.op)).toEqual(['NODE_GROUP', 'NODE_UNGROUP']);
+  });
+
+  it('copies, pastes with new ids and deletes the whole selection', () => {
+    const s = createBuilderStore(draft());
+    const st = () => s.getState();
+    st().select('hero');
+    st().toggleSelect('band');
+    expect(st().copy()).toBe(2);
+    st().select('row');
+    expect(st().paste()).toBe(2);
+    const ids = st().draft.content.root.children.map((x) => x.id);
+    expect(ids).toHaveLength(5);
+    expect(ids.slice(0, 3)).toEqual(['hero', 'band', 'row']);
+    expect(ids.slice(3)).not.toContain('hero'); // fresh ids
+    st().removeSelection();
+    expect(st().draft.content.root.children.map((x) => x.id)).toEqual(['hero', 'band', 'row']);
+    // One undo step per operation.
+    s.temporal.getState().undo();
+    expect(st().draft.content.root.children).toHaveLength(5);
+  });
+
+  it('logs typed operations and coalesces typing into one entry', () => {
+    vi.useFakeTimers();
+    const s = createBuilderStore(draft());
+    s.getState().updateProps('h', { text: 'Ab' }, 'h.text');
+    s.getState().updateProps('h', { text: 'Abc' }, 'h.text');
+    vi.advanceTimersByTime(2_000);
+    s.getState().updateNode('h', { hidden: true });
+    expect(s.getState().opLog.map((e) => [e.op, e.label])).toEqual([
+      ['PROPS_UPDATE', 'Edit Heading: text'],
+      ['NODE_META', 'Hide Heading'],
+    ]);
+    vi.useRealTimers();
+  });
+
+  it('refuses inserts past the server cap instead of failing on save', () => {
+    const many = Array.from({ length: 2998 }, (_, i) => n(`h${i}`, 'heading', [], { text: 'x', level: 2 }));
+    const s = createBuilderStore(draft({ root: n('root', 'section', many) }));
+    s.getState().select('h0');
+    expect(s.getState().copy()).toBe(1);
+    expect(s.getState().paste()).toBe(1); // 3 000 blocks with the root: still fine
+    expect(s.getState().paste()).toBe(0);
+    expect(s.getState().limitHit).not.toBeNull();
+    s.getState().duplicate('h1');
+    expect(s.getState().draft.content.root.children).toHaveLength(2999);
+  });
+});

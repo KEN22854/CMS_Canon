@@ -11,6 +11,7 @@ import { Badge, Button, Card, CardContent, Input, Label, Select } from '@/compon
 import { useAbility } from '@/lib/ability';
 import { api, errorMessage } from '@/lib/api';
 import { STATUS_STYLE, usePages, useSite, type PageDetail, type PageSummary } from '@/lib/content';
+import { useT } from '@/lib/i18n';
 import { useTenantId } from '@/lib/queries';
 import { relativeTime } from '@/lib/utils';
 
@@ -24,6 +25,7 @@ const slugify = (s: string) =>
     .slice(0, 80);
 
 export default function PagesList() {
+  const t = useT();
   const { siteId } = useParams<{ siteId: string }>();
   const site = useSite(siteId);
   const pages = usePages(siteId);
@@ -181,7 +183,7 @@ export default function PagesList() {
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex flex-wrap gap-1">
-                        <Badge className={STATUS_STYLE[p.status]}>{p.status.toLowerCase()}</Badge>
+                        <Badge className={STATUS_STYLE[p.status]}>{t(`status.${p.status}`)}</Badge>
                         {p.hasUnpublishedChanges && <Badge className="border-warning/40 text-warning">changes</Badge>}
                       </div>
                     </td>

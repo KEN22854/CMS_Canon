@@ -1,5 +1,5 @@
-import { compileStyles, videoEmbedUrl, type BlockNode, type RichTextDoc } from '@canon/blocks';
-import type { CSSProperties, ReactNode } from 'react';
+import { compileStyles, expandInstance, videoEmbedUrl, type BlockNode, type RichTextDoc } from '@canon/blocks';
+import type { ComponentType, CSSProperties, ReactNode } from 'react';
 import { FormView, type RenderForm } from './form';
 import { RichText } from './rich-text';
 
@@ -34,7 +34,41 @@ export interface RenderContext {
   editing?: boolean;
   /** Forms embedded on the page (public definitions, keyed by id). */
   forms?: Record<string, RenderForm>;
+  /**
+   * Global component trees by id. Delivery expands components before rendering, so only the
+   * builder passes these (working copies), to draw instances in place.
+   */
+  components?: Record<string, BlockNode>;
+  /** Placeholder texts shown in drafts and the builder, in the editor's language (English otherwise). */
+  labels?: Partial<RenderLabels>;
+  /**
+   * Renders child blocks. The builder passes a memoised BlockRenderer, so an edit re-renders only
+   * the path to the changed block (untouched subtrees keep their identity); the site renders plainly.
+   */
+  Child?: ComponentType<BlockRendererProps>;
 }
+
+export interface BlockRendererProps {
+  node: BlockNode;
+  ctx: RenderContext;
+  isRoot?: boolean;
+  parent?: BlockNode;
+}
+
+export const DEFAULT_RENDER_LABELS = {
+  addColumns: 'Add columns',
+  emptyPage: 'Drag blocks here, or generate a page with AI',
+  dropHere: 'Drop blocks here',
+  componentDeleted: 'This component was deleted',
+  chooseComponent: 'Choose a component',
+  chooseImage: 'Choose an image',
+  pasteVideo: 'Paste a YouTube or Vimeo link',
+  formMissing: 'This form is inactive or was deleted',
+  chooseForm: 'Choose a form in the inspector',
+  noRenderer: 'Block “{type}” has no renderer yet',
+};
+export type RenderLabels = typeof DEFAULT_RENDER_LABELS;
+const label = (ctx: RenderContext, k: keyof RenderLabels) => ctx.labels?.[k] ?? DEFAULT_RENDER_LABELS[k];
 
 type P = Record<string, unknown>;
 const str = (v: unknown, d = '') => (typeof v === 'string' ? v : d);
@@ -56,19 +90,17 @@ const STATS_COLS: Record<number, string> = { 1: '', 2: '@xl:grid-cols-2', 3: '@x
 const FEATURE_COLS: Record<number, string> = { 2: '@2xl:grid-cols-2', 3: '@2xl:grid-cols-2 @4xl:grid-cols-3', 4: '@2xl:grid-cols-2 @5xl:grid-cols-4' };
 const TONE: Record<string, string> = { primary: 'bg-site-primary text-white', muted: 'bg-site-muted text-site-fg', dark: 'bg-site-fg text-site-bg' };
 
-const CONTAINERS = new Set(['section', 'row', 'column']);
+const CONTAINERS = new Set(['section', 'row', 'column', 'group']);
+const GROUP_LAYOUT: Record<string, string> = { stack: 'flex flex-col', row: 'flex flex-row flex-wrap', grid: 'grid' };
+const GROUP_GAP: Record<string, string> = { none: 'gap-0', sm: 'gap-3', md: 'gap-6', lg: 'gap-10' };
+const GROUP_ALIGN: Record<string, string> = { start: 'items-start', center: 'items-center', end: 'items-end', stretch: 'items-stretch' };
 
 export function BlockRenderer({
   node,
   ctx,
   isRoot = false,
   parent,
-}: {
-  node: BlockNode;
-  ctx: RenderContext;
-  isRoot?: boolean;
-  parent?: BlockNode;
-}): ReactNode {
+}: BlockRendererProps): ReactNode {
   // Hidden blocks never reach the site; the builder keeps them (dimmed) so they can be shown again.
   if (node.hidden && !ctx.editing) return null;
   const p = node.props as P;
@@ -79,9 +111,9 @@ export function BlockRenderer({
   };
   const children = () =>
     node.children.length === 0 && ctx.editing ? (
-      <EmptyContainer label={node.type === 'row' ? 'Add columns' : isRoot ? 'Drag blocks here, or generate a page with AI' : 'Drop blocks here'} />
+      <EmptyContainer label={label(ctx, node.type === 'row' ? 'addColumns' : isRoot ? 'emptyPage' : 'dropHere')} />
     ) : (
-      node.children.map((c) => <BlockRenderer key={c.id} node={c} ctx={ctx} parent={node} />)
+      node.children.map((c) => (ctx.Child ? <ctx.Child key={c.id} node={c} ctx={ctx} parent={node} /> : <BlockRenderer key={c.id} node={c} ctx={ctx} parent={node} />))
     );
 
   switch (node.type) {
@@ -109,6 +141,30 @@ export function BlockRenderer({
       return (
         <div {...a} style={width ? ({ '--col': width } as CSSProperties) : undefined} className={`min-w-0 space-y-6 [&>*]:!px-0 ${width ? `grow-0 ${COL_BASIS[stack] ?? COL_BASIS.md}` : 'flex-1'}`}>
           {children()}
+        </div>
+      );
+    }
+
+    case 'group': {
+      const layout = str(p.layout, 'stack');
+      const cols = Math.min(6, Math.max(2, Number(p.columns) || 3));
+      return (
+        <div {...a} style={layout === 'grid' ? { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` } : undefined} className={`${GROUP_LAYOUT[layout] ?? GROUP_LAYOUT.stack} ${GROUP_GAP[str(p.gap, 'md')] ?? GROUP_GAP.md} ${GROUP_ALIGN[str(p.align, 'stretch')] ?? ''} min-w-0`}>
+          {children()}
+        </div>
+      );
+    }
+
+    case 'component': {
+      const tree = ctx.components?.[str(p.componentId)];
+      if (!tree) return ctx.draft || ctx.editing ? <Placeholder a={a} label={label(ctx, str(p.componentId) ? 'componentDeleted' : 'chooseComponent')} /> : null;
+      const expanded = expandInstance(node, tree);
+      if (!ctx.editing) return <BlockRenderer node={expanded} ctx={ctx} parent={parent} />;
+      // In the builder an instance is one block: its inner blocks are drawn but not selectable.
+      const { 'data-cn': _cn, ...attrs } = a as typeof a & { 'data-cn'?: string };
+      return (
+        <div {...attrs} data-component-instance="">
+          <BlockRenderer node={expanded} ctx={{ ...ctx, editing: false }} parent={parent} />
         </div>
       );
     }
@@ -153,7 +209,7 @@ export function BlockRenderer({
 
     case 'image': {
       const m = ctx.media[str(p.mediaId)];
-      if (!m) return ctx.draft || ctx.editing ? <Placeholder a={a} label="Choose an image" tall /> : null;
+      if (!m) return ctx.draft || ctx.editing ? <Placeholder a={a} label={label(ctx, 'chooseImage')} tall /> : null;
       return (
         <figure {...a} className="mx-auto max-w-5xl px-6">
           <Picture media={m} alt={str(p.alt) || m.alt || ''} className={p.rounded === false ? '' : 'rounded-site'} sizes="(min-width: 1024px) 960px, 100vw" />
@@ -164,7 +220,7 @@ export function BlockRenderer({
 
     case 'video': {
       const src = videoEmbedUrl(str(p.url));
-      if (!src) return ctx.draft || ctx.editing ? <Placeholder a={a} label="Paste a YouTube or Vimeo link" tall /> : null;
+      if (!src) return ctx.draft || ctx.editing ? <Placeholder a={a} label={label(ctx, 'pasteVideo')} tall /> : null;
       return (
         <div {...a} className="mx-auto max-w-4xl px-6">
           <div className="relative aspect-video overflow-hidden rounded-site bg-black">
@@ -305,7 +361,7 @@ export function BlockRenderer({
         return ctx.draft || ctx.editing ? (
           <Placeholder
             a={a}
-            label={str(p.formId) ? 'This form is inactive or was deleted' : 'Choose a form in the inspector'}
+            label={label(ctx, str(p.formId) ? 'formMissing' : 'chooseForm')}
           />
         ) : null;
       return (
@@ -323,7 +379,7 @@ export function BlockRenderer({
 
     default:
       // Registered-but-unrendered types (plugins, later phases) are visible only in preview/builder.
-      return ctx.draft || ctx.editing ? <Placeholder a={a} label={`Block “${node.type}” has no renderer yet`} /> : null;
+      return ctx.draft || ctx.editing ? <Placeholder a={a} label={label(ctx, 'noRenderer').replace('{type}', node.type)} /> : null;
   }
 }
 

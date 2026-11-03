@@ -1,3 +1,5 @@
+import { builderEn } from './builder-en';
+
 /**
  * English UI strings — the source of truth for keys. Plural messages hold "one|other" forms
  * (Russian: "one|few|many|other") and are picked by `count`. `{name}` placeholders are filled by t().
@@ -305,6 +307,7 @@ export const en = {
   'scim.revokeConfirm':
     'Revoke “{name}”? Your identity provider stops provisioning until you give it a new token.',
   'scim.revoked': 'Token revoked — provisioning with it stops now',
+  ...builderEn,
 } as const;
 
 export type MessageKey = keyof typeof en;

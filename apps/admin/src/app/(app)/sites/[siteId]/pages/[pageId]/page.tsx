@@ -1,7 +1,7 @@
 'use client';
 
 import { subject } from '@casl/ability';
-import type { RenderMedia, SiteThemeInput } from '@canon/ui-blocks';
+import { siteThemeStyle, type RenderMedia, type SiteThemeInput } from '@canon/ui-blocks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -22,7 +22,7 @@ import {
   Laptop,
   Paintbrush,
 } from 'lucide-react';
-import { getBlock, STYLE_BREAKPOINTS } from '@canon/blocks';
+import { STYLE_BREAKPOINTS } from '@canon/blocks';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 import { useCollab } from '@/components/builder/collab';
 import { GeneratePageDialog } from '@/components/builder/generate-page';
 import { Inspector } from '@/components/builder/inspector';
+import { useBlockLabels } from '@/components/builder/labels';
 import { Presence } from '@/components/builder/presence';
 import { useFacts } from '@/components/builder/rich-text-editor';
 import { BuilderContext, createBuilderStore, selectedNode, useBuilder, useBuilderStore, useHistory, type Breakpoint, type Draft } from '@/components/builder/store';
@@ -43,7 +44,7 @@ import { ApiError, api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
 import { STATUS_STYLE, useMedia, usePage, useSite, type PageDetail, type Site } from '@/lib/content';
 import { useTenantId } from '@/lib/queries';
-import { translate, currentLocale } from '@/lib/i18n';
+import { translate, currentLocale, useT } from '@/lib/i18n';
 import { cn, formatUsd, relativeTime } from '@/lib/utils';
 
 type Panel = 'block' | 'style' | 'page' | 'versions' | 'translate' | 'review';
@@ -56,7 +57,6 @@ const BREAKPOINTS = [
   ['mobileL', Smartphone],
   ['mobileS', Smartphone],
 ] as const;
-const BP_TITLE = Object.fromEntries(STYLE_BREAKPOINTS.map((b) => [b.id, b.max === null ? b.label : `${b.label} (≤ ${b.max}px)`])) as Record<Breakpoint, string>;
 
 export default function PageEditor() {
   const { siteId, pageId } = useParams<{ siteId: string; pageId: string }>();
@@ -100,7 +100,11 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
   );
   const [conflict, setConflict] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const saving = useRef(false);
+  /** The save in flight, so a Ctrl+S during an autosave waits for it instead of doing nothing. */
+  const inflight = useRef<Promise<boolean> | null>(null);
+  // Read by save() through a ref: a save that waited for another must use the version it produced.
+  const versionRef = useRef(version);
+  versionRef.current = Math.max(versionRef.current, version);
 
   const draft = useBuilder((s) => s.draft);
   const dirty = useBuilder((s) => s.draft !== s.saved);
@@ -108,6 +112,13 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
   const breakpoint = useBuilder((s) => s.breakpoint);
   const setBreakpoint = useBuilder((s) => s.setBreakpoint);
   const setDraftMeta = useBuilder((s) => s.setMeta);
+  const selectedCount = useBuilder((s) => s.selectedIds.length);
+  const L = useBlockLabels();
+  const t = L.t;
+  const bpTitle = (b: Breakpoint) => {
+    const info = STYLE_BREAKPOINTS.find((x) => x.id === b)!;
+    return info.max === null ? L.bp(b) : `${L.bp(b)} (≤ ${info.max}px)`;
+  };
 
   const own = subject('Page', { tenantId: tid, createdById: initial.createdById });
   const canEdit = ability.can('update', own);
@@ -129,20 +140,21 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
    * while a save is in flight stay dirty (the store compares draft references) and go next time.
    */
   const save = useCallback(async (): Promise<boolean> => {
+    if (conflict) return false;
+    // Edits made during that save are still dirty: wait for it, then send them.
+    while (inflight.current) await inflight.current;
     const s = store.getState();
     if (s.draft === s.saved) return true;
-    if (saving.current || conflict) return false;
     const sending = s.draft;
-    saving.current = true;
     const patch = (expectedVersion: number) =>
       api<PageDetail>(`/sites/${siteId}/pages/${initial.id}`, {
         method: 'PATCH',
         body: { expectedVersion, title: sending.title, slug: sending.slug, description: sending.description || null, seo: sending.seo, content: sending.content },
       });
-    try {
+    const run = async (): Promise<boolean> => {
       let res: PageDetail;
       try {
-        res = await patch(version);
+        res = await patch(versionRef.current);
       } catch (err) {
         // In a live session the usual cause is a collaborator's save: the room already holds their
         // changes, so saving on top of their version loses nothing. Anyone else's write is a conflict.
@@ -151,20 +163,26 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
         if (!fresh.updatedById || !live.current.peers.some((p) => p.canEdit && p.userId === fresh.updatedById)) throw err;
         res = await patch(fresh.version);
       }
+      versionRef.current = res.version;
       setVersion(res.version);
       setMeta(res);
       store.getState().markSaved(sending);
       live.current.announceSaved(res.version, sending);
       void qc.invalidateQueries({ queryKey: ['pages', tid, siteId] });
       return true;
-    } catch (err) {
-      if (err instanceof ApiError && err.code === 'VERSION_CONFLICT') setConflict(true);
-      else toast.error(errorMessage(err), { id: 'save-error' });
-      return false;
-    } finally {
-      saving.current = false;
-    }
-  }, [store, conflict, siteId, initial.id, version, qc, tid]);
+    };
+    const p = run()
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && err.code === 'VERSION_CONFLICT') setConflict(true);
+        else toast.error(errorMessage(err), { id: 'save-error' });
+        return false;
+      })
+      .finally(() => {
+        if (inflight.current === p) inflight.current = null;
+      });
+    inflight.current = p;
+    return p;
+  }, [store, conflict, siteId, initial.id, qc, tid]);
 
   /** Takes the server's latest draft — into the whole room when the session is live. */
   const loadLatest = useCallback(async () => {
@@ -195,7 +213,7 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        void save().then((ok) => ok && toast.success('Saved'));
+        void save().then((ok) => ok && toast.success(translate(currentLocale(), 'builder.saved')));
       }
     };
     const onLeave = (e: BeforeUnloadEvent) => {
@@ -218,15 +236,15 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
   const blockLabel = useCallback(
     (id: string) => {
       const n = findNode(store.getState().draft.content.root, id);
-      return n ? (getBlock(n.type)?.name ?? n.type) : undefined;
+      return n ? (n.name ?? L.name(n.type)) : undefined;
     },
-    [store],
+    [store, L],
   );
 
   const lifecycle = useMutation({
     mutationFn: async (op: 'publish' | 'unpublish') => {
       if (op === 'publish' && !(await save()))
-        throw new Error('Save failed — fix the error before publishing');
+        throw new Error(t('builder.saveBeforePublish'));
       const run = (body: object) =>
         api<PageDetail>(`/sites/${siteId}/pages/${initial.id}/${op}`, { method: 'POST', body });
       try {
@@ -245,7 +263,7 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
     },
     onSuccess: (res, op) => {
       setMeta(res);
-      toast.success(op === 'publish' ? 'Published — the site updates within seconds' : 'Unpublished');
+      toast.success(op === 'publish' ? t('builder.published') : t('builder.unpublished'));
       void qc.invalidateQueries({ queryKey: ['pages', tid, siteId] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : errorMessage(err)),
@@ -268,76 +286,76 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
     <div className="flex h-dvh flex-col">
       {/* Toolbar */}
       <div className="z-20 flex flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-2 backdrop-blur">
-        <Link href={`/sites/${siteId}/pages`} className="rounded p-1.5 hover:bg-muted" aria-label="Back to pages">
+        <Link href={`/sites/${siteId}/pages`} className="rounded p-1.5 hover:bg-muted" aria-label={t('builder.back')}>
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div className="min-w-0 flex-1">
-          <input aria-label="Page title" value={draft.title} disabled={!canEdit} onChange={(e) => setDraftMeta({ title: e.target.value }, 'title')} className="w-full truncate bg-transparent text-base font-semibold outline-none" />
+          <input aria-label={t('builder.pageTitle')} value={draft.title} disabled={!canEdit} onChange={(e) => setDraftMeta({ title: e.target.value }, 'title')} className="w-full truncate bg-transparent text-base font-semibold outline-none" />
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>{meta.locale}</span>·<span>{meta.fullPath}</span>
-            <Badge className={STATUS_STYLE[meta.status]}>{meta.status.toLowerCase()}</Badge>
-            {meta.hasUnpublishedChanges && <Badge className="border-warning/40 text-warning">unpublished changes</Badge>}
+            <Badge className={STATUS_STYLE[meta.status]}>{t(`status.${meta.status}`)}</Badge>
+            {meta.hasUnpublishedChanges && <Badge className="border-warning/40 text-warning">{t('builder.unpublishedChanges')}</Badge>}
             {meta.schedule && (
               <Badge className="border-primary/40 text-primary">
                 <CalendarClock className="mr-1 h-3 w-3" />
                 {meta.schedule.action.toLowerCase()} {new Date(meta.schedule.at).toLocaleString()}
               </Badge>
             )}
-            <span aria-live="polite">{dirty ? (collab.leaderName ? `Autosaved by ${collab.leaderName}…` : 'Unsaved…') : `Saved · v${version}`}</span>
+            <span aria-live="polite">{dirty ? (collab.leaderName ? t('builder.autosavedBy', { name: collab.leaderName }) : t('builder.unsaved')) : t('builder.savedVersion', { version })}</span>
           </div>
         </div>
         <Presence collab={collab} selfId={me?.id} />
         {canEdit && (
           <div className="flex items-center gap-0.5">
-            <ToolBtn label="Undo (Ctrl+Z)" disabled={!history.canUndo} onClick={history.undo}>
+            <ToolBtn label={t('builder.undo')} disabled={!history.canUndo} onClick={history.undo}>
               <Undo2 className="h-4 w-4" />
             </ToolBtn>
-            <ToolBtn label="Redo (Ctrl+Shift+Z)" disabled={!history.canRedo} onClick={history.redo}>
+            <ToolBtn label={t('builder.redo')} disabled={!history.canRedo} onClick={history.redo}>
               <Redo2 className="h-4 w-4" />
             </ToolBtn>
           </div>
         )}
-        <div className="flex items-center rounded-md border p-0.5" role="radiogroup" aria-label="Preview width">
+        <div className="flex items-center rounded-md border p-0.5" role="radiogroup" aria-label={t('builder.previewWidth')}>
           {BREAKPOINTS.map(([b, Icon]) => (
-            <button key={b} type="button" role="radio" aria-checked={breakpoint === b} aria-label={BP_TITLE[b]} title={BP_TITLE[b]} onClick={() => setBreakpoint(b)} className={cn('rounded p-1', breakpoint === b ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+            <button key={b} type="button" role="radio" aria-checked={breakpoint === b} aria-label={bpTitle(b)} title={bpTitle(b)} onClick={() => setBreakpoint(b)} className={cn('rounded p-1', breakpoint === b ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}>
               <Icon className={b === 'mobileS' ? 'h-3 w-3' : 'h-4 w-4'} />
             </button>
           ))}
         </div>
         {canEdit && canAi && (
           <Button size="sm" variant="outline" onClick={() => setGenerating(true)}>
-            <Sparkles className="h-4 w-4 text-primary" /> Generate page
+            <Sparkles className="h-4 w-4 text-primary" /> {t('builder.generatePage')}
           </Button>
         )}
         <Button size="sm" variant="ghost" onClick={() => void preview()}>
-          <Eye className="h-4 w-4" /> Preview
+          <Eye className="h-4 w-4" /> {t('builder.preview')}
         </Button>
         {canEdit && (
-          <Button size="sm" variant="outline" disabled={!dirty || conflict} onClick={() => void save().then((ok) => ok && toast.success('Saved'))}>
-            <Save className="h-4 w-4" /> Save
+          <Button size="sm" variant="outline" disabled={!dirty || conflict} onClick={() => void save().then((ok) => ok && toast.success(t('builder.saved')))}>
+            <Save className="h-4 w-4" /> {t('builder.save')}
           </Button>
         )}
         {canPublish && meta.publishedVersion !== null && (
           <Button size="sm" variant="ghost" loading={lifecycle.isPending && lifecycle.variables === 'unpublish'} onClick={() => lifecycle.mutate('unpublish')}>
-            Unpublish
+            {t('builder.unpublish')}
           </Button>
         )}
         {canPublish && (
           <Button size="sm" loading={lifecycle.isPending && lifecycle.variables === 'publish'} disabled={conflict || (!dirty && meta.status === 'PUBLISHED' && !meta.hasUnpublishedChanges)} onClick={() => lifecycle.mutate('publish')}>
-            Publish
+            {t('builder.publish')}
           </Button>
         )}
       </div>
 
       {conflict && (
         <Alert tone="error" className="mx-4 mt-3">
-          Someone else changed this page. Your edits are kept here but can&apos;t be saved over theirs.{' '}
+          {t('builder.conflict')}{' '}
           <button type="button" className="font-medium underline" onClick={() => void loadLatest()}>
-            Reload the latest version
+            {t('builder.reloadLatest')}
           </button>
         </Alert>
       )}
-      {!canEdit && <Alert className="mx-4 mt-3">Read-only: your role cannot edit this page.</Alert>}
+      {!canEdit && <Alert className="mx-4 mt-3">{t('builder.readOnly')}</Alert>}
 
       <Workspace
         siteId={siteId}
@@ -352,31 +370,35 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
             <div className="sticky top-0 z-10 flex border-b bg-background text-sm">
               {(
                 [
-                  ['block', 'Block', Settings2],
-                  ['style', 'Style', Paintbrush],
-                  ['page', 'Page & SEO', Sparkles],
-                  ['versions', 'Versions', History],
-                  ['translate', 'Translate', Languages],
-                  ['review', 'Review', MessageSquare],
+                  ['block', Settings2],
+                  ['style', Paintbrush],
+                  ['page', Sparkles],
+                  ['versions', History],
+                  ['translate', Languages],
+                  ['review', MessageSquare],
                 ] as const
-              ).map(([id, label, Icon]) => (
+              ).map(([id, Icon]) => (
                 <button key={id} type="button" onClick={() => setPanel(id)} aria-pressed={panel === id} className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] leading-tight', panel === id ? 'border-b-2 border-primary font-medium text-foreground' : 'text-muted-foreground hover:text-foreground')}>
-                  <Icon className="h-3.5 w-3.5" aria-hidden /> {label}
+                  <Icon className="h-3.5 w-3.5" aria-hidden /> {t(`builder.panel.${id}`)}
                 </button>
               ))}
             </div>
             <div className="p-4">
-              {panel === 'block' &&
+              {panel === 'block' && selectedCount > 1 && <p className="text-sm text-muted-foreground">{t('builder.multiSelected', { count: selectedCount })}</p>}
+              {panel === 'block' && selectedCount <= 1 &&
                 (selected && selected.id !== draft.content.root.id ? (
                   <Inspector node={selected} siteId={siteId} pageId={initial.id} readOnly={!canEdit} facts={facts} />
                 ) : (
-                  <p className="text-sm text-muted-foreground">Select a block on the canvas or in Layers. Drag blocks in from the palette, or generate the page with AI.</p>
+                  <p className="text-sm text-muted-foreground">{t('builder.selectToEdit')}</p>
                 ))}
               {panel === 'style' &&
                 (selected && selected.id !== draft.content.root.id ? (
-                  <StylePanel node={selected} readOnly={!canEdit} />
+                  // Site colour variables, so the theme chips show this site's colours.
+                  <div style={siteThemeStyle(site.theme as SiteThemeInput)}>
+                    <StylePanel node={selected} readOnly={!canEdit} />
+                  </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Select a block to style it. Styles are saved per breakpoint: pick Desktop, Tablet or Mobile in the toolbar first.</p>
+                  <p className="text-sm text-muted-foreground">{t('builder.selectToStyle')}</p>
                 ))}
               {panel === 'page' && (
                 <PagePanel
@@ -437,6 +459,7 @@ function PagePanel({
   pageId: string;
   isHome: boolean;
 }) {
+  const t = useT();
   const draft = useBuilder((s) => s.draft);
   const setMeta = useBuilder((s) => s.setMeta);
   const suggest = useMutation({
@@ -451,20 +474,20 @@ function PagePanel({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="pg-slug">Slug</Label>
+        <Label htmlFor="pg-slug">{t('page.slug')}</Label>
         <Input id="pg-slug" value={draft.slug} disabled={readOnly || isHome} onChange={(e) => setMeta({ slug: e.target.value.toLowerCase() }, 'slug')} />
-        {isHome && <p className="text-[11px] text-muted-foreground">The home page always lives at /.</p>}
+        {isHome && <p className="text-[11px] text-muted-foreground">{t('page.homeSlug')}</p>}
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="pg-desc">Description</Label>
+        <Label htmlFor="pg-desc">{t('page.description')}</Label>
         <textarea id="pg-desc" rows={2} disabled={readOnly} value={draft.description} onChange={(e) => setMeta({ description: e.target.value }, 'description')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
       </div>
       <hr />
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">Search & social</p>
+        <p className="text-sm font-medium">{t('page.searchSocial')}</p>
         {!readOnly && (
           <Button size="sm" variant="outline" loading={suggest.isPending} onClick={() => suggest.mutate()}>
-            <Sparkles className="h-3.5 w-3.5" /> Suggest
+            <Sparkles className="h-3.5 w-3.5" /> {t('page.suggest')}
           </Button>
         )}
       </div>
@@ -477,18 +500,18 @@ function PagePanel({
               {suggest.data.model} · {formatUsd(suggest.data.costUsd)}
             </span>
             <Button size="sm" onClick={() => (setMeta({ seo: { ...draft.seo, title: suggest.data!.suggestion.title, description: suggest.data!.suggestion.description } }), suggest.reset())}>
-              Apply
+              {t('page.apply')}
             </Button>
           </div>
         </Alert>
       )}
       <div className="space-y-1.5">
-        <Label htmlFor="seo-title">SEO title</Label>
+        <Label htmlFor="seo-title">{t('page.seoTitle')}</Label>
         <Input id="seo-title" maxLength={120} disabled={readOnly} value={draft.seo.title ?? ''} onChange={(e) => setMeta({ seo: { ...draft.seo, title: e.target.value } }, 'seo.title')} />
         <p className="text-right text-[11px] text-muted-foreground">{(draft.seo.title ?? '').length}/60</p>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="seo-desc">Meta description</Label>
+        <Label htmlFor="seo-desc">{t('page.metaDescription')}</Label>
         <textarea id="seo-desc" rows={3} maxLength={320} disabled={readOnly} value={draft.seo.description ?? ''} onChange={(e) => setMeta({ seo: { ...draft.seo, description: e.target.value } }, 'seo.description')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
         <p className="text-right text-[11px] text-muted-foreground">{(draft.seo.description ?? '').length}/155</p>
       </div>
@@ -499,7 +522,7 @@ function PagePanel({
           checked={Boolean(draft.seo.noindex)}
           onChange={(e) => setMeta({ seo: { ...draft.seo, noindex: e.target.checked } })}
         />{' '}
-        Hide from search engines
+        {t('page.noindex')}
       </label>
     </div>
   );
@@ -514,32 +537,33 @@ function SchedulePanel({
   page: PageDetail;
   onChange: (p: PageDetail) => void;
 }) {
+  const t = useT();
   const [at, setAt] = useState('');
   const schedule = useMutation({
     mutationFn: () => api<PageDetail>(`/sites/${siteId}/pages/${page.id}/schedule`, { body: { at: new Date(at).toISOString(), action: 'PUBLISH', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } }),
-    onSuccess: (p) => (onChange(p), toast.success('Scheduled')),
+    onSuccess: (p) => (onChange(p), toast.success(t('page.scheduled'))),
     onError: (err) => toast.error(errorMessage(err)),
   });
   const cancel = useMutation({ mutationFn: () => api<PageDetail>(`/sites/${siteId}/pages/${page.id}/schedule`, { method: 'DELETE' }), onSuccess: onChange });
   return (
     <div className="mt-6 space-y-2 border-t pt-4">
-      <p className="text-sm font-medium">Schedule publish</p>
+      <p className="text-sm font-medium">{t('page.schedulePublish')}</p>
       {page.schedule ? (
         <div className="flex items-center justify-between text-sm">
           <span>{new Date(page.schedule.at).toLocaleString()}</span>
           <Button size="sm" variant="ghost" onClick={() => cancel.mutate()}>
-            Cancel
+            {t('common.cancel')}
           </Button>
         </div>
       ) : (
         <div className="flex gap-2">
-          <Input type="datetime-local" aria-label="Publish at" value={at} onChange={(e) => setAt(e.target.value)} />
+          <Input type="datetime-local" aria-label={t('page.publishAt')} value={at} onChange={(e) => setAt(e.target.value)} />
           <Button size="sm" disabled={!at} loading={schedule.isPending} onClick={() => schedule.mutate()}>
-            Schedule
+            {t('page.schedule')}
           </Button>
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">The current draft is published at that time (save your changes first).</p>
+      <p className="text-[11px] text-muted-foreground">{t('page.scheduleHint')}</p>
     </div>
   );
 }
@@ -555,6 +579,7 @@ function VersionsPanel({
   canEdit: boolean;
   onRestored: () => void;
 }) {
+  const t = useT();
   const versions = useQuery({
     queryKey: ['versions', pageId],
     queryFn: () =>
@@ -570,7 +595,7 @@ function VersionsPanel({
   });
   const restore = useMutation({
     mutationFn: (v: number) => api(`/sites/${siteId}/pages/${pageId}/versions/${v}/restore`, { method: 'POST', body: {} }),
-    onSuccess: () => (toast.success('Restored into the draft'), onRestored()),
+    onSuccess: () => (toast.success(t('page.restored')), onRestored()),
     onError: (err) => toast.error(errorMessage(err)),
   });
   return (
@@ -580,20 +605,20 @@ function VersionsPanel({
           <div className="min-w-0">
             <p className="font-medium">
               v{v.version}{' '}
-              {v.isPublished && <Badge className="ml-1 border-success/40 text-success">live</Badge>}
+              {v.isPublished && <Badge className="ml-1 border-success/40 text-success">{t('page.live')}</Badge>}
             </p>
             <p className="truncate text-xs text-muted-foreground">
-              {v.comment} · {v.createdBy?.name ?? 'system'} · {relativeTime(v.createdAt)}
+              {v.comment} · {v.createdBy?.name ?? t('page.system')} · {relativeTime(v.createdAt)}
             </p>
           </div>
           {canEdit && (
-            <Button size="sm" variant="ghost" loading={restore.isPending && restore.variables === v.version} onClick={() => window.confirm(`Replace the draft with v${v.version}?`) && restore.mutate(v.version)}>
-              Restore
+            <Button size="sm" variant="ghost" loading={restore.isPending && restore.variables === v.version} onClick={() => window.confirm(t('page.restoreConfirm', { version: v.version })) && restore.mutate(v.version)}>
+              {t('page.restore')}
             </Button>
           )}
         </li>
       ))}
-      {versions.data?.length === 0 && <p className="text-sm text-muted-foreground">Versions are created on publish and on restore.</p>}
+      {versions.data?.length === 0 && <p className="text-sm text-muted-foreground">{t('page.noVersions')}</p>}
     </ul>
   );
 }
@@ -611,6 +636,7 @@ function TranslatePanel({
   onDone: (id: string) => void;
   beforeTranslate: () => Promise<boolean>;
 }) {
+  const t = useT();
   const targets = locales.filter((l) => l !== page.locale);
   const [target, setTarget] = useState(targets[0] ?? '');
   const existing = page.translations.find((t) => t.locale === target);
@@ -620,29 +646,29 @@ function TranslatePanel({
       return api<{ page: PageDetail; ai: { strings: number; costUsd: number; models: string[] } }>(`/sites/${siteId}/pages/${page.id}/ai-translate`, { body: { targetLocale: target, overwrite: Boolean(existing) } });
     },
     onSuccess: (r) => {
-      toast.success(`Translated ${r.ai.strings} strings · ${formatUsd(r.ai.costUsd)}`);
+      toast.success(t('page.translated', { count: r.ai.strings, cost: formatUsd(r.ai.costUsd) }));
       onDone(r.page.id);
     },
     onError: (err) => toast.error(errorMessage(err)),
   });
-  if (targets.length === 0) return <p className="text-sm text-muted-foreground">Add more locales in the site settings to translate pages.</p>;
+  if (targets.length === 0) return <p className="text-sm text-muted-foreground">{t('page.needLocales')}</p>;
   return (
     <div className="space-y-4">
       {page.translations.length > 0 && (
         <ul className="space-y-1 text-sm">
-          {page.translations.map((t) => (
-            <li key={t.id}>
-              <Link href={`/sites/${siteId}/pages/${t.id}`} className="text-primary hover:underline">
-                {t.locale.toUpperCase()} · {t.fullPath}
+          {page.translations.map((tr) => (
+            <li key={tr.id}>
+              <Link href={`/sites/${siteId}/pages/${tr.id}`} className="text-primary hover:underline">
+                {tr.locale.toUpperCase()} · {tr.fullPath}
               </Link>{' '}
-              <Badge className={STATUS_STYLE[t.status]}>{t.status.toLowerCase()}</Badge>
+              <Badge className={STATUS_STYLE[tr.status]}>{t(`status.${tr.status}`)}</Badge>
             </li>
           ))}
         </ul>
       )}
       <div className="flex items-end gap-2">
         <div className="space-y-1.5">
-          <Label htmlFor="tr-target">Target locale</Label>
+          <Label htmlFor="tr-target">{t('page.targetLocale')}</Label>
           <Select id="tr-target" value={target} onChange={(e) => setTarget(e.target.value)}>
             {targets.map((l) => (
               <option key={l} value={l}>
@@ -652,10 +678,10 @@ function TranslatePanel({
           </Select>
         </div>
         <Button loading={translate.isPending} onClick={() => translate.mutate()}>
-          <Languages className="h-4 w-4" /> {existing ? 'Re-translate draft' : 'Translate with AI'}
+          <Languages className="h-4 w-4" /> {existing ? t('page.retranslate') : t('page.translateAi')}
         </Button>
       </div>
-      <p className="text-[11px] text-muted-foreground">Creates a draft in the target locale using the site glossary and brand voice. Structure, images, links and Canon facts are kept; review before publishing.</p>
+      <p className="text-[11px] text-muted-foreground">{t('page.translateHint')}</p>
     </div>
   );
 }

@@ -62,6 +62,59 @@ type ResponsiveStyles = Partial<Record<Breakpoint, StyleProps>>;
   property, like content edits.
 - Co-editing: the Yjs document carries the full tree, so styles sync with no protocol change.
 
+## Typed operations (`packages/blocks/src/edit.ts`)
+
+Every change to a page tree is an `EditorOperation`:
+
+| Operation | Payload |
+|---|---|
+| `NODE_INSERT` | `parentId`, `index`, `nodes[]` |
+| `NODE_REMOVE` | `ids[]` |
+| `NODE_MOVE` / `NODE_REORDER` | `id`, `parentId`, `index` / `delta` |
+| `NODE_DUPLICATE` / `NODE_REPLACE` | `id` / `id`, `node` |
+| `PROPS_UPDATE` | `id`, `patch` |
+| `NODE_META` | `id`, `patch` (name, hidden, locked, styles) |
+| `STYLE_SET` | `id`, `breakpoint`, `property`, `value \| null` |
+| `NODE_GROUP` / `NODE_UNGROUP` | `ids[]`, optional `wrapper` / `id` |
+
+`applyOperation(content, op)` is pure and all-or-nothing: an operation that breaks a nesting rule
+or touches a locked block returns the same object (a no-op). Untouched subtrees keep their
+identity, which the style compiler, the canvas (memoised blocks) and the undo history rely on.
+The builder store applies every edit through `apply(op)` and keeps an operation log (History tab);
+Canon AI (Stage 5) will propose operations in the same vocabulary, so a plan can be shown as a
+diff and approved per operation. The API can apply the same functions.
+
+## Global components (`packages/blocks/src/components.ts`, `apps/api/src/modules/components`)
+
+- `SiteComponent` (table `site_components`, RLS by tenant): `tree` (working copy) and
+  `publishedTree`, `version` (optimistic lock) and `publishedVersion`.
+- A page holds an instance: `{ type: 'component', props: { componentId, overrides } }`.
+  `overrides` maps an inner block id to a props patch (text and links in the UI).
+- `expandInstance` turns an instance into blocks: the component root takes the instance id (so
+  the instance's styles, name and visibility apply), inner ids are prefixed with the instance id
+  (unique when used twice), overrides are applied only if the merged props still validate.
+- Delivery expands **published** trees for live pages and working copies for previews, before
+  media, facts and forms are collected. `ComponentPublished` (outbox) invalidates the site cache and
+  the renderer's ISR tags, so every page that uses a component updates on publish.
+- No recursion: a component can't contain component blocks (validated on save).
+- The builder draws instances in place (inner blocks visible, not selectable), offers overrides,
+  detach (replace with a copy of its blocks) and "Edit component", which opens the same workspace
+  on the component tree.
+
+## Section library (`packages/blocks/src/sections.ts`)
+
+29 layouts × 4 tones built only from registry blocks and the style layer (so everything stays
+editable and validated), copy in EN/RU picked by the page locale. Tones are styles on the
+section root (`token:` colours), so they follow the site theme.
+
+## Canvas rendering
+
+`BlockRenderer` stays a plain server-compatible function. The builder passes `ctx.Child`, a
+`memo`-wrapped renderer, so an edit re-renders the path to the changed block only; styles are
+emitted as one `<style>` per top-level section (memoised), so a style edit replaces one small
+sheet. The site renders one sheet with `PageStyles`.
+
+
 ## Design system (admin)
 
 Tokens live in `apps/admin/src/app/globals.css` as HSL CSS variables consumed by Tailwind:

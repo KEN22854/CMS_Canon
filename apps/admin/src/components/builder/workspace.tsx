@@ -1,16 +1,19 @@
 'use client';
 
-import { getBlock } from '@canon/blocks';
 import type { RenderMedia, SiteThemeInput } from '@canon/ui-blocks';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragMoveEvent, type DragStartEvent } from '@dnd-kit/core';
+import { MAX_NODES } from '@canon/blocks';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { translate, currentLocale, type MessageKey } from '@/lib/i18n';
+import { cn, relativeTime } from '@/lib/utils';
 import { findNode, findParent, newBlock } from '../editor/tree-ops';
 import { Canvas } from './canvas';
+import { useBlockLabels } from './labels';
 import { resolveCanvasDrop, resolveLayerDrop, type DragItem, type DropTarget } from './drop';
 import { Layers } from './layers';
 import { Palette } from './palette';
-import { historyOf, useBuilderStore } from './store';
+import { historyOf, useBuilder, useBuilderStore } from './store';
 
 type Zone = 'canvas' | 'layers';
 
@@ -23,7 +26,9 @@ export function Workspace({ siteId, pageId, locale, theme, media, facts, readOnl
   const store = useBuilderStore();
   const canvasRef = useRef<HTMLDivElement>(null);
   const layersRef = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState<'blocks' | 'layers'>('blocks');
+  const [tab, setTab] = useState<'blocks' | 'layers' | 'history'>('blocks');
+  const L = useBlockLabels();
+  const t = L.t;
   const [active, setActive] = useState<DragItem | null>(null);
   const [drop, setDrop] = useState<{ zone: Zone; target: DropTarget } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -68,25 +73,25 @@ export function Workspace({ siteId, pageId, locale, theme, media, facts, readOnl
     <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActive((e.active.data.current as DragItem) ?? null)} onDragMove={onMove} onDragEnd={onEnd} onDragCancel={() => (setActive(null), setDrop(null))}>
       <div className="flex min-h-0 flex-1">
         {!readOnly && (
-          <aside className="hidden w-64 shrink-0 flex-col border-r bg-background lg:flex" aria-label="Blocks and layers">
+          <aside className="hidden w-64 shrink-0 flex-col border-r bg-background lg:flex" aria-label={t('builder.sidebar')}>
             <div className="flex border-b text-sm">
-              {(['blocks', 'layers'] as const).map((t) => (
-                <button key={t} type="button" onClick={() => setTab(t)} className={cn('flex-1 px-2 py-2 capitalize', tab === t ? 'border-b-2 border-primary font-medium' : 'text-muted-foreground')}>
-                  {t}
+              {(['blocks', 'layers', 'history'] as const).map((id) => (
+                <button key={id} type="button" onClick={() => setTab(id)} aria-pressed={tab === id} className={cn('flex-1 px-2 py-2', tab === id ? 'border-b-2 border-primary font-medium' : 'text-muted-foreground')}>
+                  {t(`builder.tab.${id}`)}
                 </button>
               ))}
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">{tab === 'blocks' ? <Palette siteId={siteId} pageId={pageId} locale={locale} /> : <Layers hostRef={layersRef} drop={drop?.zone === 'layers' ? drop.target : null} readOnly={readOnly} />}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto">{tab === 'blocks' ? <Palette siteId={siteId} pageId={pageId} locale={locale} /> : tab === 'layers' ? <Layers hostRef={layersRef} drop={drop?.zone === 'layers' ? drop.target : null} readOnly={readOnly} /> : <OperationHistory />}</div>
           </aside>
         )}
         <main className="min-w-0 flex-1">
           <Canvas media={media} facts={facts} theme={theme} hostRef={canvasRef} drop={drop?.zone === 'canvas' ? drop.target : null} dragging={Boolean(active)} siteId={siteId} pageId={pageId} readOnly={readOnly} />
         </main>
-        <aside className="w-80 shrink-0 overflow-y-auto border-l bg-background xl:w-96" aria-label="Inspector">
+        <aside className="w-80 shrink-0 overflow-y-auto border-l bg-background xl:w-96" aria-label={t('builder.inspector')}>
           {inspector}
         </aside>
       </div>
-      <DragOverlay dropAnimation={null} className="pointer-events-none">{active && <div className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium shadow-lg">{getBlock(active.type)?.name ?? active.type}</div>}</DragOverlay>
+      <DragOverlay dropAnimation={null} className="pointer-events-none">{active && <div className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium shadow-lg">{L.name(active.type)}</div>}</DragOverlay>
     </DndContext>
   );
 }
@@ -99,7 +104,9 @@ const editable = (t: EventTarget | null) => {
 /**
  * Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y) drive the builder history everywhere except inside the rich-text
  * editor, which has its own; block shortcuts only apply when focus is not in a form field:
- * Delete, Ctrl+D duplicate, Alt+↑/↓ reorder, Ctrl+Shift+H hide, Ctrl+Shift+L lock, Ctrl+=/−/0 zoom, Esc parent.
+ * Delete, Ctrl+D duplicate, Ctrl+C/X/V copy/cut/paste (across pages), Ctrl+G group, Ctrl+Shift+G
+ * ungroup, Ctrl+A select all, Alt+↑/↓ reorder, Ctrl+Shift+H hide, Ctrl+Shift+L lock, Ctrl+=/−/0 zoom,
+ * Esc parent. Delete, duplicate and copy act on the whole multi-selection.
  */
 function useShortcuts(readOnly: boolean) {
   const store = useBuilderStore();
@@ -124,14 +131,30 @@ function useShortcuts(readOnly: boolean) {
         s.setZoom(k === '0' ? 1 : s.zoom + (k === '-' ? -0.1 : 0.1));
         return;
       }
-      const id = s.selectedId;
-      if (!id) return;
       const act = (fn: () => void) => {
         e.preventDefault();
         fn();
       };
-      if (e.key === 'Delete' || e.key === 'Backspace') act(() => s.remove(id));
-      else if (mod && k === 'd') act(() => s.duplicate(id));
+      const say = (key: MessageKey, count: number) => toast.success(translate(currentLocale(), key, { count }), { id: 'clipboard' });
+      if (mod && k === 'v' && !e.shiftKey) {
+        // The browser's own paste stays in text fields (handled above); here it pastes blocks.
+        return act(() => {
+          const hit = s.limitHit;
+          const n = s.paste();
+          if (n) say('builder.pasted', n);
+          else if (store.getState().limitHit !== hit) toast.error(translate(currentLocale(), 'builder.tooManyBlocks', { max: MAX_NODES }), { id: 'clipboard' });
+          else toast(translate(currentLocale(), 'builder.nothingToPaste'), { id: 'clipboard' });
+        });
+      }
+      if (mod && k === 'a' && !e.shiftKey) return act(() => s.selectAll());
+      const id = s.selectedId;
+      if (!id) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') act(() => s.removeSelection());
+      else if (mod && k === 'd') act(() => s.duplicateSelection());
+      else if (mod && k === 'c' && !e.shiftKey) act(() => say('builder.copied', s.copy()));
+      else if (mod && k === 'x' && !e.shiftKey) act(() => say('builder.cut', s.cut()));
+      else if (mod && k === 'g' && e.shiftKey) act(() => s.ungroup(id));
+      else if (mod && k === 'g') act(() => void (s.group() || toast.error(translate(currentLocale(), 'builder.cantGroup'), { id: 'clipboard' })));
       else if (mod && e.shiftKey && k === 'h') act(() => s.updateNode(id, { hidden: !findNode(s.draft.content.root, id)?.hidden || undefined }));
       else if (mod && e.shiftKey && k === 'l') act(() => s.updateNode(id, { locked: !findNode(s.draft.content.root, id)?.locked || undefined }));
       else if (e.altKey && e.key === 'ArrowUp') act(() => s.nudge(id, -1));
@@ -144,4 +167,27 @@ function useShortcuts(readOnly: boolean) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [store, readOnly]);
+}
+
+/** The typed operations of this session, newest first (the same log Canon AI and audit read). */
+function OperationHistory() {
+  const log = useBuilder((s) => s.opLog);
+  const { t } = useBlockLabels();
+  if (!log.length) return <p className="p-4 text-center text-xs text-muted-foreground">{t('builder.history.empty')}</p>;
+  return (
+    <div className="space-y-2 p-2">
+      <p className="px-1 text-[11px] text-muted-foreground">{t('builder.history.hint')}</p>
+      <ol className="space-y-0.5" aria-label={t('builder.tab.history')}>
+        {[...log].reverse().map((e, i) => (
+          <li key={log.length - i} className="flex items-baseline gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted">
+            <code className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] text-muted-foreground">{e.op}</code>
+            <span className="min-w-0 flex-1 truncate" title={e.label}>
+              {e.label}
+            </span>
+            <time className="shrink-0 text-[10px] text-muted-foreground">{relativeTime(new Date(e.at).toISOString())}</time>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }

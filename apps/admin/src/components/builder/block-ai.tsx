@@ -6,18 +6,19 @@ import { Loader2, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api, errorMessage } from '@/lib/api';
+import { translate, currentLocale, useT, type MessageKey } from '@/lib/i18n';
 import { cn, formatUsd } from '@/lib/utils';
 import { findNode } from '../editor/tree-ops';
 import { useBuilderStore } from './store';
 
 export const BLOCK_ACTIONS = [
-  { id: 'rewrite', label: 'Improve' },
-  { id: 'shorten', label: 'Shorten' },
-  { id: 'expand', label: 'Expand' },
-  { id: 'simplify', label: 'Simplify' },
-  { id: 'formalize', label: 'More formal' },
-  { id: 'fix', label: 'Fix grammar' },
-] as const;
+  { id: 'rewrite', label: 'ai.improve' },
+  { id: 'shorten', label: 'ai.shorten' },
+  { id: 'expand', label: 'ai.expand' },
+  { id: 'simplify', label: 'ai.simplify' },
+  { id: 'formalize', label: 'ai.formalize' },
+  { id: 'fix', label: 'ai.fix' },
+] as const satisfies readonly { id: string; label: MessageKey }[];
 
 interface ImproveResult {
   block: BlockNode;
@@ -45,8 +46,9 @@ export function useImproveBlock(siteId: string, pageId: string) {
       const current = findNode(store.getState().draft.content.root, id);
       if (!current) return;
       store.getState().replace(id, { ...current, props: res.block.props });
-      toast.success(`Rewrote ${res.changed} text${res.changed === 1 ? '' : 's'} · ${formatUsd(res.costUsd)}`, {
-        action: { label: 'Undo', onClick: () => store.temporal.getState().undo() },
+      const tr = (k: MessageKey, v?: Record<string, string | number>) => translate(currentLocale(), k, v);
+      toast.success(tr('ai.rewrote', { count: res.changed, cost: formatUsd(res.costUsd) }), {
+        action: { label: tr('builder.undoAction'), onClick: () => store.temporal.getState().undo() },
       });
     } catch (err) {
       toast.error(errorMessage(err));
@@ -58,6 +60,7 @@ export function useImproveBlock(siteId: string, pageId: string) {
 }
 
 export function BlockAiMenu({ id, siteId, pageId, variant, fields }: { id: string; siteId: string; pageId: string; variant: 'toolbar' | 'inline'; fields?: string[] }) {
+  const t = useT();
   const store = useBuilderStore();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -78,8 +81,8 @@ export function BlockAiMenu({ id, siteId, pageId, variant, fields }: { id: strin
     <div className="relative" ref={ref} data-builder-ui>
       <button
         type="button"
-        aria-label="AI: rewrite this block"
-        title="AI: rewrite this block"
+        aria-label={t('ai.rewriteBlock')}
+        title={t('ai.rewriteBlock')}
         onClick={(e) => (e.stopPropagation(), setOpen((o) => !o))}
         className={cn('flex items-center gap-1 rounded p-0.5', variant === 'toolbar' ? 'hover:bg-white/15' : 'p-1 text-primary hover:bg-primary/10')}
       >
@@ -99,7 +102,7 @@ export function BlockAiMenu({ id, siteId, pageId, variant, fields }: { id: strin
               }}
               className="block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-50"
             >
-              {a.label}
+              {t(a.label)}
             </button>
           ))}
         </div>

@@ -35,6 +35,30 @@ permission: the API does not enforce it (any editor can unlock). This is intenti
 The inline script in `apps/admin/src/app/layout.tsx` is a static string that only reads
 `localStorage` and `matchMedia`; no user data is interpolated into it.
 
+## Global components (iteration 2)
+
+- **Tenant isolation**: `site_components` has `FORCE ROW LEVEL SECURITY` with the standard
+  `tenant_isolation` policy; every query also filters by `tenantId`. Integration test: another
+  workspace gets 404 on read and update.
+- **Permissions** follow pages: read = `read Page`, create/update = `create/update Page`,
+  publish = `publish Page`, delete = `delete Page`. Viewers get 403 (tested).
+- **Validation**: a component tree goes through the same `BlockRegistry.validate` as page content
+  (props, styles whitelist, 1 MB cap); component blocks inside components are refused, so
+  expansion can't recurse. Overrides are applied only when the merged props validate against the
+  block schema, so an override can't smuggle invalid values into the renderer.
+- **Optimistic locking** on `version` with a compare-and-set update: two concurrent saves can't
+  both win (409 for the second).
+- **Live vs draft**: delivery uses `publishedTree` for live pages and the working copy only for
+  signed previews, so unpublished component edits never leak to visitors.
+- Audit log entries: `component.created`, `.updated`, `.published`, `.deleted`.
+
+## Clipboard
+
+Copied blocks are stored in the browser's `localStorage` (same origin as the admin) and are
+re-validated by the server like any other content when the page is saved; ids are regenerated on
+paste.
+
+
 ## Open items
 
 - A Content-Security-Policy for the renderer that allows the one inline `<style>` via a nonce or hash.

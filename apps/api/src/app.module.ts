@@ -33,6 +33,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { PluginsModule } from './modules/plugins/plugins.module';
 import { McpModule } from './modules/mcp/mcp.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ComponentsModule } from './modules/components/components.module';
 import { FormsModule } from './modules/forms/forms.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { ScimModule } from './modules/scim/scim.module';
@@ -89,6 +90,7 @@ const REQUEST_ID_HEADER = 'x-request-id';
     IntelligenceModule,
     SitesModule,
     PagesModule,
+    ComponentsModule,
     MediaModule,
     ContentAiModule,
     FactsModule,

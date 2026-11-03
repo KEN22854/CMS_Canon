@@ -21,7 +21,8 @@ export type FieldKind =
   | 'media'
   | 'color'
   | 'list'
-  | 'form';
+  | 'form'
+  | 'component';
 
 export interface FieldMeta {
   kind: FieldKind;
@@ -364,6 +365,48 @@ export const formBlock = define({
   },
 });
 
+export const groupBlock = define({
+  type: 'group',
+  name: 'Group',
+  description: 'A container that lays out its blocks as a stack, a row or a grid; style it freely.',
+  category: 'layout',
+  isContainer: true,
+  props: z.object({
+    layout: z.enum(['stack', 'row', 'grid']).default('stack'),
+    gap: z.enum(['none', 'sm', 'md', 'lg']).default('md'),
+    align: z.enum(['start', 'center', 'end', 'stretch']).default('stretch'),
+    columns: z.number().int().min(2).max(6).default(3),
+  }),
+  defaults: () => ({ layout: 'stack' as const, gap: 'md' as const, align: 'stretch' as const, columns: 3 }),
+  fields: {
+    layout: { kind: 'select', label: 'Layout', options: ['stack', 'row', 'grid'] },
+    gap: { kind: 'select', label: 'Gap', options: ['none', 'sm', 'md', 'lg'] },
+    align: { kind: 'select', label: 'Align items', options: ['start', 'center', 'end', 'stretch'] },
+    columns: { kind: 'number', label: 'Grid columns' },
+  },
+});
+
+/** Pattern of node and component ids (also used by the style compiler). */
+export const NODE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * An instance of a site's global component. The component's tree is expanded in its place when
+ * the page is delivered; `overrides` patches props of the component's own blocks by their id.
+ */
+export const componentBlock = define({
+  type: 'component',
+  name: 'Component',
+  description: "An instance of one of the site's reusable components (header, footer, pricing…). Edit the component once, every page updates.",
+  category: 'layout',
+  isContainer: false,
+  props: z.object({
+    componentId: z.string().max(64).default(''),
+    overrides: z.record(z.string().regex(NODE_ID_RE), z.record(z.string().max(64), z.unknown())).default({}),
+  }),
+  defaults: () => ({ componentId: '', overrides: {} }),
+  fields: { componentId: { kind: 'component', label: 'Component' } },
+});
+
 export const BLOCKS = [
   sectionBlock,
   rowBlock,
@@ -383,6 +426,8 @@ export const BLOCKS = [
   spacerBlock,
   dividerBlock,
   formBlock,
+  groupBlock,
+  componentBlock,
 ] as const;
 export type KnownBlockType = (typeof BLOCKS)[number]['type'];
 

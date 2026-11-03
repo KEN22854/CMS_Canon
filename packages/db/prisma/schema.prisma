@@ -500,6 +500,7 @@ model Site {
   segments    Segment[]
   kgEntities  KgEntity[]
   facts       Fact[]
+  components  SiteComponent[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -1898,4 +1899,32 @@ model ScimToken {
 
   @@index([tenantId])
   @@map("scim_tokens")
+}
+
+/// Global component (symbol): a block tree reused on many pages through "component" blocks.
+/// `tree` is the working copy edited in the builder; delivery expands `publishedTree` only.
+model SiteComponent {
+  id               String    @id @default(cuid())
+  tenantId         String
+  siteId           String
+  name             String
+  description      String?
+  /// One BlockNode (any block but column), validated against the block registry.
+  tree             Json
+  publishedTree    Json?
+  /// Bumped on every save; optimistic lock for the builder.
+  version          Int       @default(1)
+  publishedVersion Int?
+  publishedAt      DateTime?
+  createdById      String?
+  updatedById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, deletedAt])
+  @@index([tenantId])
+  @@map("site_components")
 }

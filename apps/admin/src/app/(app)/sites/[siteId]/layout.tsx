@@ -16,10 +16,11 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
   const ability = useAbility();
   const t = useT();
   // The page editor takes the full width; it has its own toolbar.
-  if (/\/pages\/[^/]+$/.test(pathname)) return <>{children}</>;
+  if (/\/(pages|components)\/[^/]+$/.test(pathname)) return <>{children}</>;
 
   const tabs = [
     { href: `/sites/${siteId}/pages`, label: t('site.pages') },
+    { href: `/sites/${siteId}/components`, label: t('component.listTitle') },
     { href: `/sites/${siteId}/collections`, label: t('site.collections') },
     { href: `/sites/${siteId}/reviews`, label: t('site.reviews') },
     { href: `/sites/${siteId}/media`, label: t('site.media') },

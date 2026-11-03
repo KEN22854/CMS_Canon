@@ -6,7 +6,8 @@ import { validatePageContent, type BlockNode, type PageContent, type TreeIssue }
  * Compact, model-readable description of the block registry. Generated from the same definitions
  * the API validates against, so prompts can't drift from what the server will accept.
  */
-export function blockCatalogForPrompt(types: readonly string[] = BLOCKS.map((b) => b.type)): string {
+// Component instances need ids of real components, which the model can't know: not offered.
+export function blockCatalogForPrompt(types: readonly string[] = BLOCKS.map((b) => b.type).filter((t) => t !== 'component')): string {
   return types
     .map((t) => getBlock(t))
     .filter((d): d is NonNullable<typeof d> => Boolean(d))
