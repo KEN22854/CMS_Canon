@@ -1,7 +1,7 @@
 'use client';
 
 import type { StyleBreakpoint } from '@canon/blocks';
-import { Grid3x3, Hand, Magnet, Map as MapIcon, Maximize, Minus, MousePointer2, Plus, ScanSearch, Smartphone, Monitor, Tablet, Laptop, X, MoreHorizontal } from 'lucide-react';
+import { Grid3x3, Hand, Magnet, Map as MapIcon, Maximize, Move, Ruler, Minus, MousePointer2, Plus, ScanSearch, Smartphone, Monitor, Tablet, Laptop, X, MoreHorizontal } from 'lucide-react';
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -39,6 +39,8 @@ import {
   type View,
 } from './geometry';
 import { Minimap } from './minimap';
+import { Rulers } from './rulers';
+import { useDirectFreeDrag } from './free-place';
 
 type Tool = 'select' | 'hand';
 const HEADER_H = 30;
@@ -95,6 +97,7 @@ export function Board(props: FrameProps & { hostRef: React.RefObject<HTMLDivElem
   const selectedNode = useBuilder((s) => (s.selectedId ? findNode(s.draft.content.root, s.selectedId) : null));
   const showGrid = useBuilder((s) => s.grid);
   const snapOn = useBuilder((s) => s.snap);
+  const freeOn = useBuilder((s) => s.freePlacement);
   const focus = useBuilder((s) => s.focus);
   const styledRoot = useStyledRoot(siteId);
 
@@ -109,6 +112,7 @@ export function Board(props: FrameProps & { hostRef: React.RefObject<HTMLDivElem
   const [marquee, setMarquee] = useState<Box | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [minimap, setMinimap] = useState(true);
+  const [rulers, setRulers] = useState(true);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
@@ -216,6 +220,8 @@ export function Board(props: FrameProps & { hostRef: React.RefObject<HTMLDivElem
     [hostRef],
   );
 
+  const selectionBox = useCallback(() => union(store.getState().selectedIds.flatMap((id) => worldBoxOf(id) ?? [])), [store, worldBoxOf]);
+
   const zoomToSelection = useCallback(() => {
     const boxes = store.getState().selectedIds.flatMap((id) => worldBoxOf(id) ?? []);
     const box = union(boxes);
@@ -298,6 +304,7 @@ export function Board(props: FrameProps & { hostRef: React.RefObject<HTMLDivElem
         setSpace(true);
       } else if (!mod && !e.altKey && k === 'v') setTool('select');
       else if (!mod && !e.altKey && k === 'h' && !e.shiftKey) setTool('hand');
+      else if (!mod && e.shiftKey && k === 'r') setRulers((x) => !x);
       else if (e.shiftKey && e.code === 'Digit1') {
         e.preventDefault();
         zoomToFit();
@@ -504,6 +511,16 @@ export function Board(props: FrameProps & { hostRef: React.RefObject<HTMLDivElem
           setMenu({ x: e.clientX, y: e.clientY, blockId: null });
         }}
         onMouseLeave={() => store.getState().hover(null)}
+        // Something scrolled the board element itself (scrollIntoView, focus): turn it into a pan.
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          if (!el.scrollTop && !el.scrollLeft) return;
+          const v = view.current;
+          const next = { ...v, x: v.x - el.scrollLeft, y: v.y - el.scrollTop };
+          el.scrollTop = 0;
+          el.scrollLeft = 0;
+          applyView(next, true);
+        }}
       >
         <div ref={worldRef} className="absolute left-0 top-0 origin-top-left will-change-transform" style={{ pointerEvents: panMode ? 'none' : undefined }}>
           {devices.map((d) => (
@@ -528,6 +545,7 @@ export function Board(props: FrameProps & { hostRef: React.RefObject<HTMLDivElem
             />
           ))}
         </div>
+        {rulers && <Rulers subscribe={subscribe} origin={{ x: active.x, y: active.y }} selection={selectionBox} size={viewportSize} />}
         {marquee && <div className="pointer-events-none absolute z-30 rounded-sm border border-primary bg-primary/10" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />}
 
         {/* Floating tools: bottom centre. */}
@@ -541,11 +559,17 @@ export function Board(props: FrameProps & { hostRef: React.RefObject<HTMLDivElem
           <Sep />
           <DeviceMenu onAdd={addDevice} />
           <Sep />
+          <ToolBtn label={t('board.free')} pressed={freeOn} onClick={() => store.getState().setFreePlacement(!freeOn)}>
+            <Move className="h-4 w-4" />
+          </ToolBtn>
           <ToolBtn label={t('board.grid')} pressed={showGrid} onClick={() => store.getState().setGrid(!showGrid)}>
             <Grid3x3 className="h-4 w-4" />
           </ToolBtn>
           <ToolBtn label={t('board.snap')} pressed={snapOn} onClick={() => store.getState().setSnap(!snapOn)}>
             <Magnet className="h-4 w-4" />
+          </ToolBtn>
+          <ToolBtn label={t('board.rulers')} shortcut="⇧R" pressed={rulers} onClick={() => setRulers(!rulers)}>
+            <Ruler className="h-4 w-4" />
           </ToolBtn>
           <ToolBtn label={t('board.minimap')} pressed={minimap} onClick={() => setMinimap(!minimap)}>
             <MapIcon className="h-4 w-4" />
@@ -570,7 +594,7 @@ export function Board(props: FrameProps & { hostRef: React.RefObject<HTMLDivElem
         </div>
 
         {/* Status: bottom left. */}
-        <div data-board-ui className="pointer-events-none absolute bottom-4 left-4 z-40 flex max-w-[40%] items-center gap-2 rounded-lg border bg-card/90 px-2.5 py-1.5 text-[11px] text-muted-foreground shadow backdrop-blur">
+        <div data-board-ui className="pointer-events-none absolute bottom-4 left-4 z-40 flex max-w-[calc(50%-250px)] items-center gap-2 overflow-hidden whitespace-nowrap rounded-lg border bg-card/90 px-2.5 py-1.5 text-[11px] text-muted-foreground shadow backdrop-blur">
           <span className="font-medium text-foreground">{deviceLabel(t, active)}</span>
           <span>
             · {active.width}px · {t('board.editing', { bp: L.bp(activeBp) })}
@@ -637,7 +661,7 @@ const Artboard = memo(function Artboard({
           <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
           <span className="truncate">{label}</span>
         </button>
-        {device.width * zoom >= 150 && (
+        {device.width * zoom >= 230 && (
           <span className="truncate tabular-nums text-muted-foreground">
             {device.width}px · {bpLabel}
           </span>
@@ -697,6 +721,7 @@ function BoardOverlay({ hostRef, scale, readOnly }: { hostRef: React.RefObject<H
   const freeBlock = top?.type === 'canvas' ? top : null;
   const [rect, setRect] = useState<ReturnType<typeof rectOf>>(null);
   useFreeKeyboard(store, hostRef, readOnly);
+  useDirectFreeDrag(store, hostRef, readOnly);
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host || !freeBlock) return setRect(null);

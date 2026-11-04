@@ -17,6 +17,9 @@ Stages 1–2 (design system, Builder 2.0 foundation).
 | board/03-three-devices.png | iteration 18 | 1600 | Desktop, Mobile and Tablet artboards after adding a device |
 | board/04-responsive.png | iteration 18 | 1600 | Mobile-only font size: the Mobile artboard changes, Desktop doesn't |
 | board/05-layers.png | iteration 18 | 1600 | Layers in sync with the board |
+| board/06-states-rulers.png | iteration 18b | 1600 | Rulers, a heading dropped at a point in a free-form area, state switcher |
+| board/07-light-ru.png | iteration 18b | 1600 | The board in the light theme and Russian |
+| board/08-free-board.png | iteration 18c | 1600 | A heading dropped over an image in a free zone (overlap) |
 | before/dashboard/dashboard-desktop-1440.png | baseline | 1440 | Workspace dashboard, old light theme |
 | before/dashboard/project-pages-desktop-1440.png | baseline | 1440 | Site pages list |
 | before/dashboard/sites-desktop-1440.png | baseline | 1440 | Sites list |

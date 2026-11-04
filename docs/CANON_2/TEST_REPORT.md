@@ -5,17 +5,17 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), shop strings (2), themes (3), HTML import (3), entry links (1), stagger (1), AI plans (4), SEO audit and JSON-LD (5), tree (16), custom CSS and canvas elements (3) | 71 / 71 ✅ |
-| `@canon/collab` unit (incl. animation through Yjs) | 9 / 9 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), shop strings (2), themes (3), HTML import (3), entry links (1), stagger (1), AI plans (4), SEO audit and JSON-LD (5), tree (16), custom CSS, canvas elements, interaction states, HTML attributes (6) | 74 / 74 ✅ |
+| `@canon/collab` unit (incl. animation, attributes and state styles through Yjs) | 10 / 10 ✅ |
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 5 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5), board geometry: zoom, fit, reveal, devices, marquee, distances (6) | 18 / 18 ✅ |
 | API unit | 58 / 58 ✅ |
 | API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes, 1 for migration, 1 for funnels, 1 for Telegram, 1 for staggered entrances, 1 for canvas elements and layout styles | 165 / 165 ✅ |
-| Playwright E2E | 35 / 35 ✅ (+3 opt-in performance/screenshot specs; board: 2 specs, collab cursors: 1) |
+| Playwright E2E | 37 / 37 ✅ (+3 opt-in performance/screenshot specs; board: 4 specs, collab cursors: 1) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **421** (403 after iteration 17).
+Total automated tests: **427** (421 after iteration 18).
 
 ## Iteration 18 — Infinite canvas
 

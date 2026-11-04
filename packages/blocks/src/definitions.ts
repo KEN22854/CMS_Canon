@@ -218,12 +218,13 @@ export const buttonBlock = define({
   name: 'Button',
   category: 'navigation',
   isContainer: false,
-  props: z.object({ label: z.string().min(1).max(60), href: safeUrl, variant: z.enum(['primary', 'secondary', 'link']).default('primary'), align: align.default('left') }),
-  defaults: () => ({ label: 'Learn more', href: '/', variant: 'primary' as const, align: 'left' as const }),
+  props: z.object({ label: z.string().min(1).max(60), href: safeUrl, variant: z.enum(['primary', 'secondary', 'link']).default('primary'), align: align.default('left'), size: z.enum(['sm', 'md', 'lg']).default('md') }),
+  defaults: () => ({ label: 'Learn more', href: '/', variant: 'primary' as const, align: 'left' as const, size: 'md' as const }),
   fields: {
     label: { kind: 'text', label: 'Label', ai: true },
     href: { kind: 'url', label: 'Link' },
     variant: { kind: 'select', label: 'Style', options: ['primary', 'secondary', 'link'] },
+    size: { kind: 'select', label: 'Size', options: ['sm', 'md', 'lg'] },
     align: { kind: 'select', label: 'Alignment', options: ['left', 'center', 'right'] },
   },
 });

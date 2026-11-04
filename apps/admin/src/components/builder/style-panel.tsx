@@ -1,6 +1,6 @@
 'use client';
 
-import { type FONT_FAMILIES, STYLE_BREAKPOINTS, STYLE_PROPS, THEME_COLORS, isValidStyleValue, parseCssDeclarations, resolveStyles, setStyle, styleSource, stylesToCssText, type BlockNode, type CssParseResult, type StyleGroup, type StyleProperty } from '@canon/blocks';
+import { type FONT_FAMILIES, STYLE_BREAKPOINTS, STYLE_PROPS, THEME_COLORS, isValidStyleValue, isStyleState, parseCssDeclarations, resolveStyles, setStyle, STYLE_STATES, styleSource, stylesToCssText, type BlockNode, type CssParseResult, type StyleGroup, type StyleLayer, type StyleProperty, type StyleState } from '@canon/blocks';
 import { ChevronDown, Code2, Eye, EyeOff, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -105,6 +105,7 @@ const GROUPS: { id: StyleGroup; fields: Field[] }[] = [
       { prop: 'filter', kind: 'text', placeholder: 'blur(4px)', wide: true },
       { prop: 'backdropFilter', kind: 'text', placeholder: 'blur(12px)', wide: true },
       { prop: 'cursor', kind: 'select' },
+      { prop: 'transitionDuration', kind: 'text', placeholder: '200ms' },
     ],
   },
   {
@@ -139,15 +140,32 @@ export function StylePanel({ node, readOnly }: { node: BlockNode; readOnly: bool
   const bp = useBuilder((s) => s.breakpoint);
   const updateNode = useBuilder((s) => s.updateNode);
   const [open, setOpen] = useState<Set<StyleGroup>>(() => new Set(['layout', 'spacing', 'typography']));
-  const effective = resolveStyles(node.styles, bp);
-  const own = node.styles?.[bp] ?? {};
+  // Normal styles edit the breakpoint; a state (hover, pressed, focus) edits that layer at every width.
+  const [state, setState] = useState<StyleState | null>(null);
+  const layer: StyleLayer = state ?? bp;
+  const effective = state ? { ...resolveStyles(node.styles, 'base'), ...(node.styles?.[state] ?? {}) } : resolveStyles(node.styles, bp);
+  const own = node.styles?.[layer] ?? {};
   const bpInfo = STYLE_BREAKPOINTS.find((b) => b.id === bp)!;
-  const set = (prop: StyleProperty, value: string | undefined) => updateNode(node.id, { styles: setStyle(node.styles, bp, prop, value) }, `${node.id}.style.${bp}.${prop}`);
+  const set = (prop: StyleProperty, value: string | undefined) => updateNode(node.id, { styles: setStyle(node.styles, layer, prop, value) }, `${node.id}.style.${layer}.${prop}`);
   const hiddenHere = effective.display === 'none';
   const overrides = Object.keys(own).length;
 
   return (
     <div className="space-y-3">
+      <div className="flex rounded-md border p-0.5 text-xs" role="radiogroup" aria-label={t('style.state')}>
+        {([null, ...STYLE_STATES] as const).map((st) => (
+          <button key={st ?? 'normal'} type="button" role="radio" aria-checked={state === st} onClick={() => setState(st)} className={cn('flex-1 rounded px-2 py-1', state === st ? 'bg-primary/15 font-medium text-primary' : 'text-muted-foreground hover:text-foreground')}>
+            {t(`style.state.${st ?? 'normal'}`)}
+            {st && node.styles?.[st] && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-primary align-middle" aria-hidden />}
+          </button>
+        ))}
+      </div>
+      {state ? (
+        <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+          <p className="font-medium">{t('style.stateEditing', { state: t(`style.state.${state}`) })}</p>
+          <p className="text-muted-foreground">{t('style.stateHint')}</p>
+        </div>
+      ) : (
       <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs">
         <p className="font-medium">
           {t('style.editing', { bp: bpName(bp) })}
@@ -156,9 +174,11 @@ export function StylePanel({ node, readOnly }: { node: BlockNode; readOnly: bool
         <p className="text-muted-foreground">{bp === 'base' ? t('style.appliesAll') : t('style.appliesBp', { bp: bpName(bp) })}</p>
         {overrides > 0 && <p className="mt-1 text-primary">{t('style.overrides', { count: overrides })}</p>}
       </div>
+      )}
 
-      <AnimationPanel node={node} readOnly={readOnly} />
+      {!state && <AnimationPanel node={node} readOnly={readOnly} />}
 
+      {!state && (<>
       <button
         type="button"
         disabled={readOnly}
@@ -173,6 +193,7 @@ export function StylePanel({ node, readOnly }: { node: BlockNode; readOnly: bool
         <span className="text-xs text-muted-foreground">{hiddenHere ? t('style.show') : t('style.hide')}</span>
       </button>
       <VisibilityRow node={node} readOnly={readOnly} />
+      </>)}
 
       {GROUPS.map((g) => {
         const isOpen = open.has(g.id);
@@ -200,7 +221,7 @@ export function StylePanel({ node, readOnly }: { node: BlockNode; readOnly: bool
                     nodeId={node.id}
                     value={own[f.prop]}
                     inherited={own[f.prop] === undefined ? effective[f.prop] : undefined}
-                    source={styleSource(node.styles, bp, f.prop)}
+                    source={state ? (own[f.prop] !== undefined ? null : styleSource(node.styles, 'base', f.prop)) : styleSource(node.styles, bp, f.prop)}
                     readOnly={readOnly}
                     onChange={(v) => set(f.prop, v)}
                   />
@@ -210,7 +231,7 @@ export function StylePanel({ node, readOnly }: { node: BlockNode; readOnly: bool
           </section>
         );
       })}
-      <CustomCss node={node} readOnly={readOnly} />
+      <CustomCss node={node} readOnly={readOnly} layer={layer} />
     </div>
   );
 }
@@ -259,10 +280,10 @@ function VisibilityRow({ node, readOnly }: { node: BlockNode; readOnly: boolean 
  * layer as every control above (unknown properties and unsafe values are listed and dropped), so
  * it can't escape the block or reach other pages; the site only gets the compiled rules.
  */
-function CustomCss({ node, readOnly }: { node: BlockNode; readOnly: boolean }) {
+function CustomCss({ node, readOnly, layer: bp }: { node: BlockNode; readOnly: boolean; layer: StyleLayer }) {
   const t = useT();
-  const { bp: bpName } = useBlockLabels();
-  const bp = useBuilder((s) => s.breakpoint);
+  const { bp: bpLabel } = useBlockLabels();
+  const bpName = (l: StyleLayer) => (isStyleState(l) ? t(`style.state.${l}`) : bpLabel(l));
   const updateNode = useBuilder((s) => s.updateNode);
   const own = node.styles?.[bp] ?? {};
   const current = stylesToCssText(own);

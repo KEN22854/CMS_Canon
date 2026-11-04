@@ -95,7 +95,7 @@ export function updateProps(content: PageContent, id: string, patch: Record<stri
 }
 
 /** Node-level fields edited by the Design panel and Layers (name, visibility, lock, styles, animation). */
-export type NodeMeta = Partial<Pick<BlockNode, 'name' | 'hidden' | 'locked' | 'styles' | 'animation'>>;
+export type NodeMeta = Partial<Pick<BlockNode, 'name' | 'hidden' | 'locked' | 'styles' | 'animation' | 'attrs'>>;
 
 const unsetMeta = (v: unknown) => v === undefined || v === false || v === '';
 
@@ -367,7 +367,7 @@ export function describeOperation(op: EditorOperation, root?: BlockNode): string
     case 'PROPS_UPDATE':
       return `Edit ${label(op.id)}: ${Object.keys(op.patch).join(', ')}`;
     case 'NODE_META':
-      return `${Object.keys(op.patch).map((k) => (k === 'hidden' ? (op.patch.hidden ? 'Hide' : 'Show') : k === 'locked' ? (op.patch.locked ? 'Lock' : 'Unlock') : k === 'name' ? 'Rename' : k === 'animation' ? 'Animate' : 'Style')).join(', ')} ${label(op.id)}`;
+      return `${Object.keys(op.patch).map((k) => (k === 'hidden' ? (op.patch.hidden ? 'Hide' : 'Show') : k === 'locked' ? (op.patch.locked ? 'Lock' : 'Unlock') : k === 'name' ? 'Rename' : k === 'animation' ? 'Animate' : k === 'attrs' ? 'Attributes of' : 'Style')).join(', ')} ${label(op.id)}`;
     case 'STYLE_SET':
       return `${label(op.id)}: ${op.property} ${op.value ?? 'reset'} (${op.breakpoint})`;
     case 'NODE_GROUP':

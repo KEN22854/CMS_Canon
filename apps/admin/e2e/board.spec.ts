@@ -21,6 +21,8 @@ async function dragTo(page: Page, from: Locator, to: { x: number; y: number }) {
 test('infinite canvas: build on device artboards, responsive styles, save, reload and publish', async ({ page, request }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1600, height: 960 });
+  // This scenario builds in the page flow (sections); free placement has its own test.
+  await page.addInitScript(() => window.localStorage.setItem('canon.board.free', '0'));
   await signUp(page, { editor: 'board' });
   const { siteId, host } = await createSite(page, `E2E Board ${Date.now() % 100000}`);
   await page.goto(`/sites/${siteId}/pages`);
@@ -194,4 +196,150 @@ test('infinite canvas: hand tool and Space pan the board, context menu on the em
   await page.mouse.wheel(0, 200);
   await expect.poll(async () => Math.round((await desktop.boundingBox())!.y - y0)).toBe(-200);
   await expect(page.locator('[data-minimap]')).toBeVisible();
+});
+
+test('infinite canvas: hover state, attributes, free-form drop, rulers, light theme and Russian', async ({ page, request }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1600, height: 960 });
+  await page.addInitScript(() => window.localStorage.setItem('canon.board.free', '0'));
+  await signUp(page, { editor: 'board' });
+  const { siteId, host } = await createSite(page, `E2E Board states ${Date.now() % 100000}`);
+  await page.goto(`/sites/${siteId}/pages`);
+  await page.getByRole('link', { name: 'Home' }).first().click();
+  const desktop = artboard(page, 'desktop');
+  await expect(desktop).toBeVisible();
+  await expect(page.locator('[data-rulers]')).toBeVisible();
+
+  // A button: large size, a hover colour on the button itself, an anchor id and a tooltip.
+  await page.locator('[data-library-item="button"]').click();
+  const btn = desktop.locator('[data-block-type="button"]', { hasText: 'Learn more' });
+  await expect(btn).toBeVisible();
+  await page.getByLabel('Size', { exact: true }).selectOption('lg');
+  await page.getByRole('button', { name: /HTML attributes/ }).click();
+  await page.getByLabel('Anchor id').fill('signup');
+  await page.getByLabel('Tooltip (title)').fill('Start for free');
+  await page.getByRole('button', { name: 'Style', exact: true }).click();
+  await page.getByRole('radio', { name: 'Hover' }).click();
+  await expect(page.getByText('Editing the Hover state')).toBeVisible();
+  await page.locator('button[aria-expanded]').filter({ hasText: /^Background$/ }).click();
+  await page.getByLabel('Background colour', { exact: true }).fill('#111111');
+  await page.getByLabel('Background colour', { exact: true }).press('Tab');
+  await expect.poll(() => page.locator('style[data-canon-styles]').allTextContents().then((t) => t.join('\n'))).toMatch(/\[data-cn-el\]:hover\{background-color:#111111\}/);
+  await btn.locator('a').hover();
+  await expect.poll(() => btn.locator('a').evaluate((a) => getComputedStyle(a).backgroundColor)).toBe('rgb(17, 17, 17)');
+  await page.getByRole('radio', { name: 'Normal' }).click();
+
+  // A free-form area from the library, then an Icon dropped at a point inside it.
+  await page.getByRole('tab', { name: 'Layout' }).click();
+  await page.locator('[data-library-item="freeform"]').click();
+  const free = desktop.locator('[data-block-type="canvas"]').last();
+  await expect(free).toBeVisible();
+  await free.scrollIntoViewIfNeeded();
+  const fb = (await desktop.locator('[data-block-type="canvas"] [data-free-frame]').last().boundingBox())!;
+  await page.getByRole('tab', { name: 'Elements' }).click();
+  await dragTo(page, page.locator('[data-library-item="heading"]'), { x: fb.x + fb.width / 2, y: fb.y + fb.height / 2 });
+  const placed = free.locator('[data-block-type="heading"]').last();
+  await expect(placed).toBeVisible();
+  const style = await placed.evaluate((el) => ({ position: getComputedStyle(el).position, left: parseFloat(getComputedStyle(el).left) }));
+  expect(style.position).toBe('absolute');
+  expect(style.left).toBeGreaterThan(200);
+
+  // Published: the hover rule targets the button, the anchor id and tooltip are on the block.
+  await page.keyboard.press('Control+s');
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText(/^Published —/)).toBeVisible();
+  await expect.poll(async () => (await request.get(`http://localhost:${WEB_PORT}/`, { headers: { 'x-forwarded-host': host } })).text()).toContain('id="signup"');
+  const html = await (await request.get(`http://localhost:${WEB_PORT}/`, { headers: { 'x-forwarded-host': host } })).text();
+  expect(html).toMatch(/\[data-cn-el\]:hover\{background-color:#111111\}/);
+  expect(html).toContain('title="Start for free"');
+  expect(html).toContain('px-8 py-4');
+
+  await page.screenshot({ path: `${SHOTS}/06-states-rulers.png` });
+  // Light theme and the Russian interface.
+  await page.evaluate(() => {
+    localStorage.setItem('canon.theme', 'light');
+    localStorage.setItem('canon.locale', 'ru');
+  });
+  await page.reload();
+  await expect(page.getByRole('radio', { name: 'Доска' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('button', { name: 'Показать всё' })).toBeVisible();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `${SHOTS}/07-light-ru.png` });
+  await page.evaluate(() => {
+    localStorage.setItem('canon.theme', 'dark');
+    localStorage.setItem('canon.locale', 'en');
+  });
+});
+
+test('board-like building: drop anywhere, overlap, reorder layers, drag objects directly, publish', async ({ page, request }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1600, height: 960 });
+  await signUp(page, { editor: 'board' });
+  const { siteId, host } = await createSite(page, `E2E Free board ${Date.now() % 100000}`);
+  await page.goto(`/sites/${siteId}/pages`);
+  await page.getByRole('link', { name: 'Home' }).first().click();
+  const desktop = artboard(page, 'desktop');
+  await expect(desktop).toBeVisible();
+  await expect(page.getByRole('button', { name: /Free placement/ })).toHaveAttribute('aria-pressed', 'true');
+
+  // A blank board page: one big free zone at the end of the page.
+  await page.getByRole('tab', { name: 'Templates' }).click();
+  await page.locator('[data-library-item="board-page"]').click();
+  const zone = desktop.locator('[data-block-type="canvas"]').last();
+  await zone.scrollIntoViewIfNeeded();
+  const zb = (await zone.boundingBox())!;
+
+  // Drop an image, then a heading on top of it: both land where they were released.
+  await page.getByRole('tab', { name: 'Elements' }).click();
+  await dragTo(page, page.locator('[data-library-item="image"]'), { x: zb.x + zb.width * 0.3, y: zb.y + 60 });
+  await dragTo(page, page.locator('[data-library-item="heading"]'), { x: zb.x + zb.width * 0.35, y: zb.y + 100 });
+  const img = zone.locator('[data-block-type="image"]');
+  const head = zone.locator('[data-block-type="heading"]');
+  await expect(img).toHaveCount(1);
+  await expect(head).toHaveCount(1);
+  for (const el of [img, head]) expect(await el.evaluate((e) => getComputedStyle(e).position)).toBe('absolute');
+  const ib = (await img.boundingBox())!;
+  const hb = (await head.boundingBox())!;
+  // They overlap, and the later one is on top.
+  expect(hb.x < ib.x + ib.width && hb.y < ib.y + ib.height && hb.y > ib.y).toBe(true);
+  // The topmost page object at a point (the editor's own handles are skipped).
+  const topAt = (x: number, y: number) => page.evaluate(([px, py]) => document.elementsFromPoint(px!, py!).find((e) => !e.closest('[data-builder-ui]') && e.closest('[data-block-type]:not([data-block-type="canvas"])'))?.closest('[data-block-type]')?.getAttribute('data-block-type'), [x, y]);
+  const cx = hb.x + Math.min(hb.width, 60) / 2;
+  const cy = hb.y + hb.height / 2;
+  await page.mouse.move(10, 10);
+  expect(await topAt(cx, cy)).toBe('heading');
+  // Send the heading backward: the image covers it.
+  await page.keyboard.press('Control+[');
+  await expect.poll(() => topAt(cx, cy)).toBe('image');
+  await page.keyboard.press('Control+]');
+  await expect.poll(() => topAt(cx, cy)).toBe('heading');
+  await page.screenshot({ path: `${SHOTS}/08-free-board.png` });
+
+  // Drag the image straight away (not selected first): it moves, one undo step.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  const before = (await img.boundingBox())!;
+  await page.mouse.move(before.x + before.width - 20, before.y + before.height - 20);
+  await page.mouse.down();
+  await page.mouse.move(before.x + before.width + 40, before.y + before.height + 20, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.round((await img.boundingBox())!.x - before.x)).toBeGreaterThan(40);
+  await page.keyboard.press('Control+z');
+  await expect.poll(async () => Math.round((await img.boundingBox())!.x - before.x)).toBe(0);
+
+  // Dropping outside any free zone makes one right there.
+  const zonesBefore = await desktop.locator('[data-block-type="canvas"]').count();
+  const hero = (await desktop.locator('[data-block-type="hero"]').boundingBox())!;
+  await dragTo(page, page.locator('[data-library-item="badge"]'), { x: hero.x + hero.width / 2, y: hero.y + hero.height - 8 });
+  await expect(desktop.locator('[data-block-type="canvas"]')).toHaveCount(zonesBefore + 1);
+
+  // Published: absolute positions and the stacking order reach the live site.
+  await page.keyboard.press('Control+s');
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText(/^Published —/)).toBeVisible();
+  await expect.poll(async () => (await request.get(`http://localhost:${WEB_PORT}/`, { headers: { 'x-forwarded-host': host } })).text()).toContain('data-free-form');
+  const html = await (await request.get(`http://localhost:${WEB_PORT}/`, { headers: { 'x-forwarded-host': host } })).text();
+  expect(html).toContain('position:absolute');
 });

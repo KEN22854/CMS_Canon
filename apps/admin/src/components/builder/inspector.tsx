@@ -1,7 +1,9 @@
 'use client';
 
-import { getBlock, type BlockNode, type FieldMeta, type RichTextDoc } from '@canon/blocks';
-import { ArrowDown, ArrowUp, Plus, Trash2, Ungroup } from 'lucide-react';
+import { blockAttrsSchema, getBlock, type BlockNode, type FieldMeta, type RichTextDoc } from '@canon/blocks';
+import { ArrowDown, ArrowUp, ChevronDown, Plus, Trash2, Ungroup } from 'lucide-react';
+import { useState } from 'react';
+import { cn } from '@/lib/utils';
 import { Alert, Button, Input, Label, Select } from '../ui';
 import { AiAssist } from '../editor/ai-assist';
 import { MediaPicker } from '../editor/media-picker';
@@ -59,6 +61,7 @@ export function Inspector({ node, ...ctx }: { node: BlockNode } & Ctx) {
           onChange={(v) => updateProps(node.id, { [prop]: v }, `${node.id}.${prop}`)}
         />
       ))}
+      <AttributesSection node={node} readOnly={ctx.readOnly} />
       {/* Not inside the component builder (pageId ''): components can't nest. */}
       {!ctx.readOnly && ctx.pageId && node.type !== 'column' && <MakeComponent node={node} siteId={ctx.siteId} />}
     </div>
@@ -362,5 +365,45 @@ function FormPicker({
         {value ? t('inspector.editForm') : t('inspector.createForm')}
       </a>
     </div>
+  );
+}
+
+/** The block's HTML attributes (allowlist: anchor id, accessible label, tooltip), checked like on the server. */
+function AttributesSection({ node, readOnly }: { node: BlockNode; readOnly: boolean }) {
+  const t = useT();
+  const updateNode = useBuilder((s) => s.updateNode);
+  const [open, setOpen] = useState(Boolean(node.attrs));
+  const attrs = node.attrs ?? {};
+  const set = (key: keyof NonNullable<BlockNode['attrs']>, value: string) => {
+    const next = { ...attrs, [key]: value || undefined };
+    for (const k of Object.keys(next) as (keyof typeof next)[]) if (!next[k]) delete next[k];
+    updateNode(node.id, { attrs: Object.keys(next).length ? next : undefined }, `${node.id}.attrs.${key}`);
+  };
+  const idOk = !attrs.id || blockAttrsSchema.shape.id.safeParse(attrs.id).success;
+  return (
+    <section className="rounded-md border">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium hover:bg-muted/60">
+        {t('attrs.title')}
+        <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', !open && '-rotate-90')} />
+      </button>
+      {open && (
+        <div className="space-y-2.5 border-t px-3 py-3">
+          <label className="block space-y-1 text-xs">
+            <span className="font-medium">{t('attrs.id')}</span>
+            <Input value={attrs.id ?? ''} disabled={readOnly} placeholder="pricing" onChange={(e) => set('id', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 60))} aria-invalid={!idOk} />
+            <span className={cn('block text-[10px]', idOk ? 'text-muted-foreground' : 'text-destructive')}>{idOk ? t('attrs.idHint', { id: attrs.id || 'pricing' }) : t('attrs.idInvalid')}</span>
+          </label>
+          <label className="block space-y-1 text-xs">
+            <span className="font-medium">{t('attrs.ariaLabel')}</span>
+            <Input value={attrs.ariaLabel ?? ''} maxLength={150} disabled={readOnly} onChange={(e) => set('ariaLabel', e.target.value)} />
+          </label>
+          <label className="block space-y-1 text-xs">
+            <span className="font-medium">{t('attrs.tooltip')}</span>
+            <Input value={attrs.title ?? ''} maxLength={150} disabled={readOnly} onChange={(e) => set('title', e.target.value)} />
+          </label>
+          <p className="text-[10px] text-muted-foreground">{t('attrs.hint')}</p>
+        </div>
+      )}
+    </section>
   );
 }

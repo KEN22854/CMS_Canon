@@ -18,6 +18,7 @@ interface TestNode {
   props: Record<string, unknown>;
   children: TestNode[];
   styles?: unknown;
+  attrs?: unknown;
 }
 const node = (id: string, type: string, props: Record<string, unknown>, children: TestNode[] = [], extra: Partial<TestNode> = {}): TestNode => ({ id, type, props, children, ...extra });
 
@@ -36,6 +37,7 @@ describe('infinite canvas builder: elements and styles through the existing page
             // Desktop: a row; phones: a column with a smaller gap — only the mobile override changes.
             styles: { base: { display: 'flex', flexDirection: 'row', gap: '24px' }, mobileS: { flexDirection: 'column', gap: '12px', alignSelf: 'stretch' } },
           }),
+          node('cta', 'button', { label: 'Book', href: '/book', variant: 'primary', align: 'left', size: 'lg' }, [], { styles: { base: { transitionDuration: '200ms' }, hover: { backgroundColor: '#111111' }, focus: { borderWidth: '2px' } }, attrs: { id: 'book', title: 'Book a shoot' } }),
           node('li', 'list', { items: [{ text: 'Weddings' }, { text: 'Portraits' }], marker: 'check', align: 'left' }),
           node('im', 'image', { mediaId: '', src: 'https://images.unsplash.com/photo-1', alt: 'Camera', caption: '', rounded: true, ratio: '16/9', fit: 'cover', focus: 'top', overlay: 'dark' }, [], { styles: { base: { aspectRatio: '16/9', backdropFilter: 'blur(4px)' } } }),
         ]),
@@ -58,6 +60,12 @@ describe('infinite canvas builder: elements and styles through the existing page
     for (const type of ['"icon"', '"badge"', '"list"']) expect(blocks).toContain(type);
     const row = live.body.page.content.root.children[0].children[0];
     expect(row.styles).toEqual({ base: { display: 'flex', flexDirection: 'row', gap: '24px' }, mobileS: { flexDirection: 'column', gap: '12px', alignSelf: 'stretch' } });
-    expect(live.body.page.content.root.children[0].children[2].props).toMatchObject({ ratio: '16/9', focus: 'top', overlay: 'dark' });
+    const cta = live.body.page.content.root.children[0].children[1];
+    expect(cta.styles.hover).toEqual({ backgroundColor: '#111111' });
+    expect(cta.attrs).toEqual({ id: 'book', title: 'Book a shoot' });
+    const badAttrs = structuredClone(content);
+    badAttrs.root.children[0]!.children[1]!.attrs = { onclick: 'x' };
+    await t.http.patch(`${s}/pages/${page.id}`).set(h).send({ expectedVersion: saved.version, content: badAttrs }).expect(400);
+    expect(live.body.page.content.root.children[0].children[3].props).toMatchObject({ ratio: '16/9', focus: 'top', overlay: 'dark' });
   });
 });

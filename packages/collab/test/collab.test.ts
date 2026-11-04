@@ -159,3 +159,21 @@ describe('animations in co-editing', () => {
     expect(yDocToDraft(doc)!.content.root.children[0]!.animation).toBeUndefined();
   });
 });
+
+describe('board fields in co-editing', () => {
+  it('syncs HTML attributes and interaction-state styles like any other edit', () => {
+    const doc = new Y.Doc();
+    const draft = { title: 'T', slug: 't', description: '', seo: {}, content: { root: { id: 'r', type: 'section', props: {}, children: [{ id: 'b', type: 'button', props: { label: 'Go' }, children: [], attrs: { id: 'go' }, styles: { base: { color: '#111111' }, hover: { color: '#222222' } } }] } } };
+    draftToYDoc(doc, draft);
+    const back = yDocToDraft(doc)!.content.root.children[0]!;
+    expect(back.attrs).toEqual({ id: 'go' });
+    expect(back.styles).toEqual({ base: { color: '#111111' }, hover: { color: '#222222' } });
+    const next = structuredClone(draft);
+    next.content.root.children[0]!.attrs = { id: 'go', title: 'Start' } as never;
+    (next.content.root.children[0]!.styles as Record<string, Record<string, string>>).active = { opacity: '0.8' };
+    applyDraftDiff(doc, draft, next);
+    const after = yDocToDraft(doc)!.content.root.children[0]!;
+    expect(after.attrs).toEqual({ id: 'go', title: 'Start' });
+    expect(after.styles).toMatchObject({ hover: { color: '#222222' }, active: { opacity: '0.8' } });
+  });
+});

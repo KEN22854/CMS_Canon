@@ -37,6 +37,28 @@ performance, stage status).
   (the collaboration room's copy wasn't recognised as the saved page); the Layers tree of a big page
   took 1.5 s to open (sections now fold on large pages: 0.24 s); "Size" label clash in the style panel.
 
+### Iteration 18c — build the site like a board
+
+- Free placement (default on): library objects land at the pointer — in the free zone under it, or a
+  new free zone created there; clicks drop in the middle of the view. Objects overlap like shapes,
+  layer order with Ctrl+]/[; any object of a free zone can be dragged directly without selecting it;
+  zones grow to fit; a Blank board page template. Board self-scrolling (scrollIntoView) is turned
+  into a pan.
+- Tests: +1 E2E (drop anywhere, overlap and order checked with hit-testing, direct drag + undo, a
+  zone created outside existing zones, published positions).
+
+### Iteration 18b — second pass on the board
+
+- Interaction states (Hover, Pressed, Focus) in the style panel with a Transition property; buttons
+  style the button itself and get a Size; HTML attributes (anchor id, aria-label, title) with
+  server validation and Yjs sync; library drops land at the pointer inside free-form areas; rulers
+  (⇧R) with the selection highlighted.
+- Polish: the status pill no longer runs under the tools; narrow artboard titles drop the width
+  text instead of clipping; the background colour field says "Background colour".
+- Tests: +3 blocks unit (states, attributes), +1 collab (attributes and states through Yjs),
+  +1 E2E (hover state on the live site, anchor id and tooltip, free-form drop, rulers, light theme
+  and Russian).
+
 ## Iteration 17 — Stage 11 (staggered entrances) and Stage 14 (security pass)
 
 - **Animation studio: "Inner blocks — one by one"**: on a container (group, grid, columns,

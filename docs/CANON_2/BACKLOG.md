@@ -55,9 +55,10 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - ⬜ Security: trust X-Forwarded-For only from a configured proxy list in the renderer (today the per-IP limits for forms and checkout rely on it; site-wide caps limit the damage).
 
 ## Infinite canvas (iteration 18) — next
-- ⬜ CSS class names and HTML attributes per block: needs a decision (classes would reach outside the validated style layer; attributes need an allowlist such as id/aria-*/data-*).
-- ⬜ State styles: an editor for :hover / :active / :focus styles per block (today: hover animations only).
-- ⬜ Drop at a position inside a free-form area from the library (today it lands in the area, then you move it).
+- 🟡 HTML attributes: allowlist done (anchor id, aria-label, title). CSS class names still need a decision (they would reach outside the validated style layer).
+- ✅ State styles: Normal / Hover / Pressed / Focus in the style panel, plus a transition (iteration 18b).
+- ✅ Drop at a position inside a free-form area from the library (iteration 18b).
 - ⬜ All pages of a site on one board (today: one page per board, page switcher in the header).
-- ⬜ Rulers and draggable guides; measuring distances while dragging (today: Alt + hover).
+- 🟡 Rulers done (iteration 18b). Next: draggable guides, distances while dragging (today: Alt + hover).
 - ⬜ Virtualise artboards far outside the viewport for pages over ~3 000 blocks on 3+ artboards.
+- ⬜ Free zones on phones: derive a stacked layout automatically for objects placed only on desktop (today: Arrange for this screen, per zone).

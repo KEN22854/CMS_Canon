@@ -55,6 +55,8 @@ export interface BuilderState {
   /** Board: snap moves/resizes to the 8 px grid and to other elements; show the layout grid. */
   snap: boolean;
   grid: boolean;
+  /** Board: library drops land at the pointer (in a free-form area, created where needed). */
+  freePlacement: boolean;
   /** Board: bring a block into view (a layer was clicked, a search hit…); the counter re-triggers. */
   focus: { id: string; n: number } | null;
 
@@ -96,6 +98,7 @@ export interface BuilderState {
   setRemoteCursors: (c: RemoteCursor[]) => void;
   setSnap: (on: boolean) => void;
   setGrid: (on: boolean) => void;
+  setFreePlacement: (on: boolean) => void;
   requestFocus: (id: string) => void;
   select: (id: string | null) => void;
   /** Adds or removes a block from the selection (Ctrl/Shift+click). */
@@ -132,6 +135,22 @@ export interface RemoteCursor extends BoardCursor {
 }
 export type InspectorPanel = 'block' | 'style' | 'ai';
 const MODE_KEY = 'canon.builder.mode';
+const FREE_KEY = 'canon.board.free';
+function readFlag(key: string, fallback: boolean): boolean {
+  try {
+    const v = typeof window === 'undefined' ? null : window.localStorage.getItem(key);
+    return v === null ? fallback : v === '1';
+  } catch {
+    return fallback;
+  }
+}
+function writeFlag(key: string, on: boolean) {
+  try {
+    window.localStorage.setItem(key, on ? '1' : '0');
+  } catch {
+    // Not remembered.
+  }
+}
 function initialMode(): EditorMode {
   try {
     const m = window.localStorage.getItem(MODE_KEY);
@@ -252,6 +271,7 @@ export function createBuilderStore(initial: Draft) {
           remoteCursors: [],
           snap: true,
           grid: false,
+          freePlacement: readFlag(FREE_KEY, true),
           focus: null,
           inspector: { open: false, panel: 'block', n: 0 },
           library: null,
@@ -367,6 +387,10 @@ export function createBuilderStore(initial: Draft) {
           setRemoteCursors: (remoteCursors) => set({ remoteCursors }),
           setSnap: (snap) => set({ snap }),
           setGrid: (grid) => set({ grid }),
+          setFreePlacement: (freePlacement) => {
+            writeFlag(FREE_KEY, freePlacement);
+            set({ freePlacement });
+          },
           requestFocus: (id) => set({ focus: { id, n: (get().focus?.n ?? 0) + 1 } }),
           select: (id) => setSelection(id ? [id] : []),
           toggleSelect: (id) => {

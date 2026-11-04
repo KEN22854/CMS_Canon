@@ -24,6 +24,8 @@ export interface DraftNode {
   styles?: Record<string, Record<string, string>>;
   /** One JSON value in Yjs: an animation is edited as a whole, so last write wins per block. */
   animation?: object;
+  /** HTML attributes (anchor id, label, tooltip): one JSON value, last write wins per block. */
+  attrs?: object;
 }
 
 const NODE_FLAGS = ['name', 'hidden', 'locked'] as const;
@@ -76,6 +78,7 @@ function blockMap(n: DraftNode): Y.Map<unknown> {
   for (const [k, v] of flatStyles(n.styles)) styles.set(k, v);
   m.set('styles', styles);
   if (n.animation) m.set('animation', JSON.stringify(n.animation));
+  if (n.attrs) m.set('attrs', JSON.stringify(n.attrs));
   return m;
 }
 
@@ -130,6 +133,14 @@ export function yDocToDraft(doc: Y.Doc): CollabDraft | null {
         // A malformed value from a peer is dropped; the server validates whatever is saved anyway.
       }
     }
+    const attrs = m.get('attrs');
+    if (typeof attrs === 'string' && attrs) {
+      try {
+        node.attrs = JSON.parse(attrs) as DraftNode['attrs'];
+      } catch {
+        // Same as above: dropped, validated on save.
+      }
+    }
     return node;
   };
   const root = build(rootId, 0);
@@ -179,6 +190,10 @@ export function applyDraftDiff(doc: Y.Doc, prev: CollabDraft, next: CollabDraft,
         const now = flatStyles(n.styles);
         for (const k of was.keys()) if (!now.has(k)) styles.delete(k);
         for (const [k, v] of now) if (was.get(k) !== v) styles.set(k, v);
+      }
+      if (!same(old.attrs, n.attrs)) {
+        if (n.attrs) m.set('attrs', JSON.stringify(n.attrs));
+        else m.delete('attrs');
       }
       if (!same(old.animation, n.animation)) {
         if (n.animation) m.set('animation', JSON.stringify(n.animation));

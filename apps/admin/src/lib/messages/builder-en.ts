@@ -229,7 +229,7 @@ export const builderEn = {
   'style.f.textTransform': 'Case',
   'style.f.textDecoration': 'Decoration',
   'style.f.color': 'Colour',
-  'style.f.backgroundColor': 'Colour',
+  'style.f.backgroundColor': 'Background colour',
   'style.f.backgroundImage': 'Gradient',
   'style.f.borderWidth': 'Width',
   'style.f.borderStyle': 'Style',

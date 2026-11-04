@@ -2,7 +2,7 @@
 
 import type { RenderMedia, SiteThemeInput } from '@canon/ui-blocks';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragMoveEvent, type DragStartEvent } from '@dnd-kit/core';
-import { MAX_NODES } from '@canon/blocks';
+import { MAX_NODES, type BlockNode } from '@canon/blocks';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { translate, currentLocale, type MessageKey } from '@/lib/i18n';
@@ -11,6 +11,7 @@ import { cloneWithIds, findNode, findParent, newBlock } from '../editor/tree-ops
 import { Board } from './board/board';
 import { BoardActions } from './board/board-actions';
 import { BoardLibrary } from './board/library';
+import { dropFreely, placesFreely } from './board/free-place';
 import { BlockLibrary } from './block-library';
 import { Canvas } from './canvas';
 import { useBlockLabels } from './labels';
@@ -52,6 +53,7 @@ export function Workspace({ siteId, pageId, locale, theme, media, facts, readOnl
     const start = e.activatorEvent as PointerEvent;
     if (!item || typeof start.clientX !== 'number') return;
     const x = start.clientX + e.delta.x;
+    pointer.current = { x, y: start.clientY + e.delta.y };
     const y = start.clientY + e.delta.y;
     // The drag overlay follows the cursor, so look through it for the zone underneath.
     const under = document.elementsFromPoint(x, y).find((el) => layersRef.current?.contains(el) || canvasRef.current?.contains(el)) ?? null;
@@ -61,20 +63,38 @@ export function Workspace({ siteId, pageId, locale, theme, media, facts, readOnl
       return setDrop(target ? { zone: 'layers', target } : null);
     }
     if (canvasRef.current?.contains(under)) {
+      // Free placement: a new object goes exactly under the pointer, no insertion line.
+      const st = store.getState();
+      if (st.mode === 'board' && st.freePlacement && item.kind === 'new' && placesFreely(item.node ?? newBlock(item.type))) return setDrop(null);
       const target = resolveCanvasDrop(canvasRef.current, x, y, root, item);
       return setDrop(target ? { zone: 'canvas', target } : null);
     }
     setDrop(null);
   };
 
+  const pointer = useRef({ x: 0, y: 0 });
   const onEnd = () => {
     const item = active;
     const target = drop?.target;
     setActive(null);
     setDrop(null);
+    const st = store.getState();
+    const host = canvasRef.current;
+    if (item?.kind === 'new' && st.mode === 'board' && st.freePlacement && host) {
+      const r = host.getBoundingClientRect();
+      const p = pointer.current;
+      const inside = p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom;
+      if (inside && dropFreely(store, host, item.node ? cloneWithIds(item.node) : newBlock(item.type), p)) return;
+    }
     if (!item || !target) return;
     const s = store.getState();
-    if (item.kind === 'new') s.insert(item.node ? cloneWithIds(item.node) : newBlock(item.type), { parentId: target.parentId, index: target.index });
+    if (item.kind === 'new') {
+      const block = item.node ? cloneWithIds(item.node) : newBlock(item.type);
+      // Into a free-form area: the element lands where it was dropped, like on a design board.
+      const parent = findNode(s.draft.content.root, target.parentId);
+      const placed = parent?.type === 'canvas' && canvasRef.current ? placeInFreeForm(block, canvasRef.current, parent.id, pointer.current, s.snap) : block;
+      s.insert(placed, { parentId: target.parentId, index: target.index });
+    }
     else {
       s.move(item.id, target.parentId, target.index);
       s.select(item.id);
@@ -252,4 +272,21 @@ function OperationHistory() {
       </ol>
     </div>
   );
+}
+
+/** Starting widths of elements dropped into a free-form area (the same as its own add bar). */
+const FREE_WIDTH: Record<string, { width: string; height?: string }> = { heading: { width: '480px' }, text: { width: '420px' }, button: { width: '220px' }, image: { width: '360px' }, shape: { width: '240px', height: '160px' } };
+
+/** Absolute position (desktop layer, frame CSS px) at the drop point; the 8 px grid when snapping. */
+function placeInFreeForm(block: BlockNode, host: HTMLElement, canvasId: string, at: { x: number; y: number }, snap: boolean): BlockNode {
+  const frame = host.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(canvasId)}"] [data-free-frame]`);
+  if (!frame) return block;
+  // The page content carries the artboard's zoom (CanvasFrame), so frame px = screen px / zoom.
+  const zoom = parseFloat(host.querySelector<HTMLElement>(':scope > [style*="zoom"]')?.style.zoom ?? '1') || 1;
+  const fr = frame.getBoundingClientRect();
+  const g = (v: number) => (snap ? Math.round(v / 8) * 8 : Math.round(v));
+  const left = g(Math.max(0, (at.x - fr.left) / zoom));
+  const top = g(Math.max(0, (at.y - fr.top) / zoom));
+  const size = FREE_WIDTH[block.type] ?? { width: '320px' };
+  return { ...block, styles: { ...(block.styles ?? {}), base: { ...(block.styles?.base ?? {}), position: 'absolute', left: `${left}px`, top: `${top}px`, maxWidth: 'none', marginTop: '0px', paddingLeft: '0px', paddingRight: '0px', ...size } } };
 }

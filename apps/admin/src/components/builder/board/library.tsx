@@ -49,7 +49,8 @@ import { cn } from '@/lib/utils';
 import { cloneWithIds, newBlock } from '../../editor/tree-ops';
 import { GenerateBlock } from '../palette';
 import { SectionLibrary } from '../sections';
-import { useBuilder } from '../store';
+import { useBuilder, useBuilderStore } from '../store';
+import { dropFreely, placesFreely } from './free-place';
 
 /**
  * The board's library: everything that can go on a page, by kind — layout containers, single
@@ -211,6 +212,7 @@ function Grid({ title, entries, wide }: { title?: string; entries: Entry[]; wide
 /** One library entry: click inserts, drag places. The tree gets fresh ids every time it lands. */
 function LibraryItem({ id, build, icon: Icon, label, children }: { id: string; build: () => BlockNode; icon?: LucideIcon; label: string; children?: ReactNode }) {
   const insert = useBuilder((s) => s.insert);
+  const store = useBuilderStore();
   const sample = useMemo(build, [build]);
   const drag = useDraggable({ id: `lib-${id}`, data: { kind: 'new', type: sample.type, node: sample } });
   return (
@@ -221,7 +223,20 @@ function LibraryItem({ id, build, icon: Icon, label, children }: { id: string; b
       type="button"
       title={label}
       data-library-item={id}
-      onClick={() => insert(cloneWithIds(build()))}
+      onClick={() => {
+        const block = cloneWithIds(build());
+        // Free placement: a click drops it in the middle of what you see of the artboard.
+        const st = store.getState();
+        const host = document.querySelector<HTMLDivElement>('[data-frame-active]');
+        const vp = document.querySelector<HTMLElement>('[data-board]')?.getBoundingClientRect();
+        if (st.mode === 'board' && st.freePlacement && host && vp && placesFreely(block)) {
+          const hr = host.getBoundingClientRect();
+          const x = (Math.max(hr.left, vp.left) + Math.min(hr.right, vp.right)) / 2;
+          const y = (Math.max(hr.top, vp.top) + Math.min(hr.bottom, vp.bottom)) / 2;
+          if (x > hr.left && y > hr.top && dropFreely(store, host, block, { x, y })) return;
+        }
+        insert(block);
+      }}
       className={cn('group flex flex-col items-center gap-1 rounded-lg border bg-card px-1 py-2 text-center text-[11px] font-medium leading-tight transition hover:-translate-y-px hover:border-primary hover:text-primary hover:shadow-sm', drag.isDragging && 'opacity-40')}
     >
       {children ?? (Icon && <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary" aria-hidden />)}
@@ -257,6 +272,22 @@ function PageTemplates({ locale, filter }: { locale: string; filter: (...texts: 
     <div>
       <p className="mb-0.5 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('board.lib.pages')}</p>
       <p className="mb-1.5 px-0.5 text-[10px] text-muted-foreground">{t('board.lib.pagesHint')}</p>
+      <button
+        type="button"
+        data-library-item="board-page"
+        onClick={() => {
+          const area = { ...newBlock('canvas'), name: 'Board', props: { ...newBlock('canvas').props, height: 1600 } };
+          const r = applyMany([{ op: 'NODE_INSERT', parentId: root.id, index: root.children.length, nodes: [area] }]);
+          if (r.applied) toast.success(t('board.lib.boardPageAdded'));
+        }}
+        className="mb-1.5 flex w-full items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-2 py-2 text-left text-xs font-medium text-primary hover:border-primary"
+      >
+        <SquareDashed className="h-4 w-4 shrink-0" aria-hidden />
+        <span>
+          {t('board.lib.boardPage')}
+          <span className="block text-[10px] font-normal text-muted-foreground">{t('board.lib.boardPageHint')}</span>
+        </span>
+      </button>
       <div className="grid grid-cols-2 gap-1">
         {items.map((p) => (
           <button

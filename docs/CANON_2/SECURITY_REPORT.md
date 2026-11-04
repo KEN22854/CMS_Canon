@@ -12,7 +12,9 @@ unchanged and covered by the existing integration suites.
 | New block props | Icon names, image crop/fit/focus/overlay | Enums validated by the API; icons are a fixed inline-SVG map, no external request |
 | Board layout in localStorage | Tampered or old data | `sanitizeDevices` drops anything out of range; worst case the default layout |
 | Awareness cursors | Spoofed positions | Numbers and a breakpoint id only; names from the authenticated room membership |
-| CSS classes / HTML attributes | Requested by the prompt | Not added: they would let a page target CSS outside the validated layer — in BACKLOG as a decision |
+| HTML attributes (18b) | Attribute injection, duplicate ids | Strict allowlist (`id` by pattern, `aria-label`, `title` ≤ 150 chars), unknown keys refused (400); React escapes values; the id is emitted on the site only |
+| Interaction states (18b) | New style layers | `hover`/`active`/`focus` are the only extra layer names; same property grammars; rules stay scoped to the block |
+| CSS classes | Requested by the prompt | Not added: they would let a page target CSS outside the validated layer — in BACKLOG as a decision |
 
 ## Style layer — CSS injection
 

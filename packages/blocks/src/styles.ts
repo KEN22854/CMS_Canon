@@ -19,6 +19,24 @@ export const STYLE_BREAKPOINTS = [
 ] as const;
 
 export type StyleBreakpoint = (typeof STYLE_BREAKPOINTS)[number]['id'];
+
+/**
+ * Interaction states, stored next to the breakpoints in the same `styles` object ("hover",
+ * "active", "focus" layers). They apply on top of the block's styles at every width.
+ */
+export const STYLE_STATES = ['hover', 'active', 'focus'] as const;
+export type StyleState = (typeof STYLE_STATES)[number];
+/** A layer of the styles object: a breakpoint or an interaction state. */
+export type StyleLayer = StyleBreakpoint | StyleState;
+export const isStyleState = (l: string): l is StyleState => (STYLE_STATES as readonly string[]).includes(l);
+const STATE_PSEUDO: Record<StyleState, string> = { hover: ':hover', active: ':active', focus: ':focus-visible' };
+
+/**
+ * Blocks whose visible control is an inner element (the link of a Button): their colours, border,
+ * shadow, type and states style that element, while layout, size and spacing stay on the block.
+ */
+const INNER_TARGET: Record<string, string> = { button: '[data-cn-el]' };
+const INNER_CSS = new Set(['color', 'background-color', 'background-image', 'border-width', 'border-style', 'border-color', 'border-radius', 'box-shadow', 'font-family', 'font-size', 'font-weight', 'font-style', 'letter-spacing', 'text-transform', 'text-decoration', 'opacity', 'filter', 'transition']);
 export const BREAKPOINT_IDS = STYLE_BREAKPOINTS.map((b) => b.id) as StyleBreakpoint[];
 
 // ── value grammars ───────────────────────────────────────────────────────────
@@ -150,6 +168,8 @@ export const STYLE_PROPS = {
   filter: { group: 'effects', css: 'filter', valid: isFilter },
   backdropFilter: { group: 'effects', css: 'backdrop-filter', valid: isFilter },
   cursor: opt('effects', 'cursor', ['auto', 'default', 'pointer', 'text', 'grab']),
+  /** Smooth changes between states (hover, active…): all properties, this long. */
+  transitionDuration: { group: 'effects', valid: (v: string) => /^\d{1,4}ms$/.test(v) && Number.parseInt(v, 10) <= 3000 },
   mixBlendMode: opt('effects', 'mix-blend-mode', ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'difference']),
   overflow: opt('effects', 'overflow', ['visible', 'hidden', 'auto', 'clip']),
 
@@ -162,7 +182,7 @@ export const STYLE_PROPS = {
 
 export type StyleProperty = keyof typeof STYLE_PROPS;
 export type StyleProps = Partial<Record<StyleProperty, string>>;
-export type ResponsiveStyles = Partial<Record<StyleBreakpoint, StyleProps>>;
+export type ResponsiveStyles = Partial<Record<StyleLayer, StyleProps>>;
 
 const SPECS = STYLE_PROPS as Record<string, PropSpec>;
 const MAX_VALUE = 200;
@@ -190,7 +210,7 @@ export function validateStyles(input: unknown, path = 'styles'): { styles?: Resp
   const issues: StyleIssue[] = [];
   const out: ResponsiveStyles = {};
   for (const [bp, props] of Object.entries(input as Record<string, unknown>)) {
-    if (!BREAKPOINT_IDS.includes(bp as StyleBreakpoint)) {
+    if (!BREAKPOINT_IDS.includes(bp as StyleBreakpoint) && !isStyleState(bp)) {
       issues.push({ path: `${path}.${bp}`, message: `Unknown breakpoint "${bp}"` });
       continue;
     }
@@ -204,7 +224,7 @@ export function validateStyles(input: unknown, path = 'styles'): { styles?: Resp
       else if (!isValidStyleValue(k, v)) issues.push({ path: `${path}.${bp}.${k}`, message: `Invalid value for ${k}` });
       else clean[k as StyleProperty] = (v as string).trim();
     }
-    if (Object.keys(clean).length) out[bp as StyleBreakpoint] = clean;
+    if (Object.keys(clean).length) out[bp as StyleLayer] = clean;
   }
   return { styles: Object.keys(out).length ? out : undefined, issues };
 }
@@ -231,7 +251,7 @@ export function styleSource(styles: ResponsiveStyles | undefined, bp: StyleBreak
 }
 
 /** Returns a copy with one property set (or removed when value is empty) at one breakpoint. */
-export function setStyle(styles: ResponsiveStyles | undefined, bp: StyleBreakpoint, prop: StyleProperty, value: string | undefined): ResponsiveStyles | undefined {
+export function setStyle(styles: ResponsiveStyles | undefined, bp: StyleLayer, prop: StyleProperty, value: string | undefined): ResponsiveStyles | undefined {
   const v = value === undefined || value.trim() === '' ? undefined : value.trim();
   // Setting what is already there returns the same object, so callers see "no change".
   if (styles?.[bp]?.[prop] === v) return styles;
@@ -264,14 +284,30 @@ function declarations(props: StyleProps): Map<string, string> {
   if (ok('scale')) tf.push(`scale(${props.scale})`);
   if (ok('skewX')) tf.push(`skewX(${deg(props.skewX!)})`);
   if (tf.length) out.set('transform', tf.join(' '));
+  if (ok('transitionDuration')) out.set('transition', `all ${props.transitionDuration} ease`);
   return out;
 }
 
 /** Doubled attribute: specificity (0,2,0) beats the block's own utility classes regardless of CSS order. */
-const rule = (id: string, decls: Map<string, string>) => `[data-cn="${id}"][data-cn]{${[...decls].map(([k, v]) => `${k}:${v}`).join(';')}}`;
+const rule = (id: string, decls: Map<string, string>, suffix = '') => `[data-cn="${id}"][data-cn]${suffix}{${[...decls].map(([k, v]) => `${k}:${v}`).join(';')}}`;
+
+/** The block's rules, split between the block and its inner control (see INNER_TARGET). */
+function rules(id: string, decls: Map<string, string>, type: string | undefined, pseudo = ''): string | null {
+  if (!decls.size) return null;
+  const inner = type ? INNER_TARGET[type] : undefined;
+  if (!inner) return rule(id, decls, pseudo);
+  // In a state, movement (a press-in scale, a lift) belongs to the control too.
+  const inEl = (k: string) => INNER_CSS.has(k) || (pseudo !== '' && k === 'transform');
+  const own = new Map([...decls].filter(([k]) => !inEl(k)));
+  const el = new Map([...decls].filter(([k]) => inEl(k)));
+  // States follow the control itself (hovering the empty row next to a button does nothing).
+  const out = [own.size ? rule(id, own, pseudo) : '', el.size ? rule(id, el, ` ${inner}${pseudo}`) : ''].join('');
+  return out || null;
+}
 
 interface StyledNode {
   id: string;
+  type?: string;
   styles?: ResponsiveStyles;
   animation?: BlockAnimation;
   hidden?: boolean;
@@ -294,7 +330,7 @@ export function compileStyles(root: StyledNode, isPageRoot = true): string {
       if (r) base.push(r);
     }
     if (n.styles) {
-      const c = compiledNode(n.id, n.styles, isRoot);
+      const c = compiledNode(n.id, n.styles, isRoot, n.type);
       if (c.base) base.push(c.base);
       for (const [bp, r] of c.bps) (byBp.get(bp) ?? byBp.set(bp, []).get(bp)!).push(r);
     }
@@ -320,19 +356,23 @@ interface CompiledNode {
  */
 const compiled = new WeakMap<ResponsiveStyles, Map<string, CompiledNode>>();
 
-function compiledNode(id: string, styles: ResponsiveStyles, isRoot: boolean): CompiledNode {
-  const key = `${isRoot ? 1 : 0}${id}`;
+function compiledNode(id: string, styles: ResponsiveStyles, isRoot: boolean, type?: string): CompiledNode {
+  const key = `${isRoot ? 1 : 0}${type ?? ''}:${id}`;
   let byKey = compiled.get(styles);
   const hit = byKey?.get(key);
   if (hit) return hit;
   let prev = declarations(resolveStyles(styles, 'base'));
-  const out: CompiledNode = { base: prev.size ? rule(id, prev) : null, bps: [] };
+  // Interaction states come after the block's own rules (same specificity + a pseudo-class wins).
+  const states = isRoot ? [] : STYLE_STATES.flatMap((st) => (styles[st] ? [rules(id, declarations(styles[st]!), type, STATE_PSEUDO[st])] : [])).filter(Boolean);
+  const own = rules(id, prev, type);
+  const out: CompiledNode = { base: own || states.length ? [own ?? '', ...states].join('') : null, bps: [] };
   if (!isRoot) {
     for (const bp of BREAKPOINT_IDS.slice(1)) {
       const cur = declarations(resolveStyles(styles, bp));
       // A property removed at a smaller breakpoint cannot happen (overrides only add), so diff is enough.
       const diff = new Map([...cur].filter(([k, v]) => prev.get(k) !== v));
-      if (diff.size) out.bps.push([bp, rule(id, diff)]);
+      const r = rules(id, diff, type);
+      if (r) out.bps.push([bp, r]);
       prev = cur;
     }
   }

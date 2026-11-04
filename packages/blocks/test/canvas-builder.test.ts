@@ -48,3 +48,43 @@ describe('new canvas elements', () => {
     expect(validatePageContent({ root: n('root', 'section', {}, [n('im', 'image', { ratio: '7/5' })]) }).ok).toBe(false);
   });
 });
+
+describe('interaction states', () => {
+  it('compiles hover / pressed / focus layers; a Button’s colours and states style its link', () => {
+    const tree = {
+      id: 'root',
+      children: [
+        { id: 'card', type: 'group', styles: { base: { borderRadius: '16px', transitionDuration: '200ms' }, hover: { boxShadow: '0 8px 24px 0 rgba(0,0,0,0.2)', translateY: '-4px' } }, children: [] },
+        { id: 'cta', type: 'button', styles: { base: { backgroundColor: '#111111', marginTop: '24px' }, hover: { backgroundColor: '#333333' }, active: { scale: '0.98' }, focus: { borderColor: 'token:primary', borderWidth: '2px', borderStyle: 'solid' }, mobileS: { backgroundColor: '#222222' } }, children: [] },
+      ],
+    };
+    const css = compileStyles(tree);
+    expect(css).toContain('[data-cn="card"][data-cn]{border-radius:16px;transition:all 200ms ease}');
+    expect(css).toContain('[data-cn="card"][data-cn]:hover{box-shadow:0 8px 24px 0 rgba(0,0,0,0.2);transform:translate(0, -4px)}');
+    // Layout stays on the block, the look moves to the button itself — also per breakpoint.
+    expect(css).toContain('[data-cn="cta"][data-cn]{margin-top:24px}[data-cn="cta"][data-cn] [data-cn-el]{background-color:#111111}');
+    expect(css).toContain('[data-cn="cta"][data-cn] [data-cn-el]:hover{background-color:#333333}');
+    expect(css).toContain('[data-cn="cta"][data-cn] [data-cn-el]:active{transform:scale(0.98)}');
+    expect(css).toContain('[data-cn="cta"][data-cn] [data-cn-el]:focus-visible{border-color:rgb(var(--site-primary));border-width:2px;border-style:solid}');
+    expect(css).toMatch(/@container \(max-width: 479px\)\{\[data-cn="cta"\]\[data-cn\] \[data-cn-el\]\{background-color:#222222\}\}/);
+  });
+
+  it('accepts state layers in page content and refuses unknown ones', () => {
+    const page = (styles: unknown) => ({ root: n('root', 'section', {}, [{ ...n('b', 'button', { label: 'Go', href: '/', variant: 'primary', align: 'left', size: 'lg' }), styles } as BlockNode]) });
+    expect(validatePageContent(page({ hover: { color: '#ffffff' }, focus: { opacity: '0.9' } })).ok).toBe(true);
+    expect(validatePageContent(page({ pressed: { color: '#ffffff' } })).ok).toBe(false);
+    expect(validatePageContent(page({ hover: { transitionDuration: '9000ms' } })).ok).toBe(false);
+  });
+});
+
+describe('HTML attributes', () => {
+  it('keeps the allowlist (anchor id, label, tooltip) and refuses anything else', () => {
+    const page = (attrs: unknown) => ({ root: n('root', 'section', {}, [{ ...n('h', 'heading', { text: 'Hi', level: 2, align: 'left' }), attrs } as BlockNode]) });
+    const ok = validatePageContent(page({ id: 'pricing', ariaLabel: 'Prices', title: '' }));
+    expect(ok.ok && ok.content.root.children[0]!.attrs).toEqual({ id: 'pricing', ariaLabel: 'Prices' });
+    expect(validatePageContent(page({ onclick: 'alert(1)' })).ok).toBe(false);
+    expect(validatePageContent(page({ id: '1-bad' })).ok).toBe(false);
+    expect(validatePageContent(page({ id: 'x" onmouseover="y' })).ok).toBe(false);
+    expect(validatePageContent(page({})).ok && validatePageContent(page({})).ok).toBe(true);
+  });
+});

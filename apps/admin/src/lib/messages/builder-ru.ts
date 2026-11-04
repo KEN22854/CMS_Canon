@@ -231,7 +231,7 @@ export const builderRu: Record<BuilderMessageKey, string> = {
   'style.f.textTransform': 'Регистр',
   'style.f.textDecoration': 'Оформление',
   'style.f.color': 'Цвет',
-  'style.f.backgroundColor': 'Цвет',
+  'style.f.backgroundColor': 'Цвет фона',
   'style.f.backgroundImage': 'Градиент',
   'style.f.borderWidth': 'Толщина',
   'style.f.borderStyle': 'Тип линии',

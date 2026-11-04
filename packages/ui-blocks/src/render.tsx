@@ -135,6 +135,9 @@ export function BlockRenderer({
     ...(node.animation?.type && !ctx.editing ? { 'data-anim': node.animation.type, 'data-anim-trigger': node.animation.trigger ?? 'scroll' } : {}),
     ...(node.animation?.type && ctx.editing ? { 'data-anim-edit': node.animation.type } : {}),
     ...(node.animation?.hover ? { 'data-hover': node.animation.hover } : {}),
+    ...(node.attrs?.ariaLabel ? { 'aria-label': node.attrs.ariaLabel } : {}),
+    ...(node.attrs?.title ? { title: node.attrs.title } : {}),
+    ...(node.attrs?.id && !ctx.editing ? { id: node.attrs.id } : {}),
   };
   // In the builder, text elements name the prop they show, so they can be edited in place.
   const F = (path: string) => (ctx.editing ? { 'data-field': path } : {});
@@ -149,7 +152,7 @@ export function BlockRenderer({
     case 'section':
       // The root section frames the page (and is the query container); nested sections are bands.
       return (
-        <section {...a} id={str(p.anchor) || undefined} className={`${isRoot ? '@container min-h-full' : ''} ${BG[str(p.background, 'default')] ?? BG.default} ${PAD[str(p.paddingY, 'lg')] ?? ''}`}>
+        <section {...a} id={str(p.anchor) || (a as { id?: string }).id} className={`${isRoot ? '@container min-h-full' : ''} ${BG[str(p.background, 'default')] ?? BG.default} ${PAD[str(p.paddingY, 'lg')] ?? ''}`}>
           <div className={`mx-auto ${isRoot ? 'max-w-none' : `px-6 ${WIDTH[str(p.width, 'default')] ?? WIDTH.default}`} space-y-6`}>{children()}</div>
         </section>
       );
@@ -323,7 +326,7 @@ export function BlockRenderer({
     case 'button':
       return (
         <div {...a} className={`mx-auto flex max-w-3xl px-6 ${FLEX_ALIGN[str(p.align, 'left')]}`}>
-          <CtaLink href={str(p.href, '/')} variant={str(p.variant, 'primary')} label={str(p.label)} field={F('label')} />
+          <CtaLink href={str(p.href, '/')} variant={str(p.variant, 'primary')} label={str(p.label)} field={F('label')} size={str(p.size, 'md')} />
         </div>
       );
 
@@ -597,18 +600,21 @@ export function BlockRenderer({
   }
 }
 
-function CtaLink({ href, label, variant, field }: { href: string; label: string; variant: string; field?: object }) {
+const BUTTON_PAD: Record<string, string> = { sm: 'px-4 py-2 text-sm', md: 'px-6 py-3', lg: 'px-8 py-4 text-lg' };
+
+function CtaLink({ href, label, variant, field, size = 'md' }: { href: string; label: string; variant: string; field?: object; size?: string }) {
   const external = /^https?:/i.test(href);
+  const pad = BUTTON_PAD[size] ?? BUTTON_PAD.md;
   const cls =
     variant === 'link'
-      ? 'font-semibold text-site-primary underline-offset-4 hover:underline'
+      ? `font-semibold text-site-primary underline-offset-4 hover:underline ${size === 'sm' ? 'text-sm' : size === 'lg' ? 'text-lg' : ''}`
       : variant === 'secondary'
-        ? 'rounded-site border border-current px-6 py-3 font-semibold hover:bg-site-fg/5'
+        ? `rounded-site border border-current ${pad} font-semibold hover:bg-site-fg/5`
         : variant === 'inverse'
-          ? 'rounded-site bg-white px-6 py-3 font-semibold text-site-primary shadow hover:opacity-90'
-          : 'rounded-site bg-site-primary px-6 py-3 font-semibold text-site-on-primary shadow hover:opacity-90';
+          ? `rounded-site bg-white ${pad} font-semibold text-site-primary shadow hover:opacity-90`
+          : `rounded-site bg-site-primary ${pad} font-semibold text-site-on-primary shadow hover:opacity-90`;
   return (
-    <a href={href} data-canon-event="cta_click" className={`inline-block ${cls}`} {...(external ? { rel: 'noopener noreferrer' } : {})} {...field}>
+    <a href={href} data-canon-event="cta_click" data-cn-el="" className={`inline-block ${cls}`} {...(external ? { rel: 'noopener noreferrer' } : {})} {...field}>
       {label}
     </a>
   );

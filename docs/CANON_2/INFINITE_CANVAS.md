@@ -139,7 +139,7 @@ artboard); styles are emitted once per section for all artboards.
 | 1 Architecture audit | ✅ this document |
 | 2 Infinite canvas core | ✅ pan/zoom/fit/selection zoom, marquee, drag & drop, transform (free-form), grid, snap, guides, distances, minimap |
 | 3 Element system | ✅ registry reused; new Icon, Badge, List; image crop/fit/focus/overlay; nesting, grouping |
-| 4 Editor interface | ✅ library, inspector, edit bar, layers, context menus, collapsible panels |
+| 4 Editor interface | ✅ library, inspector (incl. states and attributes), edit bar, layers, context menus, rulers, collapsible panels |
 | 5 Layout engine | ✅ flow + flex + grid containers, per-breakpoint layout props; free-form as an option |
 | 6 Responsive system | ✅ device artboards, custom widths, per-breakpoint styles and visibility |
 | 7 Persistence | ✅ existing API/versions; board layout per viewer |
@@ -148,6 +148,38 @@ artboard); styles are emitted once per section for all artboards.
 | 10 Renderer integration | ✅ same renderer on the board and the site; preview/publish unchanged; E2E checks the live HTML |
 | 11 QA & optimisation | ✅ unit, integration, E2E, perf run; fixes listed in PROGRESS |
 
-Not done, on purpose (see BACKLOG): CSS class names and arbitrary HTML attributes (would let a page
-target global CSS the style layer can't validate), a per-element "hover/active" state editor beyond
-the hover animations, multi-page boards (all pages of a site on one board).
+### Second pass (iteration 18b)
+
+- **Interaction states**: the style panel edits *Normal*, *Hover*, *Pressed* and *Focus*. States live
+  in the same `styles` object (`hover`, `active`, `focus` layers next to the breakpoints), so
+  validation, Yjs sync, undo and the API needed no new paths; they compile to `:hover`, `:active`,
+  `:focus-visible`. A **Transition** property makes the change smooth.
+- **Buttons** style the button itself: colours, background/gradient, border, radius, shadow, type and
+  states go to the link element (`[data-cn-el]`), layout and spacing stay on the block; a **Size**
+  setting (S/M/L).
+- **HTML attributes** (allowlist): anchor id, aria-label, title — validated by the API
+  (`blockAttrsSchema`), synced through Yjs, rendered as escaped attribute values; the id is only
+  emitted on the site (artboards repeat the page).
+- **Drop at a point**: library items dropped into a free-form area land where you release them
+  (absolute position on the 8 px grid when snapping).
+- **Rulers** (⇧R): page px from the active artboard's corner, the selection's extent highlighted.
+
+### Building the site like a board (iteration 18c)
+
+- **Free placement** (on by default; the move icon in the bottom tools): an object from the
+  library goes exactly where you release it. Over a free zone it lands at that point; anywhere
+  else a free zone appears in the page right there with the object in it. A click in the library
+  drops it in the middle of what you see. Whole bands (sections, hero, CTA, features, FAQ…) still
+  go into the page flow between sections.
+- **Overlap like shapes**: objects in a free zone are absolutely positioned and may cover each
+  other; the stacking order is the layer order (Ctrl+] / Ctrl+[, the edit bar, the context menu).
+- **Direct drag**: press any object of a free zone and drag it — no need to select it first; one
+  undo step, the 8 px grid when snapping, positions stored for the breakpoint being edited.
+- **Zones grow** to fit what you drop or move below their bottom (desktop height, or a min-height
+  for smaller screens).
+- **Blank board page** (Templates): one big free zone to compose a whole page freely.
+- Phones: positions are per breakpoint; on a phone artboard the zone's *Arrange for this screen*
+  stacks its objects in reading order, then you adjust.
+
+Not done, on purpose (see BACKLOG): CSS class names (they would reach outside the validated style
+layer), arbitrary attributes beyond the allowlist, all pages of a site on one board.

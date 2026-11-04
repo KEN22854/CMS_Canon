@@ -23,7 +23,28 @@ export interface BlockNode {
   styles?: ResponsiveStyles;
   /** Entrance and hover animation (see animation.ts). */
   animation?: BlockAnimation;
+  /** HTML attributes from a short allowlist (anchor id, accessible label, tooltip). */
+  attrs?: BlockAttrs;
 }
+
+/**
+ * The only HTML attributes a page can set on a block. Each is plain text checked against its own
+ * rule and rendered by React as an attribute value (escaped) — no event handlers, no style, no
+ * class names reaching outside the validated style layer.
+ */
+export interface BlockAttrs {
+  /** Anchor for in-page links (#pricing); lowercase letters, digits and dashes. */
+  id?: string;
+  ariaLabel?: string;
+  title?: string;
+}
+export const blockAttrsSchema = z
+  .object({
+    id: z.string().regex(/^[a-z][a-z0-9-]{0,59}$/, 'Anchor ids are lowercase letters, digits and dashes, starting with a letter').optional(),
+    ariaLabel: z.string().trim().max(150).optional(),
+    title: z.string().trim().max(150).optional(),
+  })
+  .strict();
 
 export interface PageContent {
   root: BlockNode;
@@ -40,6 +61,7 @@ const nodeSchema: z.ZodType<BlockNode> = z.lazy(() =>
     locked: z.boolean().optional(),
     styles: z.unknown().optional(),
     animation: z.unknown().optional(),
+    attrs: z.unknown().optional(),
   }),
 ) as z.ZodType<BlockNode>;
 
@@ -105,6 +127,13 @@ export function validatePageContent(input: unknown, opts: ValidateOptions = {}):
       const a = anim.success ? normalizeAnimation(anim.data) : undefined;
       if (a) out.animation = a;
       else delete out.animation;
+    }
+    if (node.attrs !== undefined) {
+      const at = blockAttrsSchema.safeParse(node.attrs);
+      if (!at.success) issues.push({ path: `${path}.attrs.${at.error.issues[0]?.path.join('.') ?? ''}`, message: at.error.issues[0]?.message ?? 'Invalid attributes' });
+      const clean = at.success ? Object.fromEntries(Object.entries(at.data).filter(([, v]) => v)) : {};
+      if (Object.keys(clean).length) out.attrs = clean;
+      else delete out.attrs;
     }
     return out;
   };
