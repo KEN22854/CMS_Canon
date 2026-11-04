@@ -50,6 +50,8 @@ Stages 1–2 (design system, Builder 2.0 foundation).
 | after/builder/simple-library-1440.png | 4 | 1440 | Block library: categories, live previews, tones |
 | after/builder/simple-freeform-1440.png | 2 | 1440 | Free-form block: selected element with move/resize handles, size, add-element bar, height handle |
 | after/builder/simple-template-1440.png | 4 | 1440 | A whole-page template applied |
+| after/releases/releases-review-1440.png | 13 | 1440 | Release review: the home page goes back v3 → v2, the rollback button |
+| after/releases/releases-list-1440.png | 13 | 1440 | Releases after a rollback: the automatic "before rollback" release on top |
 | after/crm/crm-contacts-1440.png | 8 | 1440 | Contacts: tag filter, contact panel with timeline and note |
 | after/crm/crm-automation-editor-1440.png | 8 | 1440 | Automation editor: when an order is placed → add tag, email the team |
 | after/crm/crm-automations-1440.png | 8 | 1440 | Automations list with on/off, run count and recent runs |

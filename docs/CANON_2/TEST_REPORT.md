@@ -10,12 +10,22 @@ renderer :3001).
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
 | API unit | 58 / 58 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM | 158 / 158 ✅ |
-| Playwright E2E | 23 / 23 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases | 159 / 159 ✅ |
+| Playwright E2E | 24 / 24 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **382** (377 after iteration 8).
+Total automated tests: **384** (382 after iteration 9).
+
+## Iteration 10 — Releases
+
+- `releases.test.ts` (API, real Postgres): a release of a page, a component and an entry; a bad
+  change to all three plus a new page and entry; the diff; editors record but can't roll back;
+  rollback restores page content and component tree on the live site, takes the new page and entry
+  offline, keeps the draft; rolling back to the automatic backup restores the bad state again;
+  release numbering; other workspaces 404.
+- `releases.spec.ts` (E2E): publish, create a release, publish a bad title, review, roll back, the
+  live site shows the old title.
 
 ## Iteration 9 — CRM and automation
 

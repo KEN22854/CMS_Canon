@@ -196,6 +196,14 @@ reduced motion) content is simply visible. Collab stores the object as a JSON st
 - **Filters** are parameterised SQL on `entries.data` (field names must exist in the schema);
   **views** live in `Collection.settings.views`; **bulk** loops the single-entry service methods.
 
+## Site releases (`apps/api/src/modules/releases`)
+
+`SiteRelease` stores pointers, not copies: `[{pageId, version}]`, `[{entryId, version}]` (page and
+entry versions are immutable snapshots already) and, for components (which keep only the latest
+published tree), the tree itself. Rollback runs in one tenant transaction: capture a backup
+release, move pointers, unpublish what wasn't live then, emit `SiteRolledBack`. No per-page
+`PagePublished` events are emitted (they would create automatic redirects).
+
 ## CRM (`apps/api/src/modules/crm`)
 
 - `CrmService` subscribes to `FormSubmitted`, `OrderPlaced`, `OrderStatusChanged` on the event

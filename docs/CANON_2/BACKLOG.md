@@ -33,7 +33,7 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - 🟡 E-commerce (Stage 7): products, cart, checkout with stock and server-side prices, orders and statuses, order emails. Next: online payments (needs the owner's provider and keys), variants (size/colour), shipping rates and taxes, discount codes, order export.
 - ✅ Redirects (manual, CSV, automatic on page move), SEO audit with scores, Schema.org JSON-LD, per-site 404 (Stage 9).
 - ⬜ Stage 9 next: redirect hit counts, keyword/SERP preview, Core Web Vitals per page from analytics, hreflang audit.
-- ⬜ Site releases: atomic publish of many pages, history, rollback (Stage 13).
+- 🟡 Hosting (Stage 13): site releases and undoable whole-site rollback. Next: automatic releases on a schedule or on every publish, release retention, staging domain per release, rollback of URLs/redirects.
 
 ## P2
 

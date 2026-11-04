@@ -515,6 +515,7 @@ model Site {
   orders      Order[]
   contacts    Contact[]
   automations Automation[]
+  releases    SiteRelease[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -2087,4 +2088,31 @@ model AutomationRun {
   @@unique([automationId, eventId])
   @@index([automationId, createdAt])
   @@map("automation_runs")
+}
+
+/// What a site had live at one moment: the published version of every page and entry, and every
+/// component's published tree. Rolling back puts those pointers back (content, not URLs).
+model SiteRelease {
+  id          String   @id @default(cuid())
+  tenantId    String
+  siteId      String
+  /// Per-site sequence ("Release 12").
+  number      Int
+  note        String?
+  /// Created by Canon (e.g. right before a rollback), not by a person.
+  automatic   Boolean  @default(false)
+  /// [{pageId, version, title, path}]
+  pages       Json
+  /// [{componentId, version, tree, name}]
+  components  Json
+  /// [{entryId, version}]
+  entries     Json
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, number])
+  @@index([tenantId, siteId, createdAt])
+  @@map("site_releases")
 }

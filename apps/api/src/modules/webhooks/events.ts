@@ -24,6 +24,7 @@ export const WEBHOOK_EVENTS = {
   'order.placed': 'OrderPlaced',
   'order.cancelled': 'OrderCancelled',
   'order.status': 'OrderStatusChanged',
+  'site.rolled_back': 'SiteRolledBack',
 } as const;
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;
 export const WEBHOOK_EVENT_NAMES = Object.keys(WEBHOOK_EVENTS) as WebhookEvent[];

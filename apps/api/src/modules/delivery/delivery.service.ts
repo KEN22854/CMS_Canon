@@ -35,6 +35,7 @@ const INVALIDATING_EVENTS = [
   // Stock on product pages.
   'OrderPlaced',
   'OrderCancelled',
+  'SiteRolledBack',
 ];
 
 /**

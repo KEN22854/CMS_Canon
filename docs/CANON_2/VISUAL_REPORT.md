@@ -112,6 +112,12 @@ automatically (marked "automatic") when a published page moves.
 
 ---
 
+# Iteration 10 — Releases
+
+| Review before rolling back | After the rollback (automatic backup release) |
+|---|---|
+| ![review](screenshots/after/releases/releases-review-1440.png) | ![list](screenshots/after/releases/releases-list-1440.png) |
+
 # Iteration 9 — CRM and automation
 
 | Contact with timeline (order, team email, note) | Automation editor |

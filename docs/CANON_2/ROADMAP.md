@@ -19,7 +19,7 @@ real screenshots and updated docs.
 | 10 | Themes and marketplace | 1, 4 | ⬜ |
 | 11 | Animation studio | 2 | 🟡 entrance/hover animations per block, scroll trigger, reduced motion |
 | 12 | Analytics and growth (heatmaps, funnels) | — | ⬜ |
-| 13 | Hosting: site releases, rollback | — | ⬜ |
+| 13 | Hosting: site releases, rollback | — | 🟡 releases of the live site, diff, one-click rollback (undoable) |
 | 14 | Security audit | each stage | continuous |
 | 15 | Multilingual platform (DE/FR/ES) | — | ⬜ |
 | 16 | Developer platform | — | ⬜ |

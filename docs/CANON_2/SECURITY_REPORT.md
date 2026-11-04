@@ -138,6 +138,12 @@ The inline script in `apps/admin/src/app/layout.tsx` is a static string that onl
 - **Open item**: refresh-token rotation + a reload mid-refresh can log a user out (fail-closed).
   Relaxing it is a deliberate trade-off — see BACKLOG.
 
+## Releases (iteration 10)
+
+- Rollback changes the whole public site, so it needs `update Site` (owners, admins) and a
+  confirmation in the UI; it is audited with counts; it is undoable (automatic backup release).
+- Releases are tenant data (RLS); capture is bounded (20 000 live entries).
+
 ## Clipboard
 
 Copied blocks are stored in the browser's `localStorage` (same origin as the admin) and are

@@ -37,6 +37,7 @@ import { ComponentsModule } from './modules/components/components.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { ShopModule } from './modules/shop/shop.module';
 import { CrmModule } from './modules/crm/crm.module';
+import { ReleasesModule } from './modules/releases/releases.module';
 import { FormsModule } from './modules/forms/forms.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { ScimModule } from './modules/scim/scim.module';
@@ -97,6 +98,7 @@ const REQUEST_ID_HEADER = 'x-request-id';
     SeoModule,
     ShopModule,
     CrmModule,
+    ReleasesModule,
     MediaModule,
     ContentAiModule,
     FactsModule,

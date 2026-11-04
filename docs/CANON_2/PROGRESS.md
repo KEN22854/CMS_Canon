@@ -2,7 +2,24 @@
 
 Last update: 2026-11-04.
 
-## Iteration 9 (this one) — Stage 8, CRM and automation
+## Iteration 10 (this one) — Stage 13, site releases and rollback
+
+- **Releases** (site → Releases): "Create release" records what is live — the published version
+  of every page and entry and every global component's published tree — with a note. Numbered per
+  site.
+- **Review and roll back**: what a rollback would change (pages back to their release version
+  with v-numbers, pages published later that go offline, pages deleted since that are skipped,
+  how many components and entries change), then one click rolls the whole site back. A
+  "before rollback" release is recorded automatically first, so a rollback is itself undoable.
+  Drafts are never touched (work in progress is kept); page URLs are not part of a release.
+- One transaction; one `SiteRolledBack` event refreshes delivery caches and the renderer (also a
+  webhook `site.rolled_back`). Creating a release needs publish rights; rolling back needs site
+  admin rights (owners, admins).
+- Tests: +1 API integration (pages, components, entries, diff, rollback, undo of the rollback,
+  editor can record but not roll back, other workspaces 404), +1 E2E (publish, release, bad
+  publish, review, roll back, live site checked).
+
+## Iteration 9 — Stage 8, CRM and automation
 
 - **Contacts** (site → Contacts): one per site and email, built automatically from form
   submissions (the form's email/name/phone fields) and orders; a timeline (form, order, order
@@ -239,5 +256,5 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.
 5. Remaining admin screens in Russian (collections, settings, analytics…).
 
-Stages 10–18 ( CRM, SEO, themes, animation, analytics, hosting, security,
+Stages 10–12 and 14–18 ( CRM, SEO, themes, animation, analytics, hosting, security,
 multilingual, developer platform, migration, local integrations) have not started. See ROADMAP.md.

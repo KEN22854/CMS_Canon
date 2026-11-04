@@ -115,6 +115,14 @@ checkedAt }`. Issue codes are listed in `packages/blocks/src/seo.ts` (`SeoIssueC
 - Delivery: `page` serves entry pages (with `entry: { id, collectionId, slug, basePath }`) and
   every page carries `lists`; `pages` adds `entries: [{ path, locale, updatedAt }]` for sitemaps.
 
+## Releases
+
+- `GET /v1/sites/:siteId/releases`, `POST /v1/sites/:siteId/releases { note? }` (publish Page).
+- `GET /v1/sites/:siteId/releases/:id` → release + `changes: { restored, unpublished, missing,
+  components, entries }`.
+- `POST /v1/sites/:siteId/releases/:id/rollback` (update Site) → `{ restored, unpublished, skipped,
+  backup }`. Webhook event `site.rolled_back`.
+
 ## CRM
 
 - `GET /v1/sites/:siteId/contacts?q&tag&customers&limit&offset` → `{ items, total, tags }`;
