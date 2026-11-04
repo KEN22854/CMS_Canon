@@ -16,7 +16,7 @@ const MAX_PROMPT_FACTS = 80;
 /** Top-level blocks are layout, not content: the builder lists the rest (row children) in the catalog. */
 // Columns are offered with Columns; component instances, free-form blocks and shapes need ids or
 // coordinates the model can't produce well.
-const PAGE_TYPES = BLOCKS.map((b) => b.type).filter((t) => !['column', 'component', 'canvas', 'shape'].includes(t));
+const PAGE_TYPES = BLOCKS.map((b) => b.type).filter((t) => !['column', 'component', 'canvas', 'shape', 'collection-list'].includes(t));
 
 interface Draft {
   raw: unknown;

@@ -11,6 +11,7 @@ import { useBlockLabels } from './labels';
 import { RichTextEditor } from './rich-text-editor';
 import { useBuilder } from './store';
 import { useForms } from '@/lib/forms';
+import { useCollections } from '@/lib/collections';
 import { useT } from '@/lib/i18n';
 
 interface Ctx {
@@ -151,6 +152,22 @@ function Field({
           {text}
         </label>
       );
+    case 'number': {
+      const v = typeof value === 'number' ? String(value) : '';
+      return (
+        <div className="space-y-1.5">
+          {label()}
+          <Input id={id} type="number" inputMode="numeric" value={v} disabled={ctx.readOnly} onChange={(e) => e.target.value !== '' && Number.isFinite(Number(e.target.value)) && onChange(Number(e.target.value))} />
+        </div>
+      );
+    }
+    case 'collection':
+      return (
+        <div className="space-y-1.5">
+          {label()}
+          <CollectionPicker id={id} siteId={ctx.siteId} value={typeof value === 'string' ? value : ''} disabled={ctx.readOnly} onChange={onChange} />
+        </div>
+      );
     case 'form':
       return (
         <div className="space-y-1.5">
@@ -286,6 +303,24 @@ function IconBtn({
 }
 
 /** Picks one of the site's forms; forms themselves are built under Site → Forms. */
+function CollectionPicker({ id, siteId, value, disabled, onChange }: { id: string; siteId: string; value: string; disabled: boolean; onChange: (v: unknown) => void }) {
+  const t = useT();
+  const collections = useCollections(siteId);
+  return (
+    <div className="space-y-1">
+      <Select id={id} className="w-full" disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{t('inspector.chooseCollection')}</option>
+        {collections.data?.map((c) => (
+          <option key={c.id} value={c.slug}>
+            {c.name}
+          </option>
+        ))}
+      </Select>
+      {collections.data?.length === 0 && <p className="text-[11px] text-muted-foreground">{t('inspector.noCollections')}</p>}
+    </div>
+  );
+}
+
 function FormPicker({
   id,
   siteId,

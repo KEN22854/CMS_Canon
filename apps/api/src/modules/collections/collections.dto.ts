@@ -1,4 +1,4 @@
-import { collectionAiSettingsSchema, collectionFieldsSchema, collectionSettingsSchema } from '@canon/fields';
+import { collectionAiSettingsSchema, collectionFieldsSchema, collectionSettingsSchema, viewFilterSchema } from '@canon/fields';
 import { z } from 'zod';
 import { LOCALE_RE } from '../sites/sites.dto';
 
@@ -40,6 +40,20 @@ export const listEntriesQuery = z.object({
   order: z.enum(['asc', 'desc']).default('desc'),
   limit: z.coerce.number().int().min(1).max(100).default(25),
   offset: z.coerce.number().int().min(0).max(100_000).default(0),
+  /** Field filters as JSON: [{"field":"price","op":"eq","value":"10"}] (eq, contains, empty, notEmpty). */
+  filters: z
+    .string()
+    .max(2_000)
+    .transform((s, ctx) => {
+      try {
+        return JSON.parse(s) as unknown;
+      } catch {
+        ctx.addIssue({ code: 'custom', message: 'filters must be JSON' });
+        return z.NEVER;
+      }
+    })
+    .pipe(z.array(viewFilterSchema).max(5))
+    .optional(),
 });
 export type ListEntriesQuery = z.infer<typeof listEntriesQuery>;
 
@@ -59,6 +73,18 @@ export const updateEntryBody = z.object({
   status: z.enum(['DRAFT', 'ARCHIVED']).optional(),
 });
 export type UpdateEntryBody = z.infer<typeof updateEntryBody>;
+
+export const BULK_ACTIONS = ['publish', 'unpublish', 'archive', 'delete', 'addTag', 'removeTag'] as const;
+export const bulkEntriesBody = z
+  .object({
+    ids: z.array(z.string().min(1).max(40)).min(1).max(200),
+    action: z.enum(BULK_ACTIONS),
+    tag: z.string().trim().min(1).max(40).optional(),
+    /** delete: also entries that other entries reference. */
+    force: z.boolean().default(false),
+  })
+  .refine((b) => !['addTag', 'removeTag'].includes(b.action) || b.tag, { message: 'tag is required for tag actions', path: ['tag'] });
+export type BulkEntriesBody = z.infer<typeof bulkEntriesBody>;
 
 export const publishEntryBody = z
   .object({ comment: z.string().max(200).optional(), overrideReview: z.boolean().optional() })

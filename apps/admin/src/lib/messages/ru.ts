@@ -1,6 +1,7 @@
 import { builderRu } from './builder-ru';
 import { seoRu } from './seo-ru';
 import { simpleRu } from './simple-ru';
+import { cmsRu } from './cms-ru';
 import type { MessageKey } from './en';
 
 /** Russian UI strings. Typed as the full key set, so a missing translation fails the build. */
@@ -302,4 +303,5 @@ export const ru: Record<MessageKey, string> = {
   ...builderRu,
   ...seoRu,
   ...simpleRu,
+  ...cmsRu,
 };

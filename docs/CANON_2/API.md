@@ -98,6 +98,23 @@ checkedAt }`. Issue codes are listed in `packages/blocks/src/seo.ts` (`SeoIssueC
 - `GET /v1/delivery/sites/:siteId/runtime` includes `redirects: [{ from, to, status }]`.
 - `GET /v1/delivery/sites/:siteId/page` includes `breadcrumbs: [{ title, path }]`.
 
+## CMS 2.0
+
+- Collection settings (`PATCH /v1/sites/:siteId/collections/:id`, `settings`):
+  - `route: { basePath: "/blog", templatePageId }` — entry pages. 400 if the template isn't a page
+    of the site or the path is malformed; 409 if another collection uses the path.
+  - `views: [{ id, name, q?, status?, tag?, sort, order, filters[] }]` — saved views (max 20).
+- `GET /v1/sites/:siteId/collections/:id/entries?filters=[{"field","op","value"}]` — ops `eq`
+  (case-insensitive; lists match an element), `contains`, `empty`, `notEmpty`; up to 5, ANDed.
+  400 `INVALID_FILTER` for unknown fields.
+- `POST /v1/sites/:siteId/collections/:id/entries/bulk` — `{ ids (1–200), action: publish |
+  unpublish | archive | delete | addTag | removeTag, tag?, force? }` → `{ done, failed: [{ id, code,
+  message }] }`.
+- `POST /v1/sites/:siteId/collection-lists/preview` — `{ blocks: [{ id, type: "collection-list",
+  props }], locale }` → cards by block id (published entries).
+- Delivery: `page` serves entry pages (with `entry: { id, collectionId, slug, basePath }`) and
+  every page carries `lists`; `pages` adds `entries: [{ path, locale, updatedAt }]` for sitemaps.
+
 ## Typed operations (library)
 
 Not an HTTP endpoint yet: `applyOperation` / `applyOperations` / `describeOperation` are exported

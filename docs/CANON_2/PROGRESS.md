@@ -2,7 +2,33 @@
 
 Last update: 2026-11-04.
 
-## Iteration 6 (this one) — hundreds of templates, photos and video, animation, the board
+## Iteration 7 (this one) — Stage 6, CMS 2.0: entry pages, collection lists, views, bulk
+
+- **Entry pages**: a collection gets an address (`/blog`) and a template page. Every published
+  entry is then a page at `/blog/<slug>`: the template's `{{entry.title}}`, `{{entry.<field>}}`
+  tokens are filled from the entry's published snapshot (texts, list items, rich text — a rich
+  text field alone in a paragraph brings its headings and lists — and image links). Title, SEO
+  title and description come from the entry; breadcrumbs work; entry pages are in the sitemap;
+  the template itself is never served or listed; a real page at the same path wins; two
+  collections can't share an address. "Create and publish a template" builds a first template
+  from the collection's fields in one click.
+- **Collection list block** (new `collection-list`): cards of published entries — collection,
+  grid or list, 1–4 columns, how many, order (newest, oldest, title), tag filter, image and text
+  fields (automatic when empty), date, link label, empty text. Cards link to entry pages. The
+  builder shows the same cards visitors will see (published entries only) through a preview
+  endpoint. Kept out of the AI catalog for now (it needs real collection slugs).
+- **Entries table**: field filters (is, contains, empty, not empty — combinable, up to 5),
+  **saved views** shared in the workspace (search, status, tag, sort, filters), **bulk actions**
+  on the selection: publish, unpublish, add/remove tag, archive, delete. Each entry goes through
+  the same checks as a single action (permissions, review gate, required fields); failures are
+  listed, the rest is done. The table is now in Russian and English.
+- Inspector: number fields and a collection picker.
+- Tests: +3 blocks unit (tokens, cards, list specs), +5 API integration (entry pages, route
+  validation, lists, filters with SQL-looking values, bulk with per-entry permissions, views),
+  +1 E2E (collection → template → drafts → filter → saved view → bulk publish → live entry page
+  and sitemap → list on the home page, in the builder and on the site).
+
+## Iteration 6 — hundreds of templates, photos and video, animation, the board
 
 - **Open-source templates**: 257 sections converted from two MIT libraries, **Tailblocks**
   (mertJF/tailblocks, 126) and **HyperUI** (markmead/hyperui, 131). A converter
@@ -155,5 +181,5 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.
 5. Remaining admin screens in Russian (collections, settings, analytics…).
 
-Stages 6–18 (CMS 2.0, e-commerce, CRM, SEO, themes, animation, analytics, hosting, security,
+Stages 7–18 (e-commerce, CRM, SEO, themes, animation, analytics, hosting, security,
 multilingual, developer platform, migration, local integrations) have not started. See ROADMAP.md.

@@ -546,6 +546,24 @@ export const builderEn = {
   'block.shape.f.kind': 'Shape',
 
   'section.cat.shop': 'Shop',
+  'canvas.chooseCollection': 'Choose a collection in the inspector',
+  'canvas.noEntries': 'No published entries match yet — publish some, or change the filter',
+  'inspector.chooseCollection': 'Choose a collection…',
+  'inspector.noCollections': 'This site has no collections yet — create one in Collections.',
+  'block.collection-list.name': 'Collection list',
+  'block.collection-list.desc': 'Cards of published entries from a collection (blog posts, products, events), newest first, optionally filtered by tag.',
+  'block.collection-list.f.collection': 'Collection',
+  'block.collection-list.f.title': 'Title',
+  'block.collection-list.f.layout': 'Layout',
+  'block.collection-list.f.columns': 'Columns',
+  'block.collection-list.f.limit': 'How many',
+  'block.collection-list.f.sort': 'Order',
+  'block.collection-list.f.tag': 'Only with tag',
+  'block.collection-list.f.imageField': 'Image field (empty: automatic)',
+  'block.collection-list.f.textField': 'Text field (empty: summary)',
+  'block.collection-list.f.showDate': 'Show the date',
+  'block.collection-list.f.linkLabel': 'Link label',
+  'block.collection-list.f.emptyText': 'When empty',
 } as const;
 
 export type BuilderMessageKey = keyof typeof builderEn;

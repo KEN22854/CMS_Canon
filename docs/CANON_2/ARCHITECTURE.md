@@ -176,6 +176,26 @@ style compiler writes its timing as CSS variables, `ANIMATION_CSS` holds the key
 entrances are hidden only after `html.canon-anim` is set by the observer, so without JS (or with
 reduced motion) content is simply visible. Collab stores the object as a JSON string per block.
 
+## CMS 2.0 (`packages/blocks/src/entry.ts`, `apps/api/src/modules/delivery/entry-pages.service.ts`)
+
+- **Entry pages.** `Collection.settings.route = { basePath, templatePageId }`. Delivery looks
+  up a page by path first; when there is none, it splits the path into base + slug, finds the
+  routed collection and the entry whose *published snapshot* has that slug, takes the template's
+  published version and runs `bindEntry` before `assemble`, so components, media and forms of
+  the result load as for any page. Template pages are refused by direct path and left out of
+  lists and the sitemap. Entry pages are cached like pages and invalidated by the same events
+  (EntryPublished/Unpublished, CollectionUpdated, PagePublished).
+- **Tokens.** `{{entry.<name>}}` in any string prop; columns (title, slug, summary,
+  publishedAt) first, then data fields. Values become text (React escapes it). Media link props
+  (`src`, `imageUrl`, `videoUrl`, `fileUrl`) accept a whole token in templates and re-check
+  the filled value against the external-media allowlist.
+- **Collection lists.** `collectListSpecs(root)` → `EntryPagesService.lists()` → payload
+  `lists[blockId]` → `RenderContext.lists`. Same code for the builder preview
+  (`POST /v1/sites/:id/collection-lists/preview`, tenant checked first, then system queries
+  pinned to the site).
+- **Filters** are parameterised SQL on `entries.data` (field names must exist in the schema);
+  **views** live in `Collection.settings.views`; **bulk** loops the single-entry service methods.
+
 ## No-op edits
 
 Edits return the same tree object when nothing changes (also for props/meta/styles set to the

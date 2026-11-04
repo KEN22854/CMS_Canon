@@ -6,9 +6,9 @@ import { validatePageContent, type BlockNode, type PageContent, type TreeIssue }
  * Compact, model-readable description of the block registry. Generated from the same definitions
  * the API validates against, so prompts can't drift from what the server will accept.
  */
-// Component instances need ids of real components the model can't know; free-form blocks and
-// shapes need hand-placed coordinates. Neither is offered to the model.
-const AI_EXCLUDED = new Set(['component', 'canvas', 'shape']);
+// Component instances and collection lists need ids/slugs of real site data the model can't know;
+// free-form blocks and shapes need hand-placed coordinates. None is offered to the model.
+const AI_EXCLUDED = new Set(['component', 'canvas', 'shape', 'collection-list']);
 export function blockCatalogForPrompt(types: readonly string[] = BLOCKS.map((b) => b.type).filter((t) => !AI_EXCLUDED.has(t))): string {
   return types
     .map((t) => getBlock(t))

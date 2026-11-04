@@ -1,4 +1,4 @@
-import { collectComponentIds, collectMediaIds, collectPageFactKeys, expandComponents, type BlockNode, type PageContent } from '@canon/blocks';
+import { bindEntry, collectComponentIds, collectListSpecs, collectMediaIds, collectPageFactKeys, expandComponents, type BlockNode, type ListItem, type PageContent } from '@canon/blocks';
 import { applyBlockPatch, decodeVariantKey, mergePatches, type BlockPatch, type RuntimeConfig } from '@canon/edge';
 import type { Page, Site } from '@canon/db';
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
@@ -13,6 +13,7 @@ import { MediaService } from '../media/media.service';
 import { PagesService } from '../pages/pages.service';
 import { DEFAULT_THEME, servedHost } from '../sites/sites.service';
 import { publicForm } from '../forms/forms.dto';
+import { EntryPagesService, type EntryPageHit } from './entry-pages.service';
 
 const CACHE_TTL_SEC = 300;
 const INVALIDATING_EVENTS = [
@@ -44,6 +45,7 @@ export class DeliveryService implements OnModuleInit {
     private readonly system: SystemPrismaService,
     private readonly media: MediaService,
     private readonly pages: PagesService,
+    private readonly entryPages: EntryPagesService,
     private readonly bus: EventBus,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
@@ -79,8 +81,17 @@ export class DeliveryService implements OnModuleInit {
     const cached = await this.redis.get(cacheKey).catch(() => null);
     if (cached) return JSON.parse(cached) as unknown;
 
-    const page = await this.system.page.findFirst({ where: { siteId, fullPath: path, locale: loc, deletedAt: null, publishedVersion: { not: null } } });
-    if (!page?.publishedVersion) throw notFound('Page');
+    const found = await this.system.page.findFirst({ where: { siteId, fullPath: path, locale: loc, deletedAt: null, publishedVersion: { not: null } } });
+    const templates = await this.entryPages.templatePageIds(siteId);
+    // An entry template is a mould with raw {{entry.*}} tokens, not a destination of its own.
+    if (found && templates.has(found.id)) throw notFound('Page');
+    if (!found) {
+      const payload = await this.entryPage(site, path, loc);
+      await this.redis.set(cacheKey, JSON.stringify(payload), 'EX', CACHE_TTL_SEC).catch(() => undefined);
+      return payload;
+    }
+    const page = found;
+    if (!page.publishedVersion) throw notFound('Page');
     const snapshot = await this.system.pageVersion.findUnique({ where: { pageId_version: { pageId: page.id, version: page.publishedVersion } } });
     if (!snapshot) throw notFound('Page');
 
@@ -143,6 +154,24 @@ export class DeliveryService implements OnModuleInit {
     return config;
   }
 
+  /**
+   * `/blog/<slug>`: the collection's live template page with the published entry filled in. Title,
+   * description and canonical path are the entry's; a real page at the same path always wins.
+   */
+  private async entryPage(site: Site, path: string, locale: string) {
+    const hit = await this.entryPages.find(site.id, path, locale);
+    if (!hit) throw notFound('Page');
+    const template = await this.system.page.findFirst({ where: { id: hit.route.templatePageId, siteId: site.id, deletedAt: null, publishedVersion: { not: null } } });
+    if (!template?.publishedVersion) throw notFound('Page');
+    const snapshot = await this.system.pageVersion.findUnique({ where: { pageId_version: { pageId: template.id, version: template.publishedVersion } } });
+    if (!snapshot) throw notFound('Page');
+    const content = bindEntry(snapshot.content as unknown as PageContent, hit.entry);
+    const seo = { ...(snapshot.seo as Record<string, unknown>), title: hit.entry.title, description: hit.entry.summary ?? (snapshot.seo as { description?: string }).description };
+    // Translations of a template don't map entries across locales, so entry pages carry no alternates.
+    const page: Page = { ...template, title: hit.entry.title, description: hit.entry.summary ?? template.description, fullPath: path, locale, translationGroupId: null, publishedAt: (hit.entry.publishedAt as Date | null) ?? template.publishedAt };
+    return { ...(await this.assemble(site, page, content, seo, false)), entry: entryRef(hit), applied: { experiments: [], segmentId: null } };
+  }
+
   /** Draft content for a signed preview link; never cached anywhere. */
   async preview(token: string) {
     const claims = await this.pages.verifyPreview(token);
@@ -155,8 +184,9 @@ export class DeliveryService implements OnModuleInit {
   /** Published pages for sitemaps and navigation. */
   async list(siteId: string) {
     const site = await this.site(siteId);
+    const [templates, entries] = await Promise.all([this.entryPages.templatePageIds(siteId), this.entryPages.sitemapEntries(siteId)]);
     const pages = await this.system.page.findMany({
-      where: { siteId, deletedAt: null, publishedVersion: { not: null } },
+      where: { siteId, deletedAt: null, publishedVersion: { not: null }, id: { notIn: [...templates] } },
       select: { id: true, title: true, fullPath: true, locale: true, parentId: true, position: true, updatedAt: true, publishedAt: true, translationGroupId: true, seo: true },
       orderBy: [{ locale: 'asc' }, { position: 'asc' }, { fullPath: 'asc' }],
     });
@@ -166,13 +196,18 @@ export class DeliveryService implements OnModuleInit {
         // The site's 404 page is a template, not a destination.
         .filter((p) => !(p.seo as { noindex?: boolean }).noindex && p.fullPath !== '/404')
         .map((p) => ({ id: p.id, title: p.title, path: p.fullPath, locale: p.locale, parentId: p.parentId, position: p.position, updatedAt: p.publishedAt ?? p.updatedAt, translationGroupId: p.translationGroupId })),
+      // Entry pages (sitemap only — they are not menu items).
+      entries: entries.map((e) => ({ path: e.path, locale: e.locale, updatedAt: e.updatedAt })),
     };
   }
 
   private async assemble(site: Site, page: Page, raw: PageContent, seo: Record<string, unknown>, draft: boolean) {
     // Global components are expanded first, so their media, facts and forms load like the page's own.
     const content = await this.withComponents(site.id, raw, draft);
+    // Collection lists: cards from published entries; their images load with the page's media.
+    const lists: Record<string, ListItem[]> = await this.entryPages.lists(site.id, collectListSpecs(content.root), page.locale);
     const mediaIds = collectMediaIds(content);
+    for (const items of Object.values(lists)) for (const i of items) if (i.mediaId) mediaIds.push(i.mediaId);
     const ogId = typeof seo.ogImageMediaId === 'string' ? seo.ogImageMediaId : undefined;
     if (ogId) mediaIds.push(ogId);
     const factKeys = collectPageFactKeys(content);
@@ -219,6 +254,7 @@ export class DeliveryService implements OnModuleInit {
       media: Object.fromEntries(mediaRows.map((m) => [m.id, this.media.present(m)])),
       facts: Object.fromEntries(factRows.map((f) => [f.key, f.displayValue])),
       forms: Object.fromEntries(formRows.map((f) => [f.id, publicForm(f)])),
+      lists,
       breadcrumbs: ancestorPaths.flatMap((p) => ancestors.filter((a) => a.fullPath === p).map((a) => ({ title: a.title, path: a.fullPath }))),
     };
   }
@@ -270,6 +306,10 @@ export class DeliveryService implements OnModuleInit {
     });
     if (!res.ok) throw new Error(`renderer revalidation returned ${res.status}`);
   }
+}
+
+function entryRef(hit: EntryPageHit) {
+  return { id: hit.entry.id, collectionId: hit.collectionId, slug: hit.entry.slug, basePath: hit.route.basePath };
 }
 
 function presentSite(s: Site) {

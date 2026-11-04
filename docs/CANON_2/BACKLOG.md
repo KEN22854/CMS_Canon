@@ -29,7 +29,7 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - ⬜ Free-form next: multi-select and align/distribute, rotation handle, smart guides, z-order buttons, drag from the library onto a position.
 - ✅ AI planner → typed operations → diff → approve per operation, one undo step (Stage 5, first part).
 - ⬜ Stage 5: live canvas preview of a plan, multi-page plans, plans as review requests.
-- ⬜ CMS dynamic pages, table/grid views, bulk actions (Stage 6).
+- 🟡 CMS 2.0 (Stage 6): entry pages from a template, Collection list block, field filters, saved views, bulk actions. Next: relation fields in templates (author, category pages), pagination and category filters on the site, inline cell editing, kanban/gallery views, scheduled bulk publish.
 - ⬜ E-commerce: products, variants, cart, checkout, orders, payment adapters with webhook verification (Stage 7).
 - ✅ Redirects (manual, CSV, automatic on page move), SEO audit with scores, Schema.org JSON-LD, per-site 404 (Stage 9).
 - ⬜ Stage 9 next: redirect hit counts, keyword/SERP preview, Core Web Vitals per page from analytics, hreflang audit.

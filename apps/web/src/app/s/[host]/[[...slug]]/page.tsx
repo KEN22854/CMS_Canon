@@ -118,7 +118,7 @@ export default async function SitePage({ params }: { params: Params }) {
         <PageStyles root={page.content.root} />
         <BlockRenderer
           node={page.content.root}
-          ctx={{ media: data.media, facts: data.facts, draft: data.draft, forms: data.forms }}
+          ctx={{ media: data.media, facts: data.facts, draft: data.draft, forms: data.forms, lists: data.lists }}
           isRoot
         />
       </main>

@@ -1,4 +1,4 @@
-import { ANIMATION_CSS, compileStyles, expandInstance, videoEmbedUrl, type BlockNode, type RichTextDoc } from '@canon/blocks';
+import { ANIMATION_CSS, compileStyles, expandInstance, videoEmbedUrl, type BlockNode, type ListItem, type RichTextDoc } from '@canon/blocks';
 import type { ComponentType, CSSProperties, ReactNode } from 'react';
 import { FormView, type RenderForm } from './form';
 import { RichText } from './rich-text';
@@ -34,6 +34,8 @@ export interface RenderContext {
   editing?: boolean;
   /** Forms embedded on the page (public definitions, keyed by id). */
   forms?: Record<string, RenderForm>;
+  /** Cards of Collection list blocks, by block id (published entries, resolved by delivery). */
+  lists?: Record<string, ListItem[]>;
   /**
    * Global component trees by id. Delivery expands components before rendering, so only the
    * builder passes these (working copies), to draw instances in place.
@@ -66,6 +68,8 @@ export const DEFAULT_RENDER_LABELS = {
   formMissing: 'This form is inactive or was deleted',
   chooseForm: 'Choose a form in the inspector',
   noRenderer: 'Block “{type}” has no renderer yet',
+  chooseCollection: 'Choose a collection in the inspector',
+  noEntries: 'No published entries match yet — publish some, or change the filter',
 };
 export type RenderLabels = typeof DEFAULT_RENDER_LABELS;
 const label = (ctx: RenderContext, k: keyof RenderLabels) => ctx.labels?.[k] ?? DEFAULT_RENDER_LABELS[k];
@@ -429,6 +433,46 @@ export function BlockRenderer({
           inert={Boolean(ctx.editing)}
           attrs={a as Record<string, string>}
         />
+      );
+    }
+
+    case 'collection-list': {
+      if (!str(p.collection)) return ctx.draft || ctx.editing ? <Placeholder a={a} label={label(ctx, 'chooseCollection')} /> : null;
+      const items = ctx.lists?.[node.id] ?? [];
+      const grid = str(p.layout, 'grid') === 'grid';
+      const showDate = p.showDate !== false;
+      return (
+        <div {...a} className="mx-auto max-w-6xl px-6">
+          {str(p.title) && <h2 {...F('title')} className="mb-8 text-3xl font-bold tracking-tight">{str(p.title)}</h2>}
+          {items.length === 0 ? (
+            <p {...F('emptyText')} className="rounded-site border border-dashed border-site-fg/20 p-8 text-center opacity-70">
+              {ctx.editing ? label(ctx, 'noEntries') : str(p.emptyText)}
+            </p>
+          ) : (
+            <ul className={grid ? `grid grid-cols-1 gap-6 ${FEATURE_COLS[Number(p.columns) || 3] ?? FEATURE_COLS[3]}` : 'divide-y divide-site-fg/10'}>
+              {items.map((it) => {
+                const m = it.mediaId ? ctx.media[it.mediaId] : undefined;
+                const img = m ? <Picture media={m} alt="" className="aspect-[16/10] object-cover" sizes={grid ? '(min-width: 1024px) 380px, 100vw' : '240px'} /> : it.imageUrl ? <ExternalImage src={it.imageUrl} className="aspect-[16/10] h-full w-full object-cover" /> : null;
+                const title = it.path && !ctx.editing ? <a href={it.path} className="hover:underline">{it.title}</a> : it.title;
+                return (
+                  <li key={it.id} className={grid ? 'flex flex-col overflow-hidden rounded-site border border-site-fg/10 bg-site-bg' : 'flex gap-5 py-5'}>
+                    {img && <div className={grid ? 'overflow-hidden' : 'w-40 shrink-0 overflow-hidden rounded-site'}>{img}</div>}
+                    <div className={grid ? 'flex flex-1 flex-col p-5' : 'min-w-0 flex-1'}>
+                      {showDate && it.date && <time dateTime={it.date} className="text-xs uppercase tracking-wide opacity-60">{it.date}</time>}
+                      <h3 className="mt-1 text-lg font-semibold">{title}</h3>
+                      {it.text && <p className="mt-2 opacity-75">{it.text}</p>}
+                      {it.path && str(p.linkLabel) && (
+                        <a href={ctx.editing ? undefined : it.path} className="mt-auto pt-4 text-sm font-semibold text-site-primary" aria-label={`${str(p.linkLabel)}: ${it.title}`}>
+                          {str(p.linkLabel)} →
+                        </a>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       );
     }
 

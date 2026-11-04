@@ -12,6 +12,7 @@ import { IntelligenceModule } from '../intelligence/intelligence.module';
 import { SitesModule } from '../sites/sites.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
 import {
+  bulkEntriesBody,
   createCollectionBody,
   createEntryBody,
   duplicateCheckBody,
@@ -23,6 +24,7 @@ import {
   suggestSchemaBody,
   updateCollectionBody,
   updateEntryBody,
+  type BulkEntriesBody,
   type CreateCollectionBody,
   type CreateEntryBody,
   type DuplicateCheckBody,
@@ -149,6 +151,15 @@ export class EntriesController {
   async create(@Param('siteId') siteId: string, @Param('collectionId') cid: string, @Body(new ZodBody(createEntryBody)) body: CreateEntryBody, @TenantScope() p: TenantPrincipal) {
     const e = await this.entries.create(p, siteId, cid, body);
     return this.entries.detail(p.tenantId, siteId, cid, e.id);
+  }
+
+  @Post('bulk')
+  @HttpCode(200)
+  @RequirePermission('read', 'Entry')
+  @ApiOperation({ summary: 'One action on up to 200 entries (publish, unpublish, archive, delete, addTag, removeTag); per-entry permission and review checks; failures are listed, not fatal' })
+  bulk(@Param('siteId') siteId: string, @Param('collectionId') cid: string, @Body(new ZodBody(bulkEntriesBody)) body: BulkEntriesBody, @TenantScope() p: TenantPrincipal, @Req() req: Request) {
+    const ability = abilityOf(req);
+    return this.entries.bulk(p, ability, siteId, cid, body, (id) => this.reviews.assertPublishable(p, ability, siteId, 'ENTRY', id, false));
   }
 
   @Get(':entryId')

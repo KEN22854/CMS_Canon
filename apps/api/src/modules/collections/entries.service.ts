@@ -1,5 +1,5 @@
 import { subject } from '@casl/ability';
-import { collectRelations, entryTitle, normalizeTag, slugify, titleFieldOf, validateEntryData, type EntryData, type FieldDef } from '@canon/fields';
+import { collectRelations, entryTitle, normalizeTag, slugify, titleFieldOf, validateEntryData, type EntryData, type FieldDef, type ViewFilter } from '@canon/fields';
 import { Prisma, type Entry } from '@canon/db';
 import { Injectable } from '@nestjs/common';
 import type { AppAbility } from '../../common/auth/abilities';
@@ -11,7 +11,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { SitesService } from '../sites/sites.service';
 import { TenantsService } from '../tenancy/tenants.service';
 import { CollectionsService, type CollectionModel } from './collections.service';
-import type { CreateEntryBody, ListEntriesQuery, UpdateEntryBody } from './collections.dto';
+import type { BulkEntriesBody, CreateEntryBody, ListEntriesQuery, UpdateEntryBody } from './collections.dto';
 import { EnrichmentQueue } from './enrichment.queue';
 
 type Tx = Prisma.TransactionClient;
@@ -44,9 +44,18 @@ export class EntriesService {
   // ── reads ──────────────────────────────────────────────────────────────────
 
   async list(tenantId: string, siteId: string, collectionId: string, q: ListEntriesQuery) {
-    await this.collections.get(tenantId, siteId, collectionId);
+    const c = await this.collections.get(tenantId, siteId, collectionId);
     const db = this.prisma.forTenant({ tenantId });
     let ids: string[] | undefined;
+    if (q.filters?.length) {
+      const unknown = q.filters.find((f) => !c.fields.some((x) => x.name === f.field));
+      if (unknown) throw badRequest('INVALID_FILTER', `The collection has no field "${unknown.field}"`);
+      const conds = q.filters.map(filterSql);
+      const rows = await this.prisma.rawForTenant({ tenantId }, (tx) =>
+        tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT id FROM entries WHERE "collectionId" = ${collectionId} AND "deletedAt" IS NULL AND ${Prisma.join(conds, ' AND ')} LIMIT ${SEARCH_CANDIDATES * 5}`),
+      );
+      ids = rows.map((r) => r.id);
+    }
     if (q.q) {
       const like = `%${q.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
       const rows = await this.prisma.rawForTenant({ tenantId }, (tx) =>
@@ -56,7 +65,8 @@ export class EntriesService {
             AND ("searchVector" @@ websearch_to_tsquery('simple', ${q.q}) OR title ILIKE ${like} OR slug ILIKE ${like})
           LIMIT ${SEARCH_CANDIDATES}`,
       );
-      ids = rows.map((r) => r.id);
+      const found = new Set(rows.map((r) => r.id));
+      ids = ids ? ids.filter((id) => found.has(id)) : [...found];
     }
     const where: Prisma.EntryWhereInput = {
       tenantId,
@@ -264,6 +274,51 @@ export class EntriesService {
     return this.create(actor, siteId, collectionId, { data, locale: e.locale, tags: e.tags });
   }
 
+  /**
+   * One action on many entries, each through the same path (and permission checks) as the single
+   * action; one failure doesn't stop the rest. `checkPublish` runs the review gate per entry.
+   */
+  async bulk(actor: TenantPrincipal, ability: AppAbility, siteId: string, collectionId: string, body: BulkEntriesBody, checkPublish: (entryId: string) => Promise<void>) {
+    await this.collections.get(actor.tenantId, siteId, collectionId);
+    const ids = [...new Set(body.ids)];
+    const failed: { id: string; code: string; message: string }[] = [];
+    let done = 0;
+    for (const id of ids) {
+      try {
+        const e = await this.get(actor.tenantId, collectionId, id);
+        switch (body.action) {
+          case 'publish':
+            await checkPublish(id);
+            await this.publish(actor, ability, siteId, collectionId, id, 'Published (bulk)');
+            break;
+          case 'unpublish':
+            await this.unpublish(actor, ability, siteId, collectionId, id);
+            break;
+          case 'archive':
+            if (e.publishedVersion) await this.unpublish(actor, ability, siteId, collectionId, id);
+            await this.update(actor, ability, siteId, collectionId, id, { expectedVersion: (await this.get(actor.tenantId, collectionId, id)).version, status: 'ARCHIVED' }, { skipEnrichment: true });
+            break;
+          case 'delete':
+            await this.remove(actor, ability, siteId, collectionId, id, body.force);
+            break;
+          case 'addTag':
+          case 'removeTag': {
+            const tag = normalizeTag(body.tag!);
+            const has = e.tags.includes(tag);
+            if (body.action === 'addTag' && !has) await this.update(actor, ability, siteId, collectionId, id, { expectedVersion: e.version, tags: [...e.tags, tag] }, { skipEnrichment: true });
+            if (body.action === 'removeTag' && has) await this.update(actor, ability, siteId, collectionId, id, { expectedVersion: e.version, tags: e.tags.filter((t) => t !== tag) }, { skipEnrichment: true });
+            break;
+          }
+        }
+        done += 1;
+      } catch (err) {
+        failed.push({ id, code: err instanceof ApiError ? err.code : 'FAILED', message: err instanceof Error ? err.message : 'Failed' });
+      }
+    }
+    await this.audit.record({ tenantId: actor.tenantId, action: `entry.bulk.${body.action}`, entityType: 'Collection', entityId: collectionId, changes: { requested: ids.length, done, failed: failed.length } }, actor);
+    return { done, failed };
+  }
+
   // ── helpers ────────────────────────────────────────────────────────────────
 
   validated(c: CollectionModel, input: unknown, mode: 'draft' | 'publish'): EntryData {
@@ -321,6 +376,23 @@ export class EntriesService {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') throw new ApiError('SLUG_TAKEN', 'Another entry in this collection already uses this slug in this locale', 409);
       throw err;
     });
+  }
+}
+
+/** A field filter as SQL. Values are bind parameters; the field name passed FIELD_NAME_RE and exists. */
+function filterSql(f: ViewFilter): Prisma.Sql {
+  const v = f.value ?? '';
+  const isEmpty = Prisma.sql`(data->(${f.field}::text) IS NULL OR data->(${f.field}::text) = 'null'::jsonb OR data->>(${f.field}::text) = '' OR data->(${f.field}::text) = '[]'::jsonb)`;
+  switch (f.op) {
+    case 'empty':
+      return isEmpty;
+    case 'notEmpty':
+      return Prisma.sql`NOT ${isEmpty}`;
+    case 'contains':
+      return Prisma.sql`(data->>(${f.field}::text)) ILIKE ${'%' + v.replace(/[\\%_]/g, (ch) => '\\' + ch) + '%'}`;
+    case 'eq':
+      // Scalars compare as text (case-insensitive); lists match when they contain the value.
+      return Prisma.sql`(lower(data->>(${f.field}::text)) = lower(${v}::text) OR (jsonb_typeof(data->(${f.field}::text)) = 'array' AND data->(${f.field}::text) ? (${v}::text)))`;
   }
 }
 

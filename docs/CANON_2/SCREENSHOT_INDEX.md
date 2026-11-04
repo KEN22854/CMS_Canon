@@ -50,6 +50,8 @@ Stages 1–2 (design system, Builder 2.0 foundation).
 | after/builder/simple-library-1440.png | 4 | 1440 | Block library: categories, live previews, tones |
 | after/builder/simple-freeform-1440.png | 2 | 1440 | Free-form block: selected element with move/resize handles, size, add-element bar, height handle |
 | after/builder/simple-template-1440.png | 4 | 1440 | A whole-page template applied |
+| after/cms/cms2-entries-bulk-1440.png | 6 | 1440 | Entries table: entry pages card, saved view tab, three selected, bulk bar |
+| after/cms/cms2-collection-list-builder-1440.png | 6 | 1440 | Collection list block with real cards, its inspector (collection, layout, order…) |
 | after/builder/simple-board-1440.png | 2 | 1440 | Board: two free-form elements selected, align/order tools, rotate handle |
 | after/builder/simple-animation-1440.png | 11 | 1440 | Design → Animation for a selected element, playing |
 | after/builder/simple-video-hero-1440.png | 4 | 1440 | Hero with a background video from the library |

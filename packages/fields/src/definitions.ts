@@ -58,12 +58,49 @@ export const collectionFieldsSchema = z
     });
   });
 
+/** "/blog", "/news/archive": lowercase segments, no trailing slash, not the site root. */
+export const ROUTE_BASE_RE = /^(?:\/[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?){1,4}$/;
+
+/**
+ * Entry pages: every published entry is served at `${basePath}/${slug}`, rendered with the
+ * template page (its `{{entry.field}}` tokens filled from the entry). A real page at the same
+ * path always wins.
+ */
+export const collectionRouteSchema = z.object({
+  basePath: z.string().regex(ROUTE_BASE_RE, 'A path like /blog (lowercase, no trailing slash)'),
+  templatePageId: z.string().min(1).max(40),
+});
+export type CollectionRoute = z.infer<typeof collectionRouteSchema>;
+
+export const VIEW_FILTER_OPS = ['eq', 'contains', 'empty', 'notEmpty'] as const;
+export const viewFilterSchema = z.object({
+  field: z.string().regex(FIELD_NAME_RE),
+  op: z.enum(VIEW_FILTER_OPS),
+  value: z.string().max(200).optional(),
+});
+export type ViewFilter = z.infer<typeof viewFilterSchema>;
+
+/** A saved, shared filter of the entries table ("Drafts by tag news", "Out of stock"). */
+export const collectionViewSchema = z.object({
+  id: z.string().regex(/^[a-z0-9]{1,24}$/),
+  name: z.string().trim().min(1).max(60),
+  q: z.string().trim().max(200).optional(),
+  status: z.enum(['DRAFT', 'IN_REVIEW', 'SCHEDULED', 'PUBLISHED', 'ARCHIVED']).optional(),
+  tag: z.string().trim().max(40).optional(),
+  sort: z.enum(['updated', 'created', 'title', 'quality']).default('updated'),
+  order: z.enum(['asc', 'desc']).default('desc'),
+  filters: z.array(viewFilterSchema).max(5).default([]),
+});
+export type CollectionView = z.infer<typeof collectionViewSchema>;
+
 export const collectionSettingsSchema = z
   .object({
     /** Field used as the entry's display title (lists, relations, duplicates). Default: first text field. */
     titleField: z.string().regex(FIELD_NAME_RE).optional(),
     /** Field the slug is generated from on create. Default: the title field. */
     slugField: z.string().regex(FIELD_NAME_RE).optional(),
+    route: collectionRouteSchema.optional(),
+    views: z.array(collectionViewSchema).max(20).optional(),
   })
   .default({});
 export type CollectionSettings = z.infer<typeof collectionSettingsSchema>;

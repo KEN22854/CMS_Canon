@@ -13,8 +13,13 @@ const safeUrl = z
  */
 export const EXTERNAL_IMAGE_HOSTS = ['images.unsplash.com', 'picsum.photos', 'fastly.picsum.photos', 'images.pexels.com', 'assets.mixkit.co'] as const;
 export const EXTERNAL_VIDEO_HOSTS = ['assets.mixkit.co', 'videos.pexels.com'] as const;
+/**
+ * An entry template may name a field instead of a link ("{{entry.cover}}"); the filled-in value is
+ * checked against the same rules when the entry page is built (bindEntry), and dropped if it fails.
+ */
+export const ENTRY_LINK_TOKEN_RE = /^\{\{\s*entry\.[a-zA-Z][a-zA-Z0-9_]{0,39}\s*\}\}$/;
 const hostIn = (hosts: readonly string[]) => (v: string) => {
-  if (v === '') return true;
+  if (v === '' || ENTRY_LINK_TOKEN_RE.test(v)) return true;
   try {
     const u = new URL(v);
     return u.protocol === 'https:' && !u.username && !u.password && hosts.includes(u.hostname);
@@ -27,7 +32,10 @@ export const externalVideoUrl = z
   .string()
   .max(2048)
   .refine(hostIn(EXTERNAL_VIDEO_HOSTS), { message: `Video files must be https on ${EXTERNAL_VIDEO_HOSTS.join(', ')}` })
-  .refine((v) => v === '' || /\.(mp4|webm)(\?|$)/i.test(v), { message: 'Video files must be .mp4 or .webm' });
+  .refine((v) => v === '' || ENTRY_LINK_TOKEN_RE.test(v) || /\.(mp4|webm)(\?|$)/i.test(v), { message: 'Video files must be .mp4 or .webm' });
+
+/** Props holding media links, re-checked after entry tokens are filled in. */
+export const MEDIA_LINK_PROPS: Readonly<Record<string, 'image' | 'video'>> = { src: 'image', imageUrl: 'image', videoUrl: 'video', fileUrl: 'video' };
 
 const spacing = z.enum(['none', 'sm', 'md', 'lg', 'xl']);
 const align = z.enum(['left', 'center', 'right']);
@@ -45,7 +53,8 @@ export type FieldKind =
   | 'color'
   | 'list'
   | 'form'
-  | 'component';
+  | 'component'
+  | 'collection';
 
 export interface FieldMeta {
   kind: FieldKind;
@@ -491,6 +500,49 @@ export const componentBlock = define({
   fields: { componentId: { kind: 'component', label: 'Component' } },
 });
 
+/**
+ * Published entries of a collection as cards (blog posts, products, team, events). Delivery
+ * resolves the cards from published snapshots only; they link to entry pages when the
+ * collection has a route. Empty image/text fields mean "pick sensibly" (first image field,
+ * the AI summary or first long text).
+ */
+export const collectionListBlock = define({
+  type: 'collection-list',
+  name: 'Collection list',
+  description: 'Cards of published entries from a collection (blog posts, products, events), newest first, optionally filtered by tag.',
+  category: 'content',
+  isContainer: false,
+  props: z.object({
+    collection: z.string().max(60).regex(/^[a-z0-9-]*$/).default(''),
+    title: short(160),
+    layout: z.enum(['grid', 'list']).default('grid'),
+    columns: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).default(3),
+    limit: z.number().int().min(1).max(24).default(6),
+    sort: z.enum(['newest', 'oldest', 'title']).default('newest'),
+    tag: z.string().trim().toLowerCase().max(40).default(''),
+    imageField: z.string().max(40).default(''),
+    textField: z.string().max(40).default(''),
+    showDate: z.boolean().default(true),
+    linkLabel: z.string().max(40).default('Read more'),
+    emptyText: z.string().max(200).default('Nothing here yet.'),
+  }),
+  defaults: () => ({ collection: '', title: 'Latest', layout: 'grid' as const, columns: 3 as const, limit: 6, sort: 'newest' as const, tag: '', imageField: '', textField: '', showDate: true, linkLabel: 'Read more', emptyText: 'Nothing here yet.' }),
+  fields: {
+    collection: { kind: 'collection', label: 'Collection' },
+    title: { kind: 'text', label: 'Title', ai: true },
+    layout: { kind: 'select', label: 'Layout', options: ['grid', 'list'] },
+    columns: { kind: 'select', label: 'Columns', options: ['1', '2', '3', '4'] },
+    limit: { kind: 'number', label: 'How many' },
+    sort: { kind: 'select', label: 'Order', options: ['newest', 'oldest', 'title'] },
+    tag: { kind: 'text', label: 'Only with tag' },
+    imageField: { kind: 'text', label: 'Image field (empty: automatic)' },
+    textField: { kind: 'text', label: 'Text field (empty: summary)' },
+    showDate: { kind: 'toggle', label: 'Show the date' },
+    linkLabel: { kind: 'text', label: 'Link label', ai: true },
+    emptyText: { kind: 'text', label: 'When empty', ai: true },
+  },
+});
+
 export const BLOCKS = [
   sectionBlock,
   rowBlock,
@@ -514,6 +566,7 @@ export const BLOCKS = [
   componentBlock,
   canvasBlock,
   shapeBlock,
+  collectionListBlock,
 ] as const;
 export type KnownBlockType = (typeof BLOCKS)[number]['type'];
 

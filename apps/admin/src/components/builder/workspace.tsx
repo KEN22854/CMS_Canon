@@ -90,7 +90,7 @@ export function Workspace({ siteId, pageId, locale, theme, media, facts, readOnl
           </aside>
         )}
         <main className="min-w-0 flex-1">
-          <Canvas media={media} facts={facts} theme={theme} hostRef={canvasRef} drop={drop?.zone === 'canvas' ? drop.target : null} dragging={Boolean(active)} siteId={siteId} pageId={pageId} readOnly={readOnly} />
+          <Canvas media={media} facts={facts} theme={theme} hostRef={canvasRef} drop={drop?.zone === 'canvas' ? drop.target : null} dragging={Boolean(active)} siteId={siteId} pageId={pageId} locale={locale} readOnly={readOnly} />
         </main>
         {simple ? (
           // Simple mode: the inspector is a drawer that opens from a block's Content / Design buttons.

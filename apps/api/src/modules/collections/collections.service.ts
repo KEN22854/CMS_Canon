@@ -69,6 +69,7 @@ export class CollectionsService {
     await this.assertLimit(actor.tenantId);
     await this.assertRelationTargets(actor.tenantId, siteId, body.fields, null);
     assertSettings(body.fields, body.settings ?? {});
+    await this.assertRoute(actor.tenantId, siteId, body.settings ?? {}, null);
     const row = await this.write(actor, (tx) =>
       tx.collection.create({
         data: {
@@ -111,6 +112,7 @@ export class CollectionsService {
     const fields = body.fields ?? current.fields;
     const settings = body.settings ?? current.settings;
     assertSettings(fields, settings);
+    if (body.settings) await this.assertRoute(actor.tenantId, siteId, body.settings, id);
     if (body.name !== undefined) data.name = body.name;
     if (body.slug !== undefined) data.slug = body.slug;
     if (body.description !== undefined) data.description = body.description;
@@ -159,6 +161,21 @@ export class CollectionsService {
     if (missing.length) throw badRequest('INVALID_RELATION', 'Relation fields must point to collections of the same site', { missing });
   }
 
+  /**
+   * Entry pages: the template is a page of this site, and no other collection serves the same
+   * base path (the first match would hide the other's entries).
+   */
+  private async assertRoute(tenantId: string, siteId: string, settings: CollectionSettings, selfId: string | null): Promise<void> {
+    const route = settings.route;
+    if (!route) return;
+    const db = this.prisma.forTenant({ tenantId });
+    const page = await db.page.findFirst({ where: { id: route.templatePageId, siteId, tenantId, deletedAt: null }, select: { id: true } });
+    if (!page) throw badRequest('INVALID_SETTINGS', 'The entry template must be a page of this site');
+    const others = await db.collection.findMany({ where: { tenantId, siteId, deletedAt: null, ...(selfId ? { NOT: { id: selfId } } : {}) } });
+    const clash = others.find((o) => this.model(o).settings.route?.basePath === route.basePath);
+    if (clash) throw conflict(`"${clash.name}" already serves its entries at ${route.basePath}`, { collectionId: clash.id });
+  }
+
   private async assertLimit(tenantId: string): Promise<void> {
     const tenant = await this.tenants.get(tenantId);
     const limit = this.tenants.limits(tenant).collections;
@@ -176,6 +193,8 @@ export class CollectionsService {
 }
 
 function assertSettings(fields: readonly FieldDef[], settings: CollectionSettings): void {
+  const viewIds = (settings.views ?? []).map((v) => v.id);
+  if (new Set(viewIds).size !== viewIds.length) throw badRequest('INVALID_SETTINGS', 'Saved views need distinct ids');
   for (const key of ['titleField', 'slugField'] as const) {
     const name = settings[key];
     if (name && !fields.some((f) => f.name === name && (f.type === 'text' || f.type === 'textarea'))) throw badRequest('INVALID_SETTINGS', `${key} must name a text field`);

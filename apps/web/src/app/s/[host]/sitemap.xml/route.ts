@@ -21,6 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ host: s
     const links = alts.map((a) => `<xhtml:link rel="alternate" hreflang="${esc(a.locale)}" href="${esc(base + localizedHref(site, a.locale, a.path))}"/>`).join('');
     return `<url><loc>${esc(base + localizedHref(site, p.locale, p.path))}</loc><lastmod>${new Date(p.updatedAt).toISOString()}</lastmod>${links}</url>`;
   });
+  for (const e of list.entries ?? []) urls.push(`<url><loc>${esc(base + localizedHref(site, e.locale, e.path))}</loc><lastmod>${new Date(e.updatedAt).toISOString()}</lastmod></url>`);
   const xml = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${urls.join('')}</urlset>`;
   return new Response(xml, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, s-maxage=3600, stale-while-revalidate=86400' } });
 }

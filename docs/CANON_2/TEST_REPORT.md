@@ -5,17 +5,35 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 53 / 53 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 56 / 56 ✅ |
 | `@canon/collab` unit (incl. animation through Yjs) | 9 / 9 ✅ |
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
 | API unit | 56 / 56 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO | 147 / 147 ✅ |
-| Playwright E2E | 20 / 20 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0 | 152 / 152 ✅ |
+| Playwright E2E | 21 / 21 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **361** (355 after iteration 5).
+Total automated tests: **370** (361 after iteration 6).
+
+## Iteration 7 — CMS 2.0
+
+- `cms2.test.ts` (API, real Postgres): an entry page is served at /blog/<slug> with every token
+  filled (a rich text field brings its structure, markup stays text), drafts and unknown slugs
+  are 404, the template is 404 and not in the sitemap, entry pages are; a real page wins; unpublish
+  takes the page down; route validation (template of another site, malformed path, two
+  collections on one path); list cards by tag/order/limit with entry links, an off-list image host
+  dropped, unknown collection empty, the builder preview equal to delivery and closed to other
+  workspaces; field filters (eq on text, number and lists, contains, empty, not empty, combined, a
+  SQL-looking value, unknown field, bad JSON); bulk publish with a validation failure listed, tags
+  added/removed, a viewer refused per entry, archive and delete; saved views validated.
+- `entry.test.ts` (blocks): token formatting (numbers, dates, lists), the template validates as
+  page content, rich text expansion, allowlist on filled links, list cards, bounded list specs.
+- `cms.spec.ts` (E2E): the whole editor flow up to the live entry page, sitemap and home page.
+
+Bugs found: a template with `{{entry.cover}}` in an image link failed validation (links are
+allowlisted) — tokens are now allowed there and the filled value is checked instead.
 
 ## Iteration 6 — templates, media, animation, the board
 

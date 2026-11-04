@@ -1,4 +1,5 @@
-import type { CollectionAiSettings, CollectionSettings, EntryData, FieldDef } from '@canon/fields';
+import type { BlockNode, ListItem } from '@canon/blocks';
+import type { CollectionAiSettings, CollectionSettings, EntryData, FieldDef, ViewFilter } from '@canon/fields';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from './api';
 import type { PageStatus } from './content';
@@ -74,6 +75,8 @@ export interface EntryQuery {
   order?: 'asc' | 'desc';
   offset?: number;
   limit?: number;
+  /** Field filters, sent as JSON. */
+  filters?: ViewFilter[];
 }
 
 export const collectionsKey = (tid: string | null, siteId: string) => ['collections', tid, siteId];
@@ -94,7 +97,11 @@ export function entriesPath(siteId: string, collectionId: string) {
 
 export function useEntries(siteId: string, collectionId: string, q: EntryQuery) {
   const tid = useTenantId();
-  const params = new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]));
+  const params = new URLSearchParams(
+    Object.entries(q)
+      .filter(([, v]) => v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0))
+      .map(([k, v]) => [k, Array.isArray(v) ? JSON.stringify(v) : String(v)]),
+  );
   return useQuery({
     queryKey: ['entries', tid, collectionId, params.toString()],
     queryFn: () => api<EntryList>(`${entriesPath(siteId, collectionId)}?${params}`),
@@ -106,6 +113,36 @@ export function useEntries(siteId: string, collectionId: string, q: EntryQuery) 
 export function useEntry(siteId: string, collectionId: string, entryId: string) {
   const tid = useTenantId();
   return useQuery({ queryKey: ['entry', tid, entryId], queryFn: () => api<EntryDetail>(`${entriesPath(siteId, collectionId)}/${entryId}`), enabled: Boolean(tid && entryId), staleTime: Infinity });
+}
+
+/** Collection list blocks anywhere in the tree (props only matter for the preview). */
+function listBlocks(root: BlockNode): { id: string; type: 'collection-list'; props: Record<string, unknown> }[] {
+  const out: { id: string; type: 'collection-list'; props: Record<string, unknown> }[] = [];
+  const walk = (n: BlockNode) => {
+    if (n.type === 'collection-list' && n.props.collection) out.push({ id: n.id, type: 'collection-list', props: n.props });
+    n.children.forEach(walk);
+  };
+  walk(root);
+  return out.slice(0, 10);
+}
+
+/** The cards visitors will see in the page's Collection list blocks (published entries only). */
+export function useListPreview(siteId: string, root: BlockNode, locale: string) {
+  const tid = useTenantId();
+  const blocks = listBlocks(root);
+  const key = JSON.stringify(blocks.map((b) => [b.id, b.props.collection, b.props.limit, b.props.sort, b.props.tag, b.props.imageField, b.props.textField]));
+  return useQuery({
+    queryKey: ['list-preview', tid, siteId, locale, key],
+    queryFn: () => api<Record<string, ListItem[]>>(`/sites/${siteId}/collection-lists/preview`, { method: 'POST', body: { blocks, locale } }),
+    enabled: Boolean(tid && blocks.length),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+export interface BulkResult {
+  done: number;
+  failed: { id: string; code: string; message: string }[];
 }
 
 export function qualityTone(score: number | null): string {

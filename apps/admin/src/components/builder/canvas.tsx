@@ -14,6 +14,7 @@ import { useBlockLabels } from './labels';
 import { useBuilder, ZOOM_STEPS, type Breakpoint, type RemoteSelection } from './store';
 import { useComponentTrees } from '@/lib/components';
 import { toRenderForms, useForms } from '@/lib/forms';
+import { useListPreview } from '@/lib/collections';
 import { toast } from 'sonner';
 import { useT, type MessageKey } from '@/lib/i18n';
 
@@ -74,8 +75,10 @@ export function Canvas({
   dragging,
   siteId,
   pageId,
+  locale,
   readOnly,
 }: {
+  locale: string;
   media: Record<string, RenderMedia>;
   facts: Record<string, string>;
   theme: SiteThemeInput | undefined;
@@ -99,7 +102,8 @@ export function Canvas({
   const remote = useBuilder((s) => s.remoteSelections);
   const formsQ = useForms(siteId);
   const forms = useMemo(() => toRenderForms(formsQ.data), [formsQ.data]);
-  const renderCtx = useMemo<RenderContext>(() => ({ media, facts, forms, components, labels, draft: true, editing: true, Child: MemoBlock }), [media, facts, forms, components, labels]);
+  const listsQ = useListPreview(siteId, root, locale);
+  const renderCtx = useMemo<RenderContext>(() => ({ media, facts, forms, components, labels, lists: listsQ.data, draft: true, editing: true, Child: MemoBlock }), [media, facts, forms, components, labels, listsQ.data]);
   const breakpoint = useBuilder((s) => s.breakpoint);
   const zoom = useBuilder((s) => s.zoom);
   const setZoom = useBuilder((s) => s.setZoom);

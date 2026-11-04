@@ -112,6 +112,16 @@ automatically (marked "automatic") when a published page moves.
 
 ---
 
+# Iteration 7 — CMS 2.0
+
+| Entries: entry pages, saved view, bulk actions | Collection list block in the builder |
+|---|---|
+| ![bulk](screenshots/after/cms/cms2-entries-bulk-1440.png) | ![list](screenshots/after/cms/cms2-collection-list-builder-1440.png) |
+
+The entry pages card says where entries live (/blog/…) and opens the template; the bulk bar
+appears with the selection. In the builder the list shows the published entries a visitor will
+see, with links to their pages.
+
 # Iteration 6 — templates, media, animation, the board
 
 | Board: two elements selected, align tools | Animation on a selected element |

@@ -97,6 +97,21 @@ The inline script in `apps/admin/src/app/layout.tsx` is a static string that onl
 - Licences: MIT texts of both libraries are kept next to the generated data and in
   THIRD_PARTY_NOTICES.md.
 
+## CMS 2.0 (iteration 7)
+
+- **Drafts never leak**: entry pages and collection lists read only `entry_versions` at
+  `publishedVersion`, on the system role, pinned to the resolved site. The builder preview
+  checks the workspace owns the site before those queries.
+- **Template mould** pages aren't reachable by their own path (raw tokens) nor listed.
+- **Injection**: token values are inserted as text into page data, rendered by React (escaped);
+  rich text fields keep the closed node set; media links from entries pass the same host
+  allowlist as typed ones (tested with an off-list host). Field filters use bind parameters and a
+  field-name allowlist (the collection schema); a value like `x' OR '1'='1` is just a value
+  (tested).
+- **Bulk actions** reuse the single-entry paths: CASL checks per entry (a viewer gets
+  FORBIDDEN per entry), the review gate before each publish, required-field validation; at most
+  200 ids per call; audited as one `entry.bulk.<action>` record.
+
 ## Clipboard
 
 Copied blocks are stored in the browser's `localStorage` (same origin as the admin) and are

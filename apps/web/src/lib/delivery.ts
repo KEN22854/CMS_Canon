@@ -1,5 +1,5 @@
 import 'server-only';
-import type { PageContent } from '@canon/blocks';
+import type { ListItem, PageContent } from '@canon/blocks';
 import type { RenderForm } from '@canon/ui-blocks';
 
 export interface SiteTheme {
@@ -62,6 +62,10 @@ export interface DeliveryPage {
   facts: Record<string, string>;
   /** Forms embedded on the page (public definitions). */
   forms?: Record<string, RenderForm>;
+  /** Cards of Collection list blocks, by block id. */
+  lists?: Record<string, ListItem[]>;
+  /** Set when the page is an entry page (a collection route filled with a published entry). */
+  entry?: { id: string; collectionId: string; slug: string; basePath: string };
   /** Which experiment variants / segment the API actually applied (re-validated server-side). */
   applied?: { experiments: { testId: string; variantId: string }[]; segmentId: string | null };
 }
@@ -76,6 +80,8 @@ export interface DeliveryList {
     updatedAt: string;
     translationGroupId: string | null;
   }[];
+  /** Entry pages of collection routes (sitemap only). */
+  entries?: { path: string; locale: string; updatedAt: string }[];
 }
 
 const API = process.env.CANON_API_URL ?? 'http://localhost:4000';
