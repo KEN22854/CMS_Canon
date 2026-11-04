@@ -19,7 +19,7 @@ const tok = (name: string) => `{{entry.${name}}}`;
 const para = (text: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
 
 /** A first template from the collection's fields: title, intro, image, body — every value a token. */
-function templateContent(fields: readonly FieldDef[]): { root: BlockNode } {
+function templateContent(fields: readonly FieldDef[], shop: boolean): { root: BlockNode } {
   const n = (type: string, props: Record<string, unknown>, children: BlockNode[] = []): BlockNode => ({ id: newId(), type, props, children });
   const intro = fields.find((f) => f.type === 'textarea');
   const image = fields.find((f) => f.type === 'media' || (f.type === 'url' && /image|photo|cover|picture/i.test(f.name)));
@@ -29,6 +29,8 @@ function templateContent(fields: readonly FieldDef[]): { root: BlockNode } {
     n('text', { doc: para(intro ? tok(intro.name) : tok('summary')), align: 'left' }),
   ];
   if (image) blocks.push(image.type === 'media' ? n('image', { mediaId: tok(image.name), alt: tok('title'), caption: '', rounded: true }) : n('image', { mediaId: '', src: tok(image.name), alt: tok('title'), caption: '', rounded: true }));
+  // A product: price, stock and "Add to cart" right under the photo.
+  if (shop) blocks.push(n('buy', { productId: tok('id'), label: 'Add to cart', showPrice: true, showStock: true, align: 'left' }));
   if (body) blocks.push(n('text', { doc: para(tok(body.name)), align: 'left' }));
   return { root: n('section', {}, [n('section', { background: 'default', paddingY: 'lg', width: 'narrow' }, blocks)]) };
 }
@@ -66,7 +68,7 @@ export function EntryPagesCard({ siteId, collection, canEdit }: { siteId: string
   const createTemplate = useMutation({
     mutationFn: async () => {
       const page = await api<{ id: string; version: number }>(`/sites/${siteId}/pages`, { body: { title: t('cms.route.templateName', { name: collection.name }), slug: `${collection.slug}-template` } });
-      const saved = await api<{ version: number }>(`/sites/${siteId}/pages/${page.id}`, { method: 'PATCH', body: { expectedVersion: page.version, content: templateContent(collection.fields) } });
+      const saved = await api<{ version: number }>(`/sites/${siteId}/pages/${page.id}`, { method: 'PATCH', body: { expectedVersion: page.version, content: templateContent(collection.fields, Boolean(collection.settings.commerce)) } });
       void saved;
       await api(`/sites/${siteId}/pages/${page.id}/publish`, { body: {} });
       return page.id;

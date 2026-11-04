@@ -22,6 +22,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
     { href: `/sites/${siteId}/pages`, label: t('site.pages') },
     { href: `/sites/${siteId}/components`, label: t('component.listTitle') },
     { href: `/sites/${siteId}/collections`, label: t('site.collections') },
+    ...(ability.can('read', 'Order') ? [{ href: `/sites/${siteId}/orders`, label: t('site.orders') }] : []),
     { href: `/sites/${siteId}/reviews`, label: t('site.reviews') },
     { href: `/sites/${siteId}/media`, label: t('site.media') },
     ...(ability.can('read', 'Form') ? [{ href: `/sites/${siteId}/forms`, label: t('site.forms') }] : []),

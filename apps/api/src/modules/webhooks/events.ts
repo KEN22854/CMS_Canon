@@ -21,6 +21,8 @@ export const WEBHOOK_EVENTS = {
   'fact.changed': 'FactChanged',
   'experiment.changed': 'ExperimentChanged',
   'form.submitted': 'FormSubmitted',
+  'order.placed': 'OrderPlaced',
+  'order.cancelled': 'OrderCancelled',
 } as const;
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;
 export const WEBHOOK_EVENT_NAMES = Object.keys(WEBHOOK_EVENTS) as WebhookEvent[];

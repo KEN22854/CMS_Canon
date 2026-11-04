@@ -16,6 +16,8 @@ const WHOLE_TOKEN_RE = /^\{\{\s*entry\.([a-zA-Z][a-zA-Z0-9_]{0,39})\s*\}\}$/;
 
 /** What a template sees of an entry: its columns plus its data fields. */
 export interface BoundEntry {
+  /** {{entry.id}} — what a Buy block on a product template names. */
+  id?: string;
   title: string;
   slug: string;
   summary?: string | null;
@@ -27,6 +29,7 @@ const isDoc = (v: unknown): v is RichTextDoc => typeof v === 'object' && v !== n
 
 /** The raw value behind a token: entry columns win over data fields of the same name. */
 function rawValue(e: BoundEntry, name: string): unknown {
+  if (name === 'id') return e.id ?? '';
   if (name === 'title') return e.title;
   if (name === 'slug') return e.slug;
   if (name === 'summary') return e.summary ?? '';

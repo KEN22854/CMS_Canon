@@ -112,6 +112,21 @@ The inline script in `apps/admin/src/app/layout.tsx` is a static string that onl
   FORBIDDEN per entry), the review gate before each publish, required-field validation; at most
   200 ids per call; audited as one `entry.bulk.<action>` record.
 
+## Shop (iteration 8)
+
+- **Prices can't be forged**: the browser sends product ids and quantities only (extra keys are
+  dropped); unit prices come from published snapshots; amounts are integers in cents; CHECKs on
+  the table refuse negative amounts and odd currencies.
+- **No overselling**: stock is decremented by `UPDATE … WHERE stock >= qty` inside the order
+  transaction; a failing line rolls back the whole order (tested: 1 left, 2 asked → 409, nothing
+  changed).
+- **Abuse**: orders only from the site's own hosts (internal or verified domain), 10 per IP per
+  10 minutes, honeypot, minimum fill time; products of other sites or draft products are refused.
+- **Personal data**: orders are readable by owners, admins and editors only (CASL + RLS);
+  IPs stored truncated; webhooks carry number and amount, not the customer.
+- **No card data**: payment is offline; online payments are not enabled without the owner's
+  provider and keys.
+
 ## Clipboard
 
 Copied blocks are stored in the browser's `localStorage` (same origin as the admin) and are

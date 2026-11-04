@@ -8,6 +8,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { EntryPagesCard } from '@/components/collections/entry-pages';
+import { ShopCard } from '@/components/collections/shop-card';
 import { Alert, Badge, Button, Input, Select } from '@/components/ui';
 import { useAbility } from '@/lib/ability';
 import { api, download, errorMessage } from '@/lib/api';
@@ -176,6 +177,7 @@ export default function CollectionEntries() {
       </div>
 
       {c && <EntryPagesCard siteId={siteId} collection={c} canEdit={ability.can('update', 'Collection')} />}
+      {c && <ShopCard siteId={siteId} collection={c} canEdit={ability.can('update', 'Collection')} />}
 
       {/* Saved views: shared filters of this table. */}
       <nav aria-label={t('cms.views')} className="mb-3 flex flex-wrap items-center gap-1 border-b">

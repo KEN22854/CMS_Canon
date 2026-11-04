@@ -41,7 +41,7 @@ export const COLLECTION_PRESETS: CollectionPreset[] = [
       { name: 'price', label: 'Price', type: 'number', min: 0 },
       { name: 'description', label: 'Description', type: 'richtext' },
       { name: 'images', label: 'Images', type: 'media', multiple: true, max: 12 },
-      { name: 'inStock', label: 'In stock', type: 'boolean' },
+      { name: 'stock', label: 'Stock', type: 'number', min: 0, integer: true },
     ],
   },
   {

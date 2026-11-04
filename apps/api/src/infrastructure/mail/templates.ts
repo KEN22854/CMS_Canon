@@ -73,6 +73,36 @@ export function aiBudgetAlertMail(to: string, tenantName: string, percent: numbe
   };
 }
 
+/** Lines as text: "2 × Rye bread — €9.00". Amounts are already formatted. */
+function orderLines(lines: { title: string; quantity: number; line: string }[]): { text: string; html: string } {
+  return {
+    text: lines.map((l) => `${l.quantity} × ${l.title} — ${l.line}`).join('\n'),
+    html: `<ul>${lines.map((l) => `<li>${l.quantity} × ${escapeHtml(l.title)} — ${escapeHtml(l.line)}</li>`).join('')}</ul>`,
+  };
+}
+
+export function orderPlacedMail(to: string, shop: string, number: number, lines: { title: string; quantity: number; line: string }[], total: string, payment: string): MailMessage {
+  const l = orderLines(lines);
+  return {
+    to,
+    template: 'order-placed',
+    subject: `${shop}: order #${number} received`,
+    text: `Thank you! ${shop} has your order #${number}.\n\n${l.text}\n\nTotal: ${total}\nPayment: ${payment}\n\nThe shop will contact you about delivery.`,
+    html: layout(`Order #${number} received`, `${p(`Thank you! ${shop} has your order.`)}${l.html}${p(`Total: ${total} · Payment: ${payment}`)}${p('The shop will contact you about delivery.')}`),
+  };
+}
+
+export function newOrderMail(to: string, shop: string, number: number, customer: string, lines: { title: string; quantity: number; line: string }[], total: string, link: string): MailMessage {
+  const l = orderLines(lines);
+  return {
+    to,
+    template: 'order-new',
+    subject: `New order #${number} on ${shop} — ${total}`,
+    text: `${customer} ordered on ${shop}:\n${l.text}\nTotal: ${total}\nOpen: ${link}`,
+    html: layout(`New order #${number}`, `${p(`${customer} ordered on ${shop}:`)}${l.html}${p(`Total: ${total}`)}`, { label: 'Open the order', href: link }),
+  };
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }

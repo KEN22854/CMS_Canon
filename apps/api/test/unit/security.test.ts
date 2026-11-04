@@ -85,6 +85,16 @@ describe('RBAC matrix', () => {
     expect(a.can('invoke', 'Ai')).toBe(true);
   });
 
+  it('orders hold customer data: only owners, admins and editors see them', () => {
+    const order = subject('Order', { tenantId: T });
+    expect(user('EDITOR').can('update', order)).toBe(true);
+    expect(user('EDITOR').can('delete', order)).toBe(false);
+    expect(user('ADMIN').can('read', order)).toBe(true);
+    expect(user('AUTHOR').can('read', order)).toBe(false);
+    expect(user('VIEWER').can('read', order)).toBe(false);
+    expect(user('OWNER').can('read', subject('Order', { tenantId: 'other' }))).toBe(false);
+  });
+
   it('editors work inside sites but cannot reconfigure them', () => {
     const a = user('EDITOR');
     expect(a.can('read', 'Site')).toBe(true);

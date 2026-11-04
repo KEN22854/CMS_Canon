@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { jsonLd, structuredData } from '@canon/blocks';
 import { BlockRenderer, PageStyles, usesScrollAnimation } from '@canon/ui-blocks';
 import { AnimationObserver } from '@/components/animations';
+import { Shop } from '@/components/shop';
 import { FormEnhancer } from '@/components/forms';
 import { Tracker } from '@/components/tracker';
 import { PREVIEW_COOKIE } from '@/lib/preview';
@@ -118,12 +119,13 @@ export default async function SitePage({ params }: { params: Params }) {
         <PageStyles root={page.content.root} />
         <BlockRenderer
           node={page.content.root}
-          ctx={{ media: data.media, facts: data.facts, draft: data.draft, forms: data.forms, lists: data.lists }}
+          ctx={{ media: data.media, facts: data.facts, draft: data.draft, forms: data.forms, lists: data.lists, products: data.products, shop: data.shop, locale: page.locale }}
           isRoot
         />
       </main>
       {Object.keys(data.forms ?? {}).length > 0 && <FormEnhancer />}
       {usesScrollAnimation(page.content.root) && <AnimationObserver />}
+      {(Object.keys(data.products ?? {}).length > 0 || data.shop) && <Shop locale={page.locale} />}
       {!data.draft && (
         <Tracker
           siteId={site.id}

@@ -193,6 +193,14 @@ export class CollectionsService {
 }
 
 function assertSettings(fields: readonly FieldDef[], settings: CollectionSettings): void {
+  const shop = settings.commerce;
+  if (shop) {
+    for (const key of ['priceField', 'stockField'] as const) {
+      const name = shop[key];
+      if (name && !fields.some((f) => f.name === name && f.type === 'number' && !f.multiple)) throw badRequest('INVALID_SETTINGS', `${key} must name a number field`);
+    }
+    if (shop.skuField && !fields.some((f) => f.name === shop.skuField && f.type === 'text')) throw badRequest('INVALID_SETTINGS', 'skuField must name a text field');
+  }
   const viewIds = (settings.views ?? []).map((v) => v.id);
   if (new Set(viewIds).size !== viewIds.length) throw badRequest('INVALID_SETTINGS', 'Saved views need distinct ids');
   for (const key of ['titleField', 'slugField'] as const) {

@@ -13,7 +13,7 @@ real screenshots and updated docs.
 | 4 | Component library (100+ sections, variants) | 2 | 🟡 114 own layouts × 4 tones + 257 from Tailblocks/HyperUI (MIT), 21 page templates, photo/video heroes |
 | 5 | AI Website Builder (planner → operations → diff → approve) | 3, 4 | 🟡 planner, diff, approve, one undo step |
 | 6 | CMS 2.0 (dynamic pages, views, bulk) | — | 🟡 entry pages from templates, collection list block, field filters, saved views, bulk actions |
-| 7 | E-commerce | 6 | ⬜ |
+| 7 | E-commerce | 6 | 🟡 products, Buy and Cart blocks, checkout with stock, orders with statuses (offline payment) |
 | 8 | CRM and automation | 7 (orders), forms | ⬜ |
 | 9 | SEO platform (redirects, audit, schema) | — | 🟡 redirects, audit, JSON-LD, 404 |
 | 10 | Themes and marketplace | 1, 4 | ⬜ |

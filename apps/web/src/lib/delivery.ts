@@ -1,5 +1,5 @@
 import 'server-only';
-import type { ListItem, PageContent } from '@canon/blocks';
+import type { ListItem, PageContent, ShopConfig, ShopProduct } from '@canon/blocks';
 import type { RenderForm } from '@canon/ui-blocks';
 
 export interface SiteTheme {
@@ -64,6 +64,10 @@ export interface DeliveryPage {
   forms?: Record<string, RenderForm>;
   /** Cards of Collection list blocks, by block id. */
   lists?: Record<string, ListItem[]>;
+  /** Products of Buy blocks (published price and stock). */
+  products?: Record<string, ShopProduct>;
+  /** The shop, when the page has a Cart block. */
+  shop?: ShopConfig | null;
   /** Set when the page is an entry page (a collection route filled with a published entry). */
   entry?: { id: string; collectionId: string; slug: string; basePath: string };
   /** Which experiment variants / segment the API actually applied (re-validated server-side). */

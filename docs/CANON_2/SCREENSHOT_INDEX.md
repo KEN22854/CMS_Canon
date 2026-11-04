@@ -50,6 +50,10 @@ Stages 1–2 (design system, Builder 2.0 foundation).
 | after/builder/simple-library-1440.png | 4 | 1440 | Block library: categories, live previews, tones |
 | after/builder/simple-freeform-1440.png | 2 | 1440 | Free-form block: selected element with move/resize handles, size, add-element bar, height handle |
 | after/builder/simple-template-1440.png | 4 | 1440 | A whole-page template applied |
+| after/shop/shop-collection-1440.png | 7 | 1440 | Products collection: shop card (EUR, price/stock fields), entry pages, published product |
+| after/shop/shop-product-1440.png | 7 | 1440 | Live product page: price, stock, Add to cart, toast with "Open cart" |
+| after/shop/shop-cart-1440.png | 7 | 1440 | Live cart: line, quantity, total, contact fields, payment method |
+| after/shop/shop-orders-1440.png | 7 | 1440 | Orders: status tabs with counts, order panel with history and next steps |
 | after/cms/cms2-entries-bulk-1440.png | 6 | 1440 | Entries table: entry pages card, saved view tab, three selected, bulk bar |
 | after/cms/cms2-collection-list-builder-1440.png | 6 | 1440 | Collection list block with real cards, its inspector (collection, layout, order…) |
 | after/builder/simple-board-1440.png | 2 | 1440 | Board: two free-form elements selected, align/order tools, rotate handle |

@@ -543,6 +543,57 @@ export const collectionListBlock = define({
   },
 });
 
+/**
+ * "Add to cart" for one product. On a product template, productId is {{entry.id}}; the price,
+ * stock and title shown come from the published product (delivery), never from the page.
+ */
+export const buyBlock = define({
+  type: 'buy',
+  name: 'Buy button',
+  description: 'Price, stock and an "Add to cart" button for one product of a shop collection.',
+  category: 'marketing',
+  isContainer: false,
+  props: z.object({
+    productId: z.string().max(40).default('{{entry.id}}'),
+    label: z.string().min(1).max(40).default('Add to cart'),
+    showPrice: z.boolean().default(true),
+    showStock: z.boolean().default(true),
+    align: z.enum(['left', 'center', 'right']).default('left'),
+  }),
+  defaults: () => ({ productId: '{{entry.id}}', label: 'Add to cart', showPrice: true, showStock: true, align: 'left' as const }),
+  fields: {
+    productId: { kind: 'text', label: 'Product id ({{entry.id}} on a product template)' },
+    label: { kind: 'text', label: 'Button label', ai: true },
+    showPrice: { kind: 'toggle', label: 'Show the price' },
+    showStock: { kind: 'toggle', label: 'Show stock' },
+    align: { kind: 'select', label: 'Alignment', options: ['left', 'center', 'right'] },
+  },
+});
+
+/** The cart and checkout: lines, quantities, contact details, payment method, order confirmation. */
+export const cartBlock = define({
+  type: 'cart',
+  name: 'Cart and checkout',
+  description: 'The visitor\'s cart with a checkout form; orders arrive in Orders with stock checked and prices recomputed.',
+  category: 'marketing',
+  isContainer: false,
+  props: z.object({
+    title: z.string().max(120).default('Your cart'),
+    emptyText: z.string().max(200).default('Your cart is empty.'),
+    checkoutLabel: z.string().min(1).max(40).default('Place order'),
+    successText: z.string().max(300).default('Thank you! We have your order and will be in touch.'),
+    askAddress: z.boolean().default(true),
+  }),
+  defaults: () => ({ title: 'Your cart', emptyText: 'Your cart is empty.', checkoutLabel: 'Place order', successText: 'Thank you! We have your order and will be in touch.', askAddress: true }),
+  fields: {
+    title: { kind: 'text', label: 'Title', ai: true },
+    emptyText: { kind: 'text', label: 'When empty', ai: true },
+    checkoutLabel: { kind: 'text', label: 'Order button', ai: true },
+    successText: { kind: 'textarea', label: 'After ordering', ai: true },
+    askAddress: { kind: 'toggle', label: 'Ask for a delivery address' },
+  },
+});
+
 export const BLOCKS = [
   sectionBlock,
   rowBlock,
@@ -567,6 +618,8 @@ export const BLOCKS = [
   canvasBlock,
   shapeBlock,
   collectionListBlock,
+  buyBlock,
+  cartBlock,
 ] as const;
 export type KnownBlockType = (typeof BLOCKS)[number]['type'];
 

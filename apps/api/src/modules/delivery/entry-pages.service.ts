@@ -1,5 +1,5 @@
-import { entryPath, listItemOf, type BoundEntry, type ListItem, type ListSpec } from '@canon/blocks';
-import { collectionFieldsSchema, collectionSettingsSchema, type CollectionRoute, type FieldDef } from '@canon/fields';
+import { entryPath, listItemOf, toMinor, type BoundEntry, type ListItem, type ListSpec, type ShopConfig, type ShopProduct } from '@canon/blocks';
+import { collectionFieldsSchema, collectionSettingsSchema, type CollectionCommerce, type CollectionRoute, type FieldDef } from '@canon/fields';
 import type { Collection, Prisma } from '@canon/db';
 import { Injectable } from '@nestjs/common';
 import { SystemPrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -11,6 +11,7 @@ interface RoutedCollection {
   row: Collection;
   fields: FieldDef[];
   route: CollectionRoute | null;
+  commerce: CollectionCommerce | null;
 }
 
 export interface EntryPageHit {
@@ -89,6 +90,34 @@ export class EntryPagesService {
     return out;
   }
 
+  /** What Buy blocks show: title, price and stock of published products of this site's shops. */
+  async products(siteId: string, ids: readonly string[]): Promise<Record<string, ShopProduct>> {
+    if (!ids.length) return {};
+    const shops = (await this.routed(siteId)).filter((c) => c.commerce);
+    if (!shops.length) return {};
+    const rows = await this.system.entry.findMany({ where: { id: { in: [...ids] }, collectionId: { in: shops.map((s) => s.row.id) }, deletedAt: null, publishedVersion: { not: null } }, select: { id: true, collectionId: true, publishedVersion: true } });
+    if (!rows.length) return {};
+    const versions = await this.system.entryVersion.findMany({ where: { OR: rows.map((r) => ({ entryId: r.id, version: r.publishedVersion! })) }, select: { entryId: true, slug: true, title: true, data: true } });
+    const out: Record<string, ShopProduct> = {};
+    for (const r of rows) {
+      const v = versions.find((x) => x.entryId === r.id);
+      const shop = shops.find((s) => s.row.id === r.collectionId)!.commerce!;
+      const data = (v?.data ?? {}) as Record<string, unknown>;
+      const price = data[shop.priceField];
+      if (!v || typeof price !== 'number' || price < 0) continue;
+      const raw = shop.stockField ? data[shop.stockField] : undefined;
+      const stock = typeof raw === 'number' ? Math.max(0, Math.floor(raw)) : null;
+      out[r.id] = { id: r.id, title: v.title, slug: v.slug, price: toMinor(price), currency: shop.currency, stock, available: stock === null || stock > 0 };
+    }
+    return out;
+  }
+
+  /** The site's shop for a page with a Cart block (the first collection with commerce settings). */
+  async shop(siteId: string): Promise<ShopConfig | null> {
+    const c = (await this.routed(siteId)).find((x) => x.commerce);
+    return c?.commerce ? { collectionId: c.row.id, currency: c.commerce.currency, paymentMethods: c.commerce.paymentMethods } : null;
+  }
+
   /** Entry pages for the sitemap: collections whose template page is live. */
   async sitemapEntries(siteId: string): Promise<{ path: string; locale: string; updatedAt: Date }[]> {
     const routed = (await this.routed(siteId)).filter((c) => c.route);
@@ -120,7 +149,7 @@ export class EntryPagesService {
     return rows.map((row) => {
       const settings = collectionSettingsSchema.safeParse(row.settings ?? {});
       const fields = collectionFieldsSchema.safeParse(row.schema);
-      return { row, fields: fields.success ? fields.data : [], route: settings.success ? (settings.data.route ?? null) : null };
+      return { row, fields: fields.success ? fields.data : [], route: settings.success ? (settings.data.route ?? null) : null, commerce: settings.success ? (settings.data.commerce ?? null) : null };
     });
   }
 }

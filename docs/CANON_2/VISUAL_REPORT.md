@@ -112,6 +112,16 @@ automatically (marked "automatic") when a published page moves.
 
 ---
 
+# Iteration 8 — Shop
+
+| Product page (Buy, stock, toast) | Cart and checkout |
+|---|---|
+| ![product](screenshots/after/shop/shop-product-1440.png) | ![cart](screenshots/after/shop/shop-cart-1440.png) |
+
+| Orders with the order panel | Products collection with the shop card |
+|---|---|
+| ![orders](screenshots/after/shop/shop-orders-1440.png) | ![collection](screenshots/after/shop/shop-collection-1440.png) |
+
 # Iteration 7 — CMS 2.0
 
 | Entries: entry pages, saved view, bulk actions | Collection list block in the builder |

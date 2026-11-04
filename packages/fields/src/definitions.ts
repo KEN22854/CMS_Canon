@@ -93,8 +93,28 @@ export const collectionViewSchema = z.object({
 });
 export type CollectionView = z.infer<typeof collectionViewSchema>;
 
+/** Offline payment methods: the order is placed, money changes hands outside Canon. */
+export const PAYMENT_METHODS = ['cash', 'card_on_delivery', 'transfer'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/**
+ * A collection whose entries are products: which number field is the price (in the currency's
+ * major unit, e.g. 12.50), which one counts stock (optional; empty = unlimited), how people pay.
+ */
+export const collectionCommerceSchema = z.object({
+  priceField: z.string().regex(FIELD_NAME_RE),
+  stockField: z.string().regex(FIELD_NAME_RE).optional(),
+  skuField: z.string().regex(FIELD_NAME_RE).optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/, 'An ISO currency code like USD, EUR, RUB'),
+  paymentMethods: z.array(z.enum(PAYMENT_METHODS)).min(1).max(3),
+  /** Who hears about new orders (besides the order list in the admin). */
+  orderEmail: z.string().email().max(254).optional(),
+});
+export type CollectionCommerce = z.infer<typeof collectionCommerceSchema>;
+
 export const collectionSettingsSchema = z
   .object({
+    commerce: collectionCommerceSchema.optional(),
     /** Field used as the entry's display title (lists, relations, duplicates). Default: first text field. */
     titleField: z.string().regex(FIELD_NAME_RE).optional(),
     /** Field the slug is generated from on create. Default: the title field. */

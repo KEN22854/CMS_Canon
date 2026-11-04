@@ -1,4 +1,4 @@
-import { ANIMATION_CSS, compileStyles, expandInstance, videoEmbedUrl, type BlockNode, type ListItem, type RichTextDoc } from '@canon/blocks';
+import { ANIMATION_CSS, compileStyles, expandInstance, formatMoney, videoEmbedUrl, type BlockNode, type ListItem, type RichTextDoc, type ShopConfig, type ShopProduct } from '@canon/blocks';
 import type { ComponentType, CSSProperties, ReactNode } from 'react';
 import { FormView, type RenderForm } from './form';
 import { RichText } from './rich-text';
@@ -36,6 +36,12 @@ export interface RenderContext {
   forms?: Record<string, RenderForm>;
   /** Cards of Collection list blocks, by block id (published entries, resolved by delivery). */
   lists?: Record<string, ListItem[]>;
+  /** Products named by Buy blocks (price and stock from the published product). */
+  products?: Record<string, ShopProduct>;
+  /** The site's shop, when the page has a Cart block. */
+  shop?: ShopConfig | null;
+  /** The page's language (prices, the cart's labels). */
+  locale?: string;
   /**
    * Global component trees by id. Delivery expands components before rendering, so only the
    * builder passes these (working copies), to draw instances in place.
@@ -69,6 +75,12 @@ export const DEFAULT_RENDER_LABELS = {
   chooseForm: 'Choose a form in the inspector',
   noRenderer: 'Block “{type}” has no renderer yet',
   chooseCollection: 'Choose a collection in the inspector',
+  buyTemplate: 'Price, stock and “Add to cart” of the product (filled in on each product page)',
+  buyMissing: 'This product isn’t published or has no price',
+  cartPreview: 'The cart and checkout appear here on the site',
+  noShop: 'Turn a collection into a shop first (Collections → Shop)',
+  inStock: '{count} in stock',
+  soldOut: 'Sold out',
   noEntries: 'No published entries match yet — publish some, or change the filter',
 };
 export type RenderLabels = typeof DEFAULT_RENDER_LABELS;
@@ -433,6 +445,52 @@ export function BlockRenderer({
           inert={Boolean(ctx.editing)}
           attrs={a as Record<string, string>}
         />
+      );
+    }
+
+    case 'buy': {
+      const id = str(p.productId);
+      const prod = ctx.products?.[id];
+      const align = FLEX_ALIGN[str(p.align, 'left')] ?? FLEX_ALIGN.left;
+      if (!prod) {
+        if (!ctx.draft && !ctx.editing) return null;
+        // On a product template the id is a token: show what the block will look like.
+        return id.startsWith('{{') ? (
+          <div {...a} className={`mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-6 ${align}`}>
+            <span className="text-2xl font-bold opacity-60">€ —</span>
+            <span className="rounded-site bg-site-primary px-6 py-3 font-semibold text-white opacity-80">{str(p.label, 'Add to cart')}</span>
+            <span className="w-full text-xs opacity-60">{label(ctx, 'buyTemplate')}</span>
+          </div>
+        ) : (
+          <Placeholder a={a} label={label(ctx, 'buyMissing')} />
+        );
+      }
+      const stockText = prod.stock === null ? '' : prod.available ? label(ctx, 'inStock').replace('{count}', String(prod.stock)) : label(ctx, 'soldOut');
+      return (
+        <div {...a} data-canon-buy={prod.id} data-title={prod.title} data-price={prod.price} data-currency={prod.currency} className={`mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-6 ${align}`}>
+          {p.showPrice !== false && <span className="text-2xl font-bold">{formatMoney(prod.price, prod.currency, ctx.locale)}</span>}
+          <button type="button" data-canon-add="" disabled={!prod.available || Boolean(ctx.editing)} className="rounded-site bg-site-primary px-6 py-3 font-semibold text-white shadow hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+            {prod.available ? str(p.label, 'Add to cart') : label(ctx, 'soldOut')}
+          </button>
+          {p.showStock !== false && stockText && <span className="text-sm opacity-70">{stockText}</span>}
+        </div>
+      );
+    }
+
+    case 'cart': {
+      if (!ctx.shop) return ctx.draft || ctx.editing ? <Placeholder a={a} label={label(ctx, 'noShop')} /> : null;
+      if (ctx.editing) return <Placeholder a={a} label={`${str(p.title)} — ${label(ctx, 'cartPreview')}`} tall />;
+      // The site's shop script fills this in (the cart lives in the visitor's browser).
+      const config = { ...ctx.shop, locale: ctx.locale ?? 'en', title: str(p.title), emptyText: str(p.emptyText), checkoutLabel: str(p.checkoutLabel, 'Place order'), successText: str(p.successText), askAddress: p.askAddress !== false };
+      return (
+        <section {...a} id="cart" data-canon-cart={JSON.stringify(config)} className="mx-auto max-w-3xl px-6">
+          <h2 className="mb-6 text-3xl font-bold tracking-tight">{str(p.title)}</h2>
+          {/* Shown until the shop script takes over (and without JavaScript). */}
+          <p data-canon-cart-fallback="" className="opacity-70">
+            {str(p.emptyText)}
+          </p>
+          <div data-canon-cart-root="" />
+        </section>
       );
     }
 

@@ -111,6 +111,16 @@ enum SubmissionStatus {
   SPAM
 }
 
+/// NEW → CONFIRMED → PAID → SHIPPED → COMPLETED; CANCELLED from any state before COMPLETED.
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  PAID
+  SHIPPED
+  COMPLETED
+  CANCELLED
+}
+
 enum AbTestStatus {
   DRAFT
   RUNNING
@@ -502,6 +512,7 @@ model Site {
   facts       Fact[]
   components  SiteComponent[]
   redirects   Redirect[]
+  orders      Order[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -1951,4 +1962,37 @@ model Redirect {
   @@unique([siteId, fromPath])
   @@index([tenantId])
   @@map("redirects")
+}
+
+/// A shop order placed on a site. Items are an immutable snapshot (title and price at the time of
+/// purchase, computed by the server from published products); amounts are in minor units (cents).
+model Order {
+  id            String      @id @default(cuid())
+  tenantId      String
+  siteId        String
+  /// The product collection the items come from.
+  collectionId  String
+  /// Per-site sequence shown to people ("Order #1042").
+  number        Int
+  status        OrderStatus @default(NEW)
+  currency      String
+  subtotal      Int
+  total         Int
+  /// [{entryId, slug, title, sku, unitPrice, quantity, lineTotal}]
+  items         Json
+  /// {name, email, phone, address, note}
+  customer      Json
+  paymentMethod String
+  /// [{at, status, by, note}] — every status change.
+  history       Json        @default("[]")
+  locale        String      @default("en")
+  ipAddress     String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, number])
+  @@index([tenantId, siteId, status, createdAt])
+  @@map("orders")
 }

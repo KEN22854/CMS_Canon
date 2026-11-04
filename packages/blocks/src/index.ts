@@ -10,3 +10,4 @@ export * from './plan';
 export * from './seo';
 export * from './animation';
 export * from './entry';
+export * from './shop';

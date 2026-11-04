@@ -196,6 +196,21 @@ reduced motion) content is simply visible. Collab stores the object as a JSON st
 - **Filters** are parameterised SQL on `entries.data` (field names must exist in the schema);
   **views** live in `Collection.settings.views`; **bulk** loops the single-entry service methods.
 
+## Shop (`packages/blocks/src/shop.ts`, `apps/api/src/modules/shop`)
+
+- `Collection.settings.commerce` makes a collection a shop. Delivery resolves Buy blocks
+  (`collectProductIds` after entry binding) to `products[id] = {title, price (cents), currency,
+  stock, available}` from published snapshots, and pages with a Cart block get `shop` (currency,
+  payment methods).
+- The site's `/api/shop/checkout` resolves the site from the request host and forwards to
+  `POST /v1/delivery/sites/:id/orders` (delivery token). `ShopService.checkout`: host and rate
+  checks → products of one shop collection, published, priced → one transaction: conditional
+  stock decrement in the published `entry_versions` row and the working `entries` row, an
+  advisory lock per site for the order number, the order, an `OrderPlaced` outbox event (bumps
+  the delivery cache, feeds webhooks) → emails after commit.
+- Status changes are compare-and-swap on the current status; CANCELLED returns stock the same
+  way.
+
 ## No-op edits
 
 Edits return the same tree object when nothing changes (also for props/meta/styles set to the

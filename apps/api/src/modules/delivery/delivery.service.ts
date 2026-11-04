@@ -1,4 +1,4 @@
-import { bindEntry, collectComponentIds, collectListSpecs, collectMediaIds, collectPageFactKeys, expandComponents, type BlockNode, type ListItem, type PageContent } from '@canon/blocks';
+import { bindEntry, collectComponentIds, collectListSpecs, collectProductIds, hasCart, collectMediaIds, collectPageFactKeys, expandComponents, type BlockNode, type ListItem, type PageContent } from '@canon/blocks';
 import { applyBlockPatch, decodeVariantKey, mergePatches, type BlockPatch, type RuntimeConfig } from '@canon/edge';
 import type { Page, Site } from '@canon/db';
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
@@ -32,6 +32,9 @@ const INVALIDATING_EVENTS = [
   'FormUpdated',
   'ComponentPublished',
   'RedirectsChanged',
+  // Stock on product pages.
+  'OrderPlaced',
+  'OrderCancelled',
 ];
 
 /**
@@ -205,7 +208,13 @@ export class DeliveryService implements OnModuleInit {
     // Global components are expanded first, so their media, facts and forms load like the page's own.
     const content = await this.withComponents(site.id, raw, draft);
     // Collection lists: cards from published entries; their images load with the page's media.
-    const lists: Record<string, ListItem[]> = await this.entryPages.lists(site.id, collectListSpecs(content.root), page.locale);
+    const [lists, products, shop, templates] = await Promise.all([
+      this.entryPages.lists(site.id, collectListSpecs(content.root), page.locale) as Promise<Record<string, ListItem[]>>,
+      this.entryPages.products(site.id, collectProductIds(content.root)),
+      hasCart(content.root) ? this.entryPages.shop(site.id) : null,
+      // Entry templates are moulds, not menu items.
+      this.entryPages.templatePageIds(site.id),
+    ]);
     const mediaIds = collectMediaIds(content);
     for (const items of Object.values(lists)) for (const i of items) if (i.mediaId) mediaIds.push(i.mediaId);
     const ogId = typeof seo.ogImageMediaId === 'string' ? seo.ogImageMediaId : undefined;
@@ -232,7 +241,7 @@ export class DeliveryService implements OnModuleInit {
         ? this.system.page.findMany({ where: { translationGroupId: page.translationGroupId, siteId: site.id, deletedAt: null, publishedVersion: { not: null } }, select: { locale: true, fullPath: true } })
         : [],
       this.system.page.findMany({
-        where: { siteId: site.id, locale: page.locale, parentId: null, deletedAt: null, publishedVersion: { not: null }, fullPath: { notIn: ['/', '/404'] } },
+        where: { siteId: site.id, locale: page.locale, parentId: null, deletedAt: null, publishedVersion: { not: null }, fullPath: { notIn: ['/', '/404'] }, id: { notIn: [...templates] } },
         select: { title: true, fullPath: true },
         orderBy: [{ position: 'asc' }, { fullPath: 'asc' }],
         take: 8,
@@ -255,6 +264,8 @@ export class DeliveryService implements OnModuleInit {
       facts: Object.fromEntries(factRows.map((f) => [f.key, f.displayValue])),
       forms: Object.fromEntries(formRows.map((f) => [f.id, publicForm(f)])),
       lists,
+      products,
+      shop,
       breadcrumbs: ancestorPaths.flatMap((p) => ancestors.filter((a) => a.fullPath === p).map((a) => ({ title: a.title, path: a.fullPath }))),
     };
   }

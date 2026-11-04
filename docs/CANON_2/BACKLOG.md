@@ -30,7 +30,7 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - ✅ AI planner → typed operations → diff → approve per operation, one undo step (Stage 5, first part).
 - ⬜ Stage 5: live canvas preview of a plan, multi-page plans, plans as review requests.
 - 🟡 CMS 2.0 (Stage 6): entry pages from a template, Collection list block, field filters, saved views, bulk actions. Next: relation fields in templates (author, category pages), pagination and category filters on the site, inline cell editing, kanban/gallery views, scheduled bulk publish.
-- ⬜ E-commerce: products, variants, cart, checkout, orders, payment adapters with webhook verification (Stage 7).
+- 🟡 E-commerce (Stage 7): products, cart, checkout with stock and server-side prices, orders and statuses, order emails. Next: online payments (needs the owner's provider and keys), variants (size/colour), shipping rates and taxes, discount codes, order export.
 - ✅ Redirects (manual, CSV, automatic on page move), SEO audit with scores, Schema.org JSON-LD, per-site 404 (Stage 9).
 - ⬜ Stage 9 next: redirect hit counts, keyword/SERP preview, Core Web Vitals per page from analytics, hreflang audit.
 - ⬜ Site releases: atomic publish of many pages, history, rollback (Stage 13).

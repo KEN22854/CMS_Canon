@@ -27,6 +27,7 @@ export const SUBJECTS = [
   'Branch',
   'Webhook',
   'Plugin',
+  'Order',
   'all',
 ] as const;
 export type SubjectName = (typeof SUBJECTS)[number];
@@ -108,6 +109,8 @@ export function defineAbilityFor(p: RequestPrincipal): AppAbility {
       can('read', 'Site', own);
       can('invoke', 'Ai', own);
       can('read', ['Tenant', 'Member', 'AiUsage', 'Analytics', 'AiAgent', 'AiPrompt'], own);
+      // Orders hold customers' personal data: editors run the shop, authors and viewers don't see it.
+      can(['read', 'update'], 'Order', own);
       break;
     case 'AUTHOR':
       can('read', CONTENT, own);

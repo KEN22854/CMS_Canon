@@ -5,17 +5,35 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 56 / 56 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 58 / 58 ✅ |
 | `@canon/collab` unit (incl. animation through Yjs) | 9 / 9 ✅ |
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
-| API unit | 56 / 56 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0 | 152 / 152 ✅ |
-| Playwright E2E | 21 / 21 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
+| API unit | 57 / 57 ✅ |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop | 155 / 155 ✅ |
+| Playwright E2E | 22 / 22 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **370** (361 after iteration 6).
+Total automated tests: **377** (370 after iteration 7).
+
+## Iteration 8 — Shop
+
+- `shop.test.ts` (API, real Postgres): prices from snapshots (a client price is ignored), lines
+  merged, unlimited stock without a value, stock taken atomically (1 left, 2 asked → 409 with
+  nothing changed), order numbers 1001/1002, emails to buyer and shop, stock visible to Buy blocks,
+  the working copy follows; refusals: draft product, no price, payment method not offered,
+  honeypot, quantity over 99, bad email, foreign host, another site's product, no delivery token;
+  admin: list/search/status filter, transitions and 409s, history, cancel returns stock, editor
+  yes, viewer no, other workspace 404.
+- `security.test.ts`: `Order` per role (authors and viewers can't read).
+- `shop.test.ts` (blocks): money in cents and per locale; Buy finds its product only after binding.
+- `shop.spec.ts` (E2E): collection → shop settings → cart page → product template → product →
+  live product page → cart → order → Orders → Confirm.
+
+Bugs found: entry templates in the site menu; the cart's "empty" text above a full cart; a
+1.5 s minimum fill time rejected fast but real buyers (autofill) — now 300 ms, the honeypot is the
+main signal.
 
 ## Iteration 7 — CMS 2.0
 

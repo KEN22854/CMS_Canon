@@ -115,6 +115,20 @@ checkedAt }`. Issue codes are listed in `packages/blocks/src/seo.ts` (`SeoIssueC
 - Delivery: `page` serves entry pages (with `entry: { id, collectionId, slug, basePath }`) and
   every page carries `lists`; `pages` adds `entries: [{ path, locale, updatedAt }]` for sitemaps.
 
+## Shop
+
+- Collection settings `commerce: { priceField, stockField?, skuField?, currency, paymentMethods:
+  ["cash"|"card_on_delivery"|"transfer"], orderEmail? }` (number/text fields are checked).
+- `GET /v1/sites/:siteId/orders?status&q&limit&offset` → `{ items, total, counts }`;
+  `GET /v1/sites/:siteId/orders/:id`; `PATCH /v1/sites/:siteId/orders/:id { status, note? }` —
+  409 for moves outside NEW → CONFIRMED → PAID → SHIPPED → COMPLETED / CANCELLED. Permission
+  `Order` (owners, admins, editors).
+- Renderer only: `POST /v1/delivery/sites/:siteId/orders` `{ items: [{ productId, quantity }],
+  customer: { name, email, phone?, address?, note? }, paymentMethod, locale?, honeypot?, elapsedMs? }`
+  → 201 `{ number, status, currency, total, items }`; errors `PRODUCT_UNAVAILABLE`,
+  `OUT_OF_STOCK` (409), `PAYMENT_METHOD`, `MIXED_SHOPS` (400), `REJECTED` (422), `RATE_LIMITED` (429).
+- Delivery pages carry `products` and `shop`. Webhook events `order.placed`, `order.cancelled`.
+
 ## Typed operations (library)
 
 Not an HTTP endpoint yet: `applyOperation` / `applyOperations` / `describeOperation` are exported

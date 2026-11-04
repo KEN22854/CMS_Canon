@@ -2,7 +2,40 @@
 
 Last update: 2026-11-04.
 
-## Iteration 7 (this one) — Stage 6, CMS 2.0: entry pages, collection lists, views, bulk
+## Iteration 8 (this one) — Stage 7, e-commerce: products, cart, checkout, orders
+
+- **Products are a collection with a shop** (Collections → Shop): the price field (a number, in
+  the currency's major unit), optional stock and SKU fields, currency, offline payment methods
+  (cash or card on delivery, bank transfer), an email for new orders. "Create the cart page"
+  publishes /cart; the product template made from a shop collection already has a Buy button. The
+  Products preset now has a numeric Stock field.
+- **Buy button** (new `buy` block, `productId: {{entry.id}}` on product templates): price in
+  the visitor's locale, stock ("2 in stock", "Sold out"), "Add to cart". Price and stock come
+  from the published product via delivery, never from the page.
+- **Cart and checkout** (new `cart` block): the cart lives in the visitor's browser (ids and
+  quantities; titles and prices only for display); quantities, remove, total, name, email, phone,
+  address, note, payment method; a confirmation with the order number. English and Russian.
+- **Orders** (new table with RLS): the server recomputes every amount from published snapshots
+  (amounts in cents), merges repeated lines, takes stock with a conditional UPDATE inside the
+  order's transaction (two buyers can't take the last item), numbers orders per site (#1001…)
+  under an advisory lock, records the IP truncated, emails a confirmation to the buyer and a
+  heads-up to the shop. Checkout is accepted only from the site's own hosts, rate-limited per IP,
+  with a honeypot and a minimum fill time.
+- **Orders screen** (site → Orders): status tabs with counts, search by number, name or email,
+  an order panel (items, customer, payment, history) with the allowed moves: NEW → CONFIRMED →
+  PAID → SHIPPED → COMPLETED, or CANCELLED (stock goes back). Owners, admins and editors only —
+  authors and viewers don't see customers' data. Webhooks: `order.placed`, `order.cancelled`
+  (number and amount, no personal data).
+- **No online payments yet**: taking card payments needs a provider account and live keys — a
+  decision for the owner (Stripe/YooKassa/…); the order model already has a payment method and a
+  PAID state for it.
+- Fixes on the way: entry templates showed up in the site's menu; the cart's "empty" text stayed
+  above a full cart.
+- Tests: +2 blocks unit (money, product ids after binding), +1 API unit (order permissions per
+  role), +3 API integration (checkout pricing/stock/numbering/mails, refusals, admin orders with
+  cancel returning stock), +1 E2E (shop set-up → product page → cart → order → Orders).
+
+## Iteration 7 — Stage 6, CMS 2.0: entry pages, collection lists, views, bulk
 
 - **Entry pages**: a collection gets an address (`/blog`) and a template page. Every published
   entry is then a page at `/blog/<slug>`: the template's `{{entry.title}}`, `{{entry.<field>}}`
@@ -181,5 +214,5 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.
 5. Remaining admin screens in Russian (collections, settings, analytics…).
 
-Stages 7–18 (e-commerce, CRM, SEO, themes, animation, analytics, hosting, security,
+Stages 8–18 ( CRM, SEO, themes, animation, analytics, hosting, security,
 multilingual, developer platform, migration, local integrations) have not started. See ROADMAP.md.
