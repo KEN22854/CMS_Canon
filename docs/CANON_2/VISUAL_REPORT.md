@@ -112,6 +112,13 @@ automatically (marked "automatic") when a published page moves.
 
 ---
 
+# Iteration 11 — Themes
+
+![theme studio](screenshots/after/themes/themes-gallery-1440.png)
+
+The studio previews the theme being edited; the gallery shows each preset with its own colours,
+font and corners; workspace themes sit below.
+
 # Iteration 10 — Releases
 
 | Review before rolling back | After the rollback (automatic backup release) |

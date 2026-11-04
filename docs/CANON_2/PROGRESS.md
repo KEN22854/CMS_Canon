@@ -2,7 +2,27 @@
 
 Last update: 2026-11-04.
 
-## Iteration 10 (this one) — Stage 13, site releases and rollback
+## Iteration 11 (this one) — Stage 10, themes
+
+- **Theme studio** (site → Settings → Theme): a live preview of the theme on a page fragment
+  (heading, text, button, link, band), four colours (primary, background, text, bands), font,
+  corners and colour mode, "Not saved yet" until saved.
+- **Theme gallery**: 24 curated themes in 7 categories (minimal, bold, warm, nature, dark, pastel,
+  corporate), each drawn with its own tokens; one click tries a theme, Save applies it to every
+  page and every section template.
+- **Contrast**: WCAG checks while editing (text on background, button text, links, text on bands)
+  with ratios; every preset passes them (unit-tested).
+- **Readable buttons in any theme**: button text on the primary colour is now white or near-black,
+  whichever contrasts more (`--site-on-primary`, `text-site-on-primary`) — before, a pale primary
+  (dark themes) got white-on-pale buttons.
+- **Workspace themes**: save the current theme for the team (`/v1/themes`, kept in workspace
+  settings, up to 30) and apply it to any site; copy/paste a theme as JSON to share it between
+  workspaces.
+- Tests: +3 blocks unit (presets, contrast), +1 API integration (preset applied, saved for the
+  workspace, applied to another site, validation, editors read-only, isolation), +1 E2E (gallery →
+  contrast warning → save → live site CSS variables → workspace theme).
+
+## Iteration 10 — Stage 13, site releases and rollback
 
 - **Releases** (site → Releases): "Create release" records what is live — the published version
   of every page and entry and every global component's published tree — with a note. Numbered per
@@ -256,5 +276,5 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.
 5. Remaining admin screens in Russian (collections, settings, analytics…).
 
-Stages 10–12 and 14–18 ( CRM, SEO, themes, animation, analytics, hosting, security,
+Stages 11–12 and 14–18 ( CRM, SEO, themes, animation, analytics, hosting, security,
 multilingual, developer platform, migration, local integrations) have not started. See ROADMAP.md.

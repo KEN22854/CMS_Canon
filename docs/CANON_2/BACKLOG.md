@@ -39,7 +39,7 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 
 - 🟡 CRM and automation (Stage 8): contacts, timeline, tags, notes, erasure; automations on form and order events (emails, tags, run history). Next: segments from contacts, delays/schedules in automations, email templates with the site theme, CSV export, deduplication across sites.
 - ⬜ Auth: a reload that interrupts a refresh-token rotation logs the user out (401 inside the grace window). Option: within the grace window return the successor session instead of 401 — a security trade-off to decide (OAuth BCP allows it).
-- ⬜ Themes marketplace (Stage 10).
+- 🟡 Themes (Stage 10): gallery, studio with contrast checks, workspace themes, JSON import/export. Next: a public theme marketplace (publishing, moderation, payouts), per-section theme overrides, custom fonts upload.
 - 🟡 Animation studio (Stage 11): entrance and hover animations, scroll trigger, preview. Next: timeline, parallax, per-breakpoint settings.
 - ⬜ Heatmaps, funnels (Stage 12).
 - 🟡 Remaining admin screens in Russian (builder done); server-side notification i18n.

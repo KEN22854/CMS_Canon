@@ -12,7 +12,8 @@ module.exports = {
   content: [],
   theme: {
     extend: {
-      colors: { site: { primary: v('primary'), bg: v('background'), fg: v('foreground'), muted: v('muted') } },
+      // `on-primary`: text on primary surfaces — dark or white, whichever reads (set from the theme).
+      colors: { site: { primary: v('primary'), 'on-primary': v('on-primary'), bg: v('background'), fg: v('foreground'), muted: v('muted') } },
       borderRadius: { site: 'var(--site-radius)' },
       fontFamily: { site: 'var(--site-font)' },
     },

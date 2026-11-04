@@ -16,7 +16,7 @@ real screenshots and updated docs.
 | 7 | E-commerce | 6 | 🟡 products, Buy and Cart blocks, checkout with stock, orders with statuses (offline payment) |
 | 8 | CRM and automation | 7 (orders), forms | 🟡 contacts from forms and orders, timeline, tags, notes, erasure; automations (form/order events → emails, tags) |
 | 9 | SEO platform (redirects, audit, schema) | — | 🟡 redirects, audit, JSON-LD, 404 |
-| 10 | Themes and marketplace | 1, 4 | ⬜ |
+| 10 | Themes and marketplace | 1, 4 | 🟡 24-theme gallery, theme studio with WCAG checks, workspace themes, JSON sharing (no public marketplace yet) |
 | 11 | Animation studio | 2 | 🟡 entrance/hover animations per block, scroll trigger, reduced motion |
 | 12 | Analytics and growth (heatmaps, funnels) | — | ⬜ |
 | 13 | Hosting: site releases, rollback | — | 🟡 releases of the live site, diff, one-click rollback (undoable) |

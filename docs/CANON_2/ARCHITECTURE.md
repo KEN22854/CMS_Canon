@@ -196,6 +196,13 @@ reduced motion) content is simply visible. Collab stores the object as a JSON st
 - **Filters** are parameterised SQL on `entries.data` (field names must exist in the schema);
   **views** live in `Collection.settings.views`; **bulk** loops the single-entry service methods.
 
+## Themes (`packages/blocks/src/themes.ts`)
+
+Presets are token sets (`THEME_PRESETS`); applying one is the existing `PATCH /sites/:id/theme`.
+`themeContrastIssues` computes WCAG ratios; `onPrimaryChannels` (ui-blocks) picks white or
+#0f172a for text on primary and is exposed as `--site-on-primary`. Workspace themes live in
+`Tenant.settings.themes` (validated on read and write).
+
 ## Site releases (`apps/api/src/modules/releases`)
 
 `SiteRelease` stores pointers, not copies: `[{pageId, version}]`, `[{entryId, version}]` (page and

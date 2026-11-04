@@ -1,5 +1,7 @@
 'use client';
 
+import type { SiteThemeTokens } from '@canon/blocks';
+import { ThemeStudio } from '@/components/site/theme-studio';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Copy, Loader2, TriangleAlert } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -24,8 +26,6 @@ import { useTenantId } from '@/lib/queries';
 import { useT, type MessageKey } from '@/lib/i18n';
 import { relativeTime } from '@/lib/utils';
 
-const FONTS = ['system', 'serif', 'mono', 'Inter', 'Manrope', 'Lora'];
-const RADII = ['none', 'sm', 'md', 'lg', 'full'];
 
 export default function SiteSettings() {
   const { siteId } = useParams<{ siteId: string }>();
@@ -35,7 +35,7 @@ export default function SiteSettings() {
     <div className="space-y-6">
       <General site={site.data} />
       {site.data.domain && <DomainCard site={site.data} />}
-      <Theme site={site.data} />
+      <ThemeStudio siteId={site.data.id} theme={site.data.theme as Partial<SiteThemeTokens>} />
       <AiSettings site={site.data} />
       <Danger site={site.data} />
     </div>
@@ -275,65 +275,6 @@ function DomainCard({ site }: { site: Site }) {
             {d.checkedAt ? t('domain.lastChecked', { when: relativeTime(d.checkedAt) }) : ''}
           </p>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function Theme({ site }: { site: Site }) {
-  const save = useSaver(site.id, '/theme');
-  const c = site.theme.colors ?? {};
-  const [primary, setPrimary] = useState(c.primary ?? '#4f46e5');
-  const [background, setBackground] = useState(c.background ?? '#ffffff');
-  const [foreground, setForeground] = useState(c.foreground ?? '#0f172a');
-  const [font, setFont] = useState(site.theme.font ?? 'system');
-  const [radius, setRadius] = useState(site.theme.radius ?? 'md');
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Theme</CardTitle>
-        <CardDescription>Design tokens applied to every page as CSS variables.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          className="flex flex-wrap items-end gap-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            save.mutate({ colors: { primary, background, foreground }, font, radius });
-          }}
-        >
-          {(
-            [
-              ['Primary', primary, setPrimary],
-              ['Background', background, setBackground],
-              ['Text', foreground, setForeground],
-            ] as const
-          ).map(([label, v, set]) => (
-            <div key={label} className="space-y-1.5">
-              <Label htmlFor={`c-${label}`}>{label}</Label>
-              <input id={`c-${label}`} type="color" value={v} onChange={(e) => set(e.target.value)} className="h-9 w-16 cursor-pointer rounded border" />
-            </div>
-          ))}
-          <div className="space-y-1.5">
-            <Label htmlFor="t-font">Font</Label>
-            <Select id="t-font" value={font} onChange={(e) => setFont(e.target.value)}>
-              {FONTS.map((f) => (
-                <option key={f}>{f}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="t-radius">Corners</Label>
-            <Select id="t-radius" value={radius} onChange={(e) => setRadius(e.target.value)}>
-              {RADII.map((r) => (
-                <option key={r}>{r}</option>
-              ))}
-            </Select>
-          </div>
-          <Button type="submit" loading={save.isPending}>
-            Save theme
-          </Button>
-        </form>
       </CardContent>
     </Card>
   );

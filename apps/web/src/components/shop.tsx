@@ -261,7 +261,7 @@ function Cart({ config }: { config: CartConfig }) {
             {error}
           </p>
         )}
-        <button type="submit" disabled={sending} className="rounded-site bg-site-primary px-6 py-3 font-semibold text-white shadow hover:opacity-90 disabled:opacity-60 sm:col-span-2">
+        <button type="submit" disabled={sending} className="rounded-site bg-site-primary px-6 py-3 font-semibold text-site-on-primary shadow hover:opacity-90 disabled:opacity-60 sm:col-span-2">
           {sending ? L('sending') : `${config.checkoutLabel} · ${money(total)}`}
         </button>
       </form>

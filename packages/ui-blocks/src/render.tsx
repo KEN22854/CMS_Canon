@@ -94,7 +94,7 @@ const ALIGN: Record<string, string> = { left: 'text-left', center: 'text-center 
 const FLEX_ALIGN: Record<string, string> = { left: 'justify-start', center: 'justify-center', right: 'justify-end' };
 const PAD: Record<string, string> = { none: 'py-0', sm: 'py-6', md: 'py-12', lg: 'py-20', xl: 'py-32' };
 const WIDTH: Record<string, string> = { narrow: 'max-w-2xl', default: 'max-w-5xl', wide: 'max-w-7xl', full: 'max-w-none' };
-const BG: Record<string, string> = { default: 'bg-site-bg text-site-fg', muted: 'bg-site-muted text-site-fg', primary: 'bg-site-primary text-white', dark: 'bg-site-fg text-site-bg' };
+const BG: Record<string, string> = { default: 'bg-site-bg text-site-fg', muted: 'bg-site-muted text-site-fg', primary: 'bg-site-primary text-site-on-primary', dark: 'bg-site-fg text-site-bg' };
 const GAP: Record<string, string> = { sm: 'gap-4', md: 'gap-8', lg: 'gap-12' };
 const V_ALIGN: Record<string, string> = { top: 'items-start', center: 'items-center', bottom: 'items-end' };
 /** Row stacks vertically below its breakpoint; literal class strings so Tailwind can see them. */
@@ -104,7 +104,7 @@ const COL_WIDTH: Record<string, string> = { '1/4': '25%', '1/3': '33.333%', '1/2
 const SPACER: Record<string, string> = { xs: 'h-4', sm: 'h-8', md: 'h-16', lg: 'h-24', xl: 'h-32' };
 const STATS_COLS: Record<number, string> = { 1: '', 2: '@xl:grid-cols-2', 3: '@xl:grid-cols-3', 4: '@xl:grid-cols-2 @3xl:grid-cols-4', 5: '@xl:grid-cols-3 @4xl:grid-cols-5', 6: '@xl:grid-cols-3 @4xl:grid-cols-6' };
 const FEATURE_COLS: Record<number, string> = { 2: '@2xl:grid-cols-2', 3: '@2xl:grid-cols-2 @4xl:grid-cols-3', 4: '@2xl:grid-cols-2 @5xl:grid-cols-4' };
-const TONE: Record<string, string> = { primary: 'bg-site-primary text-white', muted: 'bg-site-muted text-site-fg', dark: 'bg-site-fg text-site-bg' };
+const TONE: Record<string, string> = { primary: 'bg-site-primary text-site-on-primary', muted: 'bg-site-muted text-site-fg', dark: 'bg-site-fg text-site-bg' };
 
 const CONTAINERS = new Set(['section', 'row', 'column', 'group', 'canvas']);
 const GROUP_LAYOUT: Record<string, string> = { stack: 'flex flex-col', row: 'flex flex-row flex-wrap', grid: 'grid' };
@@ -458,7 +458,7 @@ export function BlockRenderer({
         return id.startsWith('{{') ? (
           <div {...a} className={`mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-6 ${align}`}>
             <span className="text-2xl font-bold opacity-60">€ —</span>
-            <span className="rounded-site bg-site-primary px-6 py-3 font-semibold text-white opacity-80">{str(p.label, 'Add to cart')}</span>
+            <span className="rounded-site bg-site-primary px-6 py-3 font-semibold text-site-on-primary opacity-80">{str(p.label, 'Add to cart')}</span>
             <span className="w-full text-xs opacity-60">{label(ctx, 'buyTemplate')}</span>
           </div>
         ) : (
@@ -469,7 +469,7 @@ export function BlockRenderer({
       return (
         <div {...a} data-canon-buy={prod.id} data-title={prod.title} data-price={prod.price} data-currency={prod.currency} className={`mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-6 ${align}`}>
           {p.showPrice !== false && <span className="text-2xl font-bold">{formatMoney(prod.price, prod.currency, ctx.locale)}</span>}
-          <button type="button" data-canon-add="" disabled={!prod.available || Boolean(ctx.editing)} className="rounded-site bg-site-primary px-6 py-3 font-semibold text-white shadow hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" data-canon-add="" disabled={!prod.available || Boolean(ctx.editing)} className="rounded-site bg-site-primary px-6 py-3 font-semibold text-site-on-primary shadow hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
             {prod.available ? str(p.label, 'Add to cart') : label(ctx, 'soldOut')}
           </button>
           {p.showStock !== false && stockText && <span className="text-sm opacity-70">{stockText}</span>}
@@ -549,7 +549,7 @@ function CtaLink({ href, label, variant, field }: { href: string; label: string;
         ? 'rounded-site border border-current px-6 py-3 font-semibold hover:bg-site-fg/5'
         : variant === 'inverse'
           ? 'rounded-site bg-white px-6 py-3 font-semibold text-site-primary shadow hover:opacity-90'
-          : 'rounded-site bg-site-primary px-6 py-3 font-semibold text-white shadow hover:opacity-90';
+          : 'rounded-site bg-site-primary px-6 py-3 font-semibold text-site-on-primary shadow hover:opacity-90';
   return (
     <a href={href} data-canon-event="cta_click" className={`inline-block ${cls}`} {...(external ? { rel: 'noopener noreferrer' } : {})} {...field}>
       {label}

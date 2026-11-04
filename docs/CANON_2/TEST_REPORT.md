@@ -5,17 +5,30 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 58 / 58 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), themes (3), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 61 / 61 ✅ |
 | `@canon/collab` unit (incl. animation through Yjs) | 9 / 9 ✅ |
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
 | API unit | 58 / 58 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases | 159 / 159 ✅ |
-| Playwright E2E | 24 / 24 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes | 160 / 160 ✅ |
+| Playwright E2E | 25 / 25 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **384** (382 after iteration 9).
+Total automated tests: **389** (384 after iteration 10).
+
+## Iteration 11 — Themes
+
+- `themes.test.ts` (blocks): 24 unique presets in all categories; WCAG ratios; every preset readable
+  (text, buttons with the better of white/dark text, links, bands); a bad palette flagged.
+- `themes.test.ts` (API): a preset applied, saved to the workspace, applied to a second site;
+  invalid colours and partial themes refused; editors read-only; another workspace sees none.
+- `themes.spec.ts` (E2E): gallery → Forest → a low-contrast text colour is flagged → back to Forest
+  → save → the live page has `--site-primary:21 128 61` and white button text → saved for the
+  workspace.
+
+Bug found by the contrast test: white button text on pale primaries (dark themes) — now the text
+colour follows the primary.
 
 ## Iteration 10 — Releases
 

@@ -115,6 +115,12 @@ checkedAt }`. Issue codes are listed in `packages/blocks/src/seo.ts` (`SeoIssueC
 - Delivery: `page` serves entry pages (with `entry: { id, collectionId, slug, basePath }`) and
   every page carries `lists`; `pages` adds `entries: [{ path, locale, updatedAt }]` for sitemaps.
 
+## Themes
+
+- `GET /v1/themes` (read Site), `POST /v1/themes { name, theme: { colors: { primary, background,
+  foreground, muted }, font, radius, mode } }`, `DELETE /v1/themes/:id` (update Site). Apply with
+  `PATCH /v1/sites/:siteId/theme`.
+
 ## Releases
 
 - `GET /v1/sites/:siteId/releases`, `POST /v1/sites/:siteId/releases { note? }` (publish Page).

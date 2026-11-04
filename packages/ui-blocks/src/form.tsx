@@ -194,7 +194,7 @@ export function FormView({
             <button
               type="submit"
               disabled={inert}
-              className="rounded-site bg-site-primary px-6 py-3 font-semibold text-white shadow hover:opacity-90 disabled:opacity-60"
+              className="rounded-site bg-site-primary px-6 py-3 font-semibold text-site-on-primary shadow hover:opacity-90 disabled:opacity-60"
             >
               {submitLabel || 'Send'}
             </button>

@@ -29,9 +29,25 @@ export function hexToRgbChannels(hex: string | undefined, fallback: string): str
  * public renderer sets them per host; the builder canvas sets them per edited site, so both paint
  * a page identically.
  */
+/**
+ * Text on the primary colour: white unless the primary is light (then near-black) — whichever has
+ * the higher WCAG contrast, so a pale primary in a dark theme still gets readable buttons.
+ */
+export function onPrimaryChannels(hex: string | undefined): string {
+  const rgb = hexToRgbChannels(hex, '79 70 229').split(' ').map(Number);
+  const lum = rgb.map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  const l = 0.2126 * lum[0]! + 0.7152 * lum[1]! + 0.0722 * lum[2]!;
+  // Contrast with white is 1.05/(l+0.05); with #0f172a (l≈0.0087) it is (l+0.05)/0.0587.
+  return 1.05 / (l + 0.05) >= (l + 0.05) / 0.0587 ? '255 255 255' : '15 23 42';
+}
+
 export function siteThemeStyle(t: SiteThemeInput | undefined): CSSProperties {
   return {
     '--site-primary': hexToRgbChannels(t?.colors?.primary, '79 70 229'),
+    '--site-on-primary': onPrimaryChannels(t?.colors?.primary),
     '--site-background': hexToRgbChannels(t?.colors?.background, '255 255 255'),
     '--site-foreground': hexToRgbChannels(t?.colors?.foreground, '15 23 42'),
     '--site-muted': hexToRgbChannels(t?.colors?.muted, '241 245 249'),
