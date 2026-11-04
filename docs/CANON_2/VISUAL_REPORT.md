@@ -112,6 +112,13 @@ automatically (marked "automatic") when a published page moves.
 
 ---
 
+# Iteration 13 — Funnels
+
+![funnels](screenshots/after/analytics/funnels-1440.png)
+
+Built from two real visits recorded by the site's tracker: both saw the home page, one clicked the
+call to action.
+
 # Iteration 12 — Migration center
 
 ![report](screenshots/after/migration/migration-report-1440.png)

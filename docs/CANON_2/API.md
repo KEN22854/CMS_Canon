@@ -115,6 +115,13 @@ checkedAt }`. Issue codes are listed in `packages/blocks/src/seo.ts` (`SeoIssueC
 - Delivery: `page` serves entry pages (with `entry: { id, collectionId, slug, basePath }`) and
   every page carries `lists`; `pages` adds `entries: [{ path, locale, updatedAt }]` for sitemaps.
 
+## Funnels
+
+- `GET /v1/sites/:siteId/analytics/funnels?from&to` (read Analytics) → funnels with `result: { steps:
+  [{ label, visitors, ofFirst, fromPrevious }], conversion }`.
+- `POST /v1/sites/:siteId/analytics/funnels { name, steps: [{ kind: page, path } | { kind: event,
+  name }], window: "session" | days }`, `DELETE …/funnels/:id` (update Site).
+
 ## Migration
 
 - `POST /v1/sites/:siteId/migrations/wordpress?dryRun=true` (multipart `file`, WXR ≤ 20 MB) → report

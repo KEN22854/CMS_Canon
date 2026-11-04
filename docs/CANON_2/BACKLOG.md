@@ -41,7 +41,7 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - ⬜ Auth: a reload that interrupts a refresh-token rotation logs the user out (401 inside the grace window). Option: within the grace window return the successor session instead of 401 — a security trade-off to decide (OAuth BCP allows it).
 - 🟡 Themes (Stage 10): gallery, studio with contrast checks, workspace themes, JSON import/export. Next: a public theme marketplace (publishing, moderation, payouts), per-section theme overrides, custom fonts upload.
 - 🟡 Animation studio (Stage 11): entrance and hover animations, scroll trigger, preview. Next: timeline, parallax, per-breakpoint settings.
-- ⬜ Heatmaps, funnels (Stage 12).
+- 🟡 Analytics and growth (Stage 12): funnels. Next: click heatmaps (pointer positions per block, sampled), cohorts and retention, revenue in funnels (orders), alerts on drops.
 - 🟡 Remaining admin screens in Russian (builder done); server-side notification i18n.
 
 ## P3

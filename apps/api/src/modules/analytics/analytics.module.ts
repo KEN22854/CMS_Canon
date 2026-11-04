@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Module, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Module, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiExcludeController, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { z } from 'zod';
@@ -12,6 +12,7 @@ import { DeliveryTokenGuard } from '../delivery/delivery.module';
 import { IntelligenceModule } from '../intelligence/intelligence.module';
 import { SitesModule } from '../sites/sites.module';
 import { CollectorService, collectBody, type CollectBody } from './collector.service';
+import { FunnelsService, funnelBody, type FunnelBody } from './funnels.service';
 import { InsightsService } from './insights.service';
 import { ReportsService } from './reports.service';
 import { RollupService, dayString } from './rollup.service';
@@ -55,7 +56,30 @@ export class AnalyticsController {
     private readonly insights: InsightsService,
     private readonly rollup: RollupService,
     private readonly collector: CollectorService,
+    private readonly funnels: FunnelsService,
   ) {}
+
+  @Get('funnels')
+  @RequirePermission('read', 'Analytics')
+  @ApiOperation({ summary: 'Saved funnels with visitors per step, share of the first step and step-to-step conversion (UTC days)' })
+  funnelsFor(@Param('siteId') siteId: string, @Query() query: Record<string, string>, @TenantScope() p: TenantPrincipal) {
+    const q = new ZodBody(rangeQuery).transform(query);
+    return this.funnels.list(p.tenantId, siteId, q.from, q.to);
+  }
+
+  @Post('funnels')
+  @RequirePermission('update', 'Site')
+  @ApiOperation({ summary: 'Save a funnel: 2–6 steps (page path or prefix*, or an event name), window: session or days' })
+  createFunnel(@Param('siteId') siteId: string, @Body(new ZodBody(funnelBody)) body: FunnelBody, @TenantScope() p: TenantPrincipal) {
+    return this.funnels.create(p, siteId, body);
+  }
+
+  @Delete('funnels/:id')
+  @HttpCode(204)
+  @RequirePermission('update', 'Site')
+  async dropFunnel(@Param('siteId') siteId: string, @Param('id') id: string, @TenantScope() p: TenantPrincipal): Promise<void> {
+    await this.funnels.remove(p, siteId, id);
+  }
 
   @Get()
   @RequirePermission('read', 'Analytics')
@@ -96,7 +120,7 @@ export class AnalyticsController {
 @Module({
   imports: [SitesModule, IntelligenceModule, ContentAiModule],
   controllers: [CollectController, AnalyticsController],
-  providers: [CollectorService, RollupService, ReportsService, InsightsService, DeliveryTokenGuard],
+  providers: [CollectorService, RollupService, ReportsService, InsightsService, FunnelsService, DeliveryTokenGuard],
   exports: [CollectorService, ReportsService],
 })
 export class AnalyticsModule {}

@@ -10,12 +10,22 @@ renderer :3001).
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
 | API unit | 58 / 58 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes, 1 for migration | 161 / 161 ✅ |
-| Playwright E2E | 26 / 26 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes, 1 for migration, 1 for funnels | 162 / 162 ✅ |
+| Playwright E2E | 27 / 27 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **394** (389 after iteration 11).
+Total automated tests: **396** (394 after iteration 12).
+
+## Iteration 13 — Funnels
+
+- `funnels.test.ts` (API): five visitors (full path, no add, wrong order, no product view, a return
+  after 10 days) → 4/2/1/1 in 7 days, the return counted in 30 days but not in one visit; prefix
+  paths don't match "/productsx"; other dates ignored; validation; viewers read, can't define.
+- `funnels.spec.ts` (E2E): two browser visitors on the live site, one clicks the CTA; the funnel
+  in the admin reads 2 → 1, converts 50%.
+
+Bug found: `make_interval` needs an int, the bound number arrived as bigint (cast added).
 
 ## Iteration 12 — Migration center
 

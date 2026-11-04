@@ -2,7 +2,21 @@
 
 Last update: 2026-11-04.
 
-## Iteration 12 (this one) — Stage 17, migration center (WordPress)
+## Iteration 13 (this one) — Stage 12, funnels
+
+- **Funnels** (site → Analytics → Funnels): 2–6 steps, each "visits a page" (exact path or a
+  section prefix like /blog/*) or "does an event" (cta_click, form_submit, purchase, any custom
+  event), counted in order, within one visit or within 1/7/30 days of the first step; bars with
+  visitors per step, share of the first step, the drop-off at each step and the conversion of the
+  whole funnel, for the report's date range.
+- One SQL statement per funnel (a CTE per step: the visitor's first matching event after the
+  previous step), values as bind parameters; definitions in the site settings (up to 20); viewers
+  see them, site admins define them.
+- Tests: +1 API integration (5 visitors with different paths: order, window in days vs one visit,
+  prefixes, noise from other paths and dates, validation, permissions), +1 E2E (real visits on the
+  live site tracked by the renderer's beacon → funnel shows 2 → 1, 50%).
+
+## Iteration 12 — Stage 17, migration center (WordPress)
 
 - **Import from WordPress** (site → Import): choose the export file (Tools → Export); a dry run
   reports posts and pages (published/drafts), categories, authors, linked images, what is skipped
@@ -300,5 +314,5 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.
 5. Remaining admin screens in Russian (collections, settings, analytics…).
 
-Stages 11–12, 14–16 and 18 ( CRM, SEO, themes, animation, analytics, hosting, security,
+Stages 11, 14–16 and 18 ( CRM, SEO, themes, animation, analytics, hosting, security,
 multilingual, developer platform, migration, local integrations) have not started. See ROADMAP.md.

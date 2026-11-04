@@ -18,7 +18,7 @@ real screenshots and updated docs.
 | 9 | SEO platform (redirects, audit, schema) | — | 🟡 redirects, audit, JSON-LD, 404 |
 | 10 | Themes and marketplace | 1, 4 | 🟡 24-theme gallery, theme studio with WCAG checks, workspace themes, JSON sharing (no public marketplace yet) |
 | 11 | Animation studio | 2 | 🟡 entrance/hover animations per block, scroll trigger, reduced motion |
-| 12 | Analytics and growth (heatmaps, funnels) | — | ⬜ |
+| 12 | Analytics and growth (heatmaps, funnels) | — | 🟡 funnels (pages and events, session/day windows); heatmaps next |
 | 13 | Hosting: site releases, rollback | — | 🟡 releases of the live site, diff, one-click rollback (undoable) |
 | 14 | Security audit | each stage | continuous |
 | 15 | Multilingual platform (DE/FR/ES) | — | ⬜ |

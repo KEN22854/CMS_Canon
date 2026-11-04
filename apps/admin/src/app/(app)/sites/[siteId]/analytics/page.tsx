@@ -11,6 +11,7 @@ import { useAbility } from '@/lib/ability';
 import { api, errorMessage } from '@/lib/api';
 import { pct, type Dimension, type Insights, type Report, type Totals } from '@/lib/experiences';
 import { useTenantId } from '@/lib/queries';
+import { Funnels } from '@/components/analytics/funnels';
 import { cn, formatUsd } from '@/lib/utils';
 
 const RANGES = [7, 30, 90] as const;
@@ -145,6 +146,8 @@ export default function SiteAnalytics() {
           <DimCard key={dim} label={label} rows={r?.dims[dim] ?? []} />
         ))}
       </div>
+
+      <Funnels siteId={siteId} from={from} to={to} />
     </div>
   );
 }

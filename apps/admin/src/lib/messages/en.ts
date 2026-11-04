@@ -7,6 +7,7 @@ import { crmEn } from './crm-en';
 import { releasesEn } from './releases-en';
 import { themeEn } from './theme-en';
 import { migrationEn } from './migration-en';
+import { funnelEn } from './funnel-en';
 
 /**
  * English UI strings — the source of truth for keys. Plural messages hold "one|other" forms
@@ -324,6 +325,7 @@ export const en = {
   ...releasesEn,
   ...themeEn,
   ...migrationEn,
+  ...funnelEn,
 } as const;
 
 export type MessageKey = keyof typeof en;
