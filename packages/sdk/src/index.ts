@@ -15,6 +15,30 @@ export interface CanonOptions {
 }
 
 /** Non-2xx responses: Canon's `{ error: { code, message, details } }` envelope. */
+export type OrderStatus = 'NEW' | 'CONFIRMED' | 'PAID' | 'SHIPPED' | 'COMPLETED' | 'CANCELLED';
+export interface Order {
+  id: string;
+  number: number;
+  status: OrderStatus;
+  currency: string;
+  total: number;
+  items: { entryId: string; title: string; sku: string | null; unitPrice: number; quantity: number; lineTotal: number }[];
+  customer: { name: string; email: string; phone?: string; address?: string; note?: string };
+  paymentMethod: string;
+  allowed: OrderStatus[];
+  createdAt: string;
+}
+export interface Contact {
+  id: string;
+  email: string;
+  name: string | null;
+  phone: string | null;
+  tags: string[];
+  orderCount: number;
+  revenue: Record<string, number>;
+  lastSeenAt: string;
+}
+
 export class CanonError extends Error {
   constructor(
     readonly status: number,
@@ -190,6 +214,23 @@ export function createCanon(opts: CanonOptions) {
         call<{ items: unknown[]; nextCursor: string | null }>('GET', `/v1/forms/${enc(formId)}/submissions`, {
           query: q,
         }),
+    },
+    /** Shop orders (scopes `orders:read`, `orders:write`). Amounts are minor units (cents). */
+    orders: {
+      list: (siteId: string, q: { status?: OrderStatus; q?: string; limit?: number; offset?: number } = {}) =>
+        call<{ items: Order[]; total: number; counts: Partial<Record<OrderStatus, number>> }>('GET', `/v1/sites/${enc(siteId)}/orders`, { query: q }),
+      get: (siteId: string, orderId: string) => call<Order>('GET', `/v1/sites/${enc(siteId)}/orders/${enc(orderId)}`),
+      /** NEW → CONFIRMED → PAID → SHIPPED → COMPLETED, or CANCELLED (returns stock). */
+      setStatus: (siteId: string, orderId: string, status: Exclude<OrderStatus, 'NEW'>, note?: string) =>
+        call<Order>('PATCH', `/v1/sites/${enc(siteId)}/orders/${enc(orderId)}`, { body: { status, ...(note ? { note } : {}) } }),
+    },
+    /** CRM contacts built from forms and orders (scopes `crm:read`, `crm:write`). */
+    contacts: {
+      list: (siteId: string, q: { q?: string; tag?: string; customers?: boolean; limit?: number; offset?: number } = {}) =>
+        call<{ items: Contact[]; total: number; tags: { tag: string; count: number }[] }>('GET', `/v1/sites/${enc(siteId)}/contacts`, { query: q }),
+      get: (siteId: string, id: string) => call<Contact & { activities: { id: string; kind: string; title: string; createdAt: string }[] }>('GET', `/v1/sites/${enc(siteId)}/contacts/${enc(id)}`),
+      update: (siteId: string, id: string, patch: { name?: string | null; phone?: string | null; tags?: string[] }) =>
+        call<Contact>('PATCH', `/v1/sites/${enc(siteId)}/contacts/${enc(id)}`, { body: patch }),
     },
     pages: {
       list: (siteId: string) =>

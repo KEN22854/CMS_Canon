@@ -2,7 +2,19 @@
 
 Last update: 2026-11-04.
 
-## Iteration 15 (this one) — Stage 15, multilingual shop (DE, FR, ES)
+## Iteration 16 (this one) — Stage 16, developer platform: shop and CRM for integrations
+
+- **API key scopes** for the new data: `orders:read`, `orders:write` (move orders along from an
+  ERP, warehouse or accounting system) and `crm:read`, `crm:write` (sync contacts with a CRM).
+  They appear in Settings → API keys automatically; a key with order scopes can't open the CRM and
+  vice versa; erasing a contact stays with people (owners, admins).
+- **SDK** (`@canon/sdk`): `canon.orders.list/get/setStatus` and `canon.contacts.list/get/update`,
+  typed (`Order`, `OrderStatus`, `Contact`).
+- **Webhooks** carry the new events: `order.placed`, `order.status`, `order.cancelled`,
+  `site.rolled_back` (signed, like the others).
+- Tests: +1 SDK unit; the shop and CRM integration tests now cover keys with each scope.
+
+## Iteration 15 — Stage 15, multilingual shop (DE, FR, ES)
 
 - What a shop's visitors read is now in **English, Russian, German, French and Spanish**, chosen by
   the page's locale ("de-AT" → German): the cart, the checkout form, payment methods, errors
@@ -342,5 +354,5 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.
 5. Remaining admin screens in Russian (collections, settings, analytics…).
 
-Stages 11, 14 and 16 ( CRM, SEO, themes, animation, analytics, hosting, security,
+Stages 11 and 14 ( CRM, SEO, themes, animation, analytics, hosting, security,
 multilingual, developer platform, migration, local integrations) have not started. See ROADMAP.md.

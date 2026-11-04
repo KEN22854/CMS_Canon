@@ -134,5 +134,17 @@ describe('orders in the admin', () => {
     await t.http.patch(`/v1/sites/${site.id}/orders/${order.id}`).set(bearer(viewer.accessToken)).send({ status: 'PAID' }).expect(403);
     const stranger = await signUp(t);
     await t.http.get(`/v1/sites/${site.id}/orders/${order.id}`).set(bearer(stranger.accessToken)).expect(404);
+
+    // Integrations use API keys with narrow scopes: read orders, or move them along.
+    const key = (scopes: string[]) => t.http.post('/v1/api-keys').set(h).send({ name: scopes.join('+'), scopes }).expect(201).then((r) => r.body.key as string);
+    const reader = await key(['orders:read']);
+    const writer = await key(['orders:read', 'orders:write']);
+    const content = await key(['content:read']);
+    expect((await t.http.get(`/v1/sites/${site.id}/orders`).set('x-api-key', reader).expect(200)).body.total).toBe(2);
+    await t.http.patch(`/v1/sites/${site.id}/orders/${order.id}`).set('x-api-key', reader).send({ status: 'PAID' }).expect(403);
+    await t.http.get(`/v1/sites/${site.id}/orders`).set('x-api-key', content).expect(403);
+    await t.http.get(`/v1/sites/${site.id}/contacts`).set('x-api-key', writer).expect(403); // orders scopes don't open the CRM
+    const second = (await t.http.get(`/v1/sites/${site.id}/orders`).query({ status: 'NEW' }).set('x-api-key', writer).expect(200)).body.items[0] as { id: string };
+    expect((await t.http.patch(`/v1/sites/${site.id}/orders/${second.id}`).set('x-api-key', writer).send({ status: 'CONFIRMED', note: 'from the ERP' }).expect(200)).body.status).toBe('CONFIRMED');
   });
 });

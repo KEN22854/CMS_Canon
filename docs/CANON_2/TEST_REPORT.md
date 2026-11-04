@@ -7,7 +7,7 @@ renderer :3001).
 |---|---|
 | `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), shop strings (2), themes (3), HTML import (3), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 66 / 66 ✅ |
 | `@canon/collab` unit (incl. animation through Yjs) | 9 / 9 ✅ |
-| fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
+| fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 5 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
 | API unit | 58 / 58 ✅ |
 | API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes, 1 for migration, 1 for funnels, 1 for Telegram | 163 / 163 ✅ |
@@ -15,7 +15,14 @@ renderer :3001).
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **399** (397 after iteration 14).
+Total automated tests: **400** (399 after iteration 15).
+
+## Iteration 16 — Developer platform
+
+- `shop.test.ts`: an `orders:read` key lists orders but can't change them, a `content:read` key gets
+  403, order scopes don't open contacts, an `orders:write` key confirms an order.
+- `crm.test.ts`: a `crm:read`+`crm:write` key lists and tags contacts but can't erase them.
+- `client.test.ts` (SDK): order list query, status change body, contacts query.
 
 ## Iteration 15 — Multilingual shop
 

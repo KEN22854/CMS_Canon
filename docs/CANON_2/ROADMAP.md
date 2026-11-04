@@ -22,7 +22,7 @@ real screenshots and updated docs.
 | 13 | Hosting: site releases, rollback | — | 🟡 releases of the live site, diff, one-click rollback (undoable) |
 | 14 | Security audit | each stage | continuous |
 | 15 | Multilingual platform (DE/FR/ES) | — | 🟡 visitor-facing shop and order emails in en/ru/de/fr/es; admin UI en/ru |
-| 16 | Developer platform | — | ⬜ |
+| 16 | Developer platform | — | 🟡 API key scopes for orders and CRM, SDK methods, webhook events for shop and releases (on top of OpenAPI, SDK, MCP, webhooks) |
 | 17 | Migration center | 4, 9 | 🟡 WordPress import (posts, pages, categories, 301 redirects); CSV/JSON into collections |
 | 18 | Local integrations | 7, 8 | 🟡 Telegram: orders, form requests, automation messages |
 

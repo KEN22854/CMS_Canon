@@ -115,6 +115,12 @@ checkedAt }`. Issue codes are listed in `packages/blocks/src/seo.ts` (`SeoIssueC
 - Delivery: `page` serves entry pages (with `entry: { id, collectionId, slug, basePath }`) and
   every page carries `lists`; `pages` adds `entries: [{ path, locale, updatedAt }]` for sitemaps.
 
+## API key scopes (shop and CRM)
+
+`orders:read` → `GET /v1/sites/:siteId/orders[/:id]`; `orders:write` → `PATCH …/orders/:id`;
+`crm:read` → `GET …/contacts[/:id]`; `crm:write` → `PATCH …/contacts/:id`, notes. SDK:
+`canon.orders.*`, `canon.contacts.*`.
+
 ## Telegram
 
 - `GET /v1/sites/:siteId/integrations/telegram` → `{ connected, chatId, events, tokenHint, botName }`.

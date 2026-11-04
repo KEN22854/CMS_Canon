@@ -85,6 +85,11 @@ describe('contacts', () => {
     await t.http.get(`/v1/sites/${site.id}/contacts`).set(bearer(viewer.accessToken)).expect(403);
     const stranger = await signUp(t);
     await t.http.get(`/v1/sites/${site.id}/contacts/${list.items[0].id}`).set(bearer(stranger.accessToken)).expect(404);
+    // A CRM sync key reads contacts but can't erase them.
+    const crm = (await t.http.post('/v1/api-keys').set(bearer(owner.accessToken)).send({ name: 'crm sync', scopes: ['crm:read', 'crm:write'] }).expect(201)).body.key as string;
+    expect((await t.http.get(`/v1/sites/${site.id}/contacts`).set('x-api-key', crm).expect(200)).body.total).toBe(1);
+    await t.http.patch(`/v1/sites/${site.id}/contacts/${list.items[0].id}`).set('x-api-key', crm).send({ tags: ['synced'] }).expect(200);
+    await t.http.delete(`/v1/sites/${site.id}/contacts/${list.items[0].id}`).set('x-api-key', crm).expect(403);
   });
 });
 

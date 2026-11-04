@@ -87,4 +87,17 @@ describe('@canon/sdk', () => {
     const canon = createCanon({ baseUrl: 'https://api.example.com', fetch: m.fetch });
     await expect(canon.forms.submissions('f1')).resolves.toBeUndefined();
   });
+
+  it('moves orders and syncs contacts', async () => {
+    const m = mockFetch((req) => json(req.method === 'PATCH' ? { id: 'o1', status: 'SHIPPED' } : { items: [], total: 0, counts: {}, tags: [] }));
+    const canon = createCanon({ baseUrl: 'https://api.example.com', apiKey: 'ck_shop', fetch: m.fetch });
+    await canon.orders.list('s1', { status: 'PAID', limit: 10 });
+    expect(m.calls[0]!.url).toBe('https://api.example.com/v1/sites/s1/orders?status=PAID&limit=10');
+    const o = await canon.orders.setStatus('s1', 'o1', 'SHIPPED', 'DHL 123');
+    expect(o.status).toBe('SHIPPED');
+    expect(m.calls[1]!.method).toBe('PATCH');
+    expect(await m.calls[1]!.json()).toEqual({ status: 'SHIPPED', note: 'DHL 123' });
+    await canon.contacts.list('s1', { customers: true });
+    expect(m.calls[2]!.url).toBe('https://api.example.com/v1/sites/s1/contacts?customers=true');
+  });
 });

@@ -60,6 +60,11 @@ export const API_KEY_SCOPES = {
   'canon:read': [['read', ['Fact', 'Branch']]],
   'canon:write': [['create', ['Fact', 'Branch']], ['update', ['Fact', 'Branch']]],
   'analytics:read': [['read', ['Analytics']]],
+  // Shop and CRM data for fulfilment, accounting and CRM sync (personal data: grant narrowly).
+  'orders:read': [['read', ['Order']]],
+  'orders:write': [['update', ['Order']]],
+  'crm:read': [['read', ['Contact']]],
+  'crm:write': [['create', ['Contact']], ['update', ['Contact']]],
 } as const satisfies Record<string, ReadonlyArray<readonly [Action, readonly SubjectName[]]>>;
 
 export type ApiKeyScope = keyof typeof API_KEY_SCOPES;
