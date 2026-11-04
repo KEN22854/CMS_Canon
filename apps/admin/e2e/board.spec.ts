@@ -316,6 +316,23 @@ test('board-like building: drop anywhere, overlap, reorder layers, drag objects 
   await expect.poll(() => topAt(cx, cy)).toBe('heading');
   await page.screenshot({ path: `${SHOTS}/08-free-board.png` });
 
+  // Phones: the zone stacks its objects by itself (they had positions for desktop only) and nothing
+  // sticks out of the Mobile artboard.
+  const mob = artboard(page, 'mobile');
+  const mImg = mob.locator('[data-block-type="canvas"]').last().locator('[data-block-type="image"]');
+  await expect.poll(() => mImg.evaluate((e) => getComputedStyle(e).position)).toBe('relative');
+  const mb = (await mob.locator('[data-frame-bp]').boundingBox())!;
+  for (const type of ['image', 'heading']) {
+    const b = (await mob.locator('[data-block-type="canvas"]').last().locator(`[data-block-type="${type}"]`).boundingBox())!;
+    expect(b.x).toBeGreaterThanOrEqual(mb.x - 1);
+    expect(b.x + b.width).toBeLessThanOrEqual(mb.x + mb.width + 1);
+  }
+  // The image is above the heading on the phone (reading order from the desktop layout).
+  const mh = (await mob.locator('[data-block-type="canvas"]').last().locator('[data-block-type="heading"]').boundingBox())!;
+  expect((await mImg.boundingBox())!.y).toBeLessThan(mh.y);
+  await mob.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${SHOTS}/09-free-zone-phone.png` });
+
   // Drag the image straight away (not selected first): it moves, one undo step.
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
@@ -342,4 +359,6 @@ test('board-like building: drop anywhere, overlap, reorder layers, drag objects 
   await expect.poll(async () => (await request.get(`http://localhost:${WEB_PORT}/`, { headers: { 'x-forwarded-host': host } })).text()).toContain('data-free-form');
   const html = await (await request.get(`http://localhost:${WEB_PORT}/`, { headers: { 'x-forwarded-host': host } })).text();
   expect(html).toContain('position:absolute');
+  expect(html).toContain('{position:relative;display:flex;flex-direction:column;align-items:center;gap:16px;padding:32px 16px}');
+  expect(html).toContain('@container (max-width: 767px)');
 });

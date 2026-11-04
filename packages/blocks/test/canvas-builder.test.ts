@@ -88,3 +88,24 @@ describe('HTML attributes', () => {
     expect(validatePageContent(page({})).ok && validatePageContent(page({})).ok).toBe(true);
   });
 });
+
+describe('free zones on phones', () => {
+  const zone = (mobile: string | undefined, kids: BlockNode[]) => ({ id: 'root', children: [{ id: 'z', type: 'canvas', props: { mobile }, children: kids }] });
+  const child = (id: string, base: Record<string, string>, extra: Record<string, Record<string, string>> = {}, type = 'heading') => ({ id, type, props: {}, children: [], styles: { base: { position: 'absolute', ...base }, ...extra } }) as unknown as BlockNode;
+
+  it('stacks objects placed only for desktop, in reading order, inside the phone breakpoint', () => {
+    const css = compileStyles(zone(undefined, [child('late', { top: '400px', left: '10px' }), child('early', { top: '40px', left: '600px' }), child('mid', { top: '40px', left: '700px' }, {}, 'shape')]));
+    const phone = /@container \(max-width: 767px\)\{(.*?)\}\n?(@container|$)/s.exec(css)?.[1] ?? '';
+    expect(phone).toContain('[data-cn="z"][data-cn] [data-free-frame]{position:relative;display:flex;flex-direction:column');
+    expect(phone).toContain('[data-cn="z"][data-cn]{min-height:0}');
+    expect(phone).toMatch(/\[data-cn="early"\]\[data-cn\]\{position:relative;[^}]*width:100%;[^}]*order:0\}/);
+    expect(phone).toMatch(/\[data-cn="mid"\]\[data-cn\]\{position:relative;left:auto;top:auto;right:auto;bottom:auto;max-width:100%[^}]*order:1\}/); // shapes keep their size
+    expect(phone).toMatch(/\[data-cn="late"\][^}]*order:2\}/);
+  });
+
+  it('leaves objects with their own phone position alone, and does nothing in manual zones', () => {
+    const own = compileStyles(zone('auto', [child('a', { top: '10px', left: '10px' }, { mobileS: { top: '20px', left: '0px' } })]));
+    expect(own).not.toContain('display:flex;flex-direction:column');
+    expect(compileStyles(zone('manual', [child('a', { top: '10px', left: '10px' })]))).not.toContain('[data-free-frame]{');
+  });
+});

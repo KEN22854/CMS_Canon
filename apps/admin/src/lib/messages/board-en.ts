@@ -136,6 +136,7 @@ export const boardEn = {
   'block.list.i.text': 'Text',
   'block.list.f.marker': 'Marker',
   'block.list.f.align': 'Alignment',
+  'block.canvas.f.mobile': 'On phones — auto: stack objects in reading order; manual: keep positions',
   'block.image.f.ratio': 'Crop (aspect ratio)',
   'block.image.f.fit': 'Fit',
   'block.image.f.focus': 'Focus',

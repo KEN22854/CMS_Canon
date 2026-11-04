@@ -130,7 +130,7 @@ export function BlockRenderer({
   const a = {
     ...(ctx.editing ? { 'data-block-id': node.id, 'data-block-type': node.type, ...(CONTAINERS.has(node.type) ? { 'data-block-container': '' } : {}), ...(node.hidden ? { 'data-hidden': '' } : {}), ...(node.locked ? { 'data-locked': '' } : {}) } : {}),
     // Target of the compiled node styles (PageStyles); the block's own root element, no wrapper.
-    ...(node.styles || node.animation?.type ? { 'data-cn': node.id } : {}),
+    ...(node.styles || node.animation?.type || node.type === 'canvas' ? { 'data-cn': node.id } : {}),
     // Entrances don't run while editing (the canvas replays them on request); hover effects do.
     ...(node.animation?.type && !ctx.editing ? { 'data-anim': node.animation.type, 'data-anim-trigger': node.animation.trigger ?? 'scroll' } : {}),
     ...(node.animation?.type && ctx.editing ? { 'data-anim-edit': node.animation.type } : {}),

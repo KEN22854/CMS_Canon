@@ -137,6 +137,7 @@ export const boardRu: Record<BoardMessageKey, string> = {
   'block.list.i.text': 'Текст',
   'block.list.f.marker': 'Маркер',
   'block.list.f.align': 'Выравнивание',
+  'block.canvas.f.mobile': 'На телефонах — auto: выстроить объекты по порядку чтения; manual: оставить позиции',
   'block.image.f.ratio': 'Кадрирование (пропорции)',
   'block.image.f.fit': 'Вписывание',
   'block.image.f.focus': 'Фокус',

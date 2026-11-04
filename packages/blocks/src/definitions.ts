@@ -474,8 +474,10 @@ export const canvasBlock = define({
     imageUrl: externalImageUrl.default(''),
     videoUrl: externalVideoUrl.default(''),
     overlay: z.enum(['none', 'light', 'dark']).default('none'),
+    /** Phones: "auto" stacks objects without their own phone position; "manual" keeps positions only. */
+    mobile: z.enum(['auto', 'manual']).default('auto'),
   }),
-  defaults: () => ({ height: 560, frame: 'grid' as const, background: 'default' as const, imageUrl: '', videoUrl: '', overlay: 'none' as const }),
+  defaults: () => ({ height: 560, frame: 'grid' as const, background: 'default' as const, imageUrl: '', videoUrl: '', overlay: 'none' as const, mobile: 'auto' as const }),
   fields: {
     height: { kind: 'number', label: 'Height (desktop, px)' },
     frame: { kind: 'select', label: 'Positions relative to', options: ['grid', 'window'] },
@@ -483,6 +485,7 @@ export const canvasBlock = define({
     imageUrl: { kind: 'url', label: 'Background image link (stock)' },
     videoUrl: { kind: 'url', label: 'Background video link (.mp4)' },
     overlay: { kind: 'select', label: 'Darken the background', options: ['none', 'light', 'dark'] },
+    mobile: { kind: 'select', label: 'On phones', options: ['auto', 'manual'] },
   },
 });
 

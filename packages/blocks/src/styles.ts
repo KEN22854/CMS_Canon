@@ -308,6 +308,7 @@ function rules(id: string, decls: Map<string, string>, type: string | undefined,
 interface StyledNode {
   id: string;
   type?: string;
+  props?: Record<string, unknown>;
   styles?: ResponsiveStyles;
   animation?: BlockAnimation;
   hidden?: boolean;
@@ -329,6 +330,12 @@ export function compileStyles(root: StyledNode, isPageRoot = true): string {
       const r = animationRule(n.id, n.animation);
       if (r) base.push(r);
     }
+    // Free zones on phones: objects without their own phone positions stack in reading order.
+    // These go first in the phone block, so anything the person set for phones still wins.
+    if (n.type === 'canvas' && !isRoot) {
+      const auto = phoneStack(n);
+      if (auto) (byBp.get(PHONE_BP) ?? byBp.set(PHONE_BP, []).get(PHONE_BP)!).push(auto);
+    }
     if (n.styles) {
       const c = compiledNode(n.id, n.styles, isRoot, n.type);
       if (c.base) base.push(c.base);
@@ -343,6 +350,37 @@ export function compileStyles(root: StyledNode, isPageRoot = true): string {
     if (rules?.length) parts.push(`@container (max-width: ${b.max}px){${rules.join('')}}`);
   }
   return parts.join('\n');
+}
+
+/** Where free zones switch to the automatic phone layout (≤ 767 px). */
+const PHONE_BP: StyleBreakpoint = 'mobileL';
+const SMALL: StyleBreakpoint[] = ['tablet', 'mobileL', 'mobileS'];
+const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * The automatic phone layout of a free-form zone (prop `mobile`: "auto", the default): its frame
+ * becomes a centred column and every object placed only for larger screens joins it, ordered by
+ * where it sits on desktop (top, then left). Objects with their own tablet/phone position keep
+ * it. "manual" turns this off (positions per breakpoint only, as before).
+ */
+export function phoneStack(zone: StyledNode): string | null {
+  if (zone.props?.mobile === 'manual' || !ID_RE.test(zone.id)) return null;
+  const positioned = (c: StyledNode) => SMALL.some((bp) => c.styles?.[bp]?.left !== undefined || c.styles?.[bp]?.top !== undefined);
+  const free = zone.children.filter((c) => ID_RE.test(c.id) && c.styles && !positioned(c));
+  if (!free.length) return null;
+  const px = (v: string | undefined) => (v && /^-?\d+(\.\d+)?px$/.test(v) ? parseFloat(v) : 0);
+  const ordered = [...free].sort((a, b) => px(a.styles?.base?.top) - px(b.styles?.base?.top) || px(a.styles?.base?.left) - px(b.styles?.base?.left));
+  const ownMin = SMALL.some((bp) => zone.styles?.[bp]?.minHeight !== undefined);
+  const out = [
+    `[data-cn="${zone.id}"][data-cn] [data-free-frame]{position:relative;display:flex;flex-direction:column;align-items:center;gap:16px;padding:32px 16px}`,
+    ownMin ? '' : `[data-cn="${zone.id}"][data-cn]{min-height:0}`,
+  ];
+  ordered.forEach((c, i) => {
+    const ownWidth = SMALL.some((bp) => c.styles?.[bp]?.width !== undefined);
+    const width = ownWidth || c.type === 'shape' || c.type === 'icon' || c.type === 'badge' ? '' : 'width:100%;';
+    out.push(`[data-cn="${c.id}"][data-cn]{position:relative;left:auto;top:auto;right:auto;bottom:auto;${width}max-width:100%;margin-left:auto;margin-right:auto;order:${i}}`);
+  });
+  return out.join('');
 }
 
 interface CompiledNode {

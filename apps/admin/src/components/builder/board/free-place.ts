@@ -1,6 +1,7 @@
 import { getBlock, setStyle, type BlockNode, type EditorOperation, type StyleBreakpoint } from '@canon/blocks';
 import { useEffect } from 'react';
 import { findNode, findParent, newBlock } from '../../editor/tree-ops';
+import { position } from '../free-board';
 import type { BuilderStore } from '../store';
 
 /**
@@ -126,8 +127,8 @@ export function useDirectFreeDrag(store: BuilderStore, hostRef: React.RefObject<
       if (!el || !area || el.hasAttribute('data-locked') || s.selectedIds.includes(el.dataset.blockId!)) return;
       const id = el.dataset.blockId!;
       const zoom = zoomOf(host);
-      const cs = getComputedStyle(el);
-      const start = { x: e.clientX, y: e.clientY, left: parseFloat(cs.left) || 0, top: parseFloat(cs.top) || 0, h: el.getBoundingClientRect().height / zoom };
+      const pos = position(el);
+      const start = { x: e.clientX, y: e.clientY, left: pos.left, top: pos.top, h: el.getBoundingClientRect().height / zoom };
       let moved = false;
       const node = el;
       const move = (ev: PointerEvent) => {
@@ -153,7 +154,9 @@ export function useDirectFreeDrag(store: BuilderStore, hostRef: React.RefObject<
         const top = grid(Math.max(-2000, start.top + (ev.clientY - start.y) / zoom), snap);
         const bp = store.getState().breakpoint;
         const st = store.getState();
-        st.applyMany([{ op: 'STYLE_SET', id, breakpoint: bp, property: 'left', value: `${left}px` }, { op: 'STYLE_SET', id, breakpoint: bp, property: 'top', value: `${top}px` }, ...growOps(area!, top + start.h, bp, host)]);
+        // An object stacked on a phone keeps its width when it gets its own position there.
+        const width: EditorOperation[] = pos.flow ? [{ op: 'STYLE_SET', id, breakpoint: bp, property: 'width', value: `${Math.round(pos.width)}px` }] : [];
+        st.applyMany([{ op: 'STYLE_SET', id, breakpoint: bp, property: 'left', value: `${left}px` }, { op: 'STYLE_SET', id, breakpoint: bp, property: 'top', value: `${top}px` }, ...width, ...growOps(area!, top + start.h, bp, host)]);
         st.select(id);
       };
       e.preventDefault();

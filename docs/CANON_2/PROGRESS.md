@@ -37,6 +37,14 @@ performance, stage status).
   (the collaboration room's copy wasn't recognised as the saved page); the Layers tree of a big page
   took 1.5 s to open (sections now fold on large pages: 0.24 s); "Size" label clash in the style panel.
 
+### Iteration 18d — free zones on phones
+
+- Free zones lay themselves out on phones: objects placed only for desktop stack in reading order
+  inside the 767 px container query; objects with their own tablet/phone position stay put; moving a
+  stacked object on a phone starts from where it is; zone setting On phones: auto / manual.
+- Tests: +2 blocks unit (stacking, manual zones and own positions), the free-board E2E checks the
+  Mobile artboard (nothing sticks out, image above heading) and the published CSS.
+
 ### Iteration 18c — build the site like a board
 
 - Free placement (default on): library objects land at the pointer — in the free zone under it, or a

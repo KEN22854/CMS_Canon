@@ -178,8 +178,12 @@ artboard); styles are emitted once per section for all artboards.
 - **Zones grow** to fit what you drop or move below their bottom (desktop height, or a min-height
   for smaller screens).
 - **Blank board page** (Templates): one big free zone to compose a whole page freely.
-- Phones: positions are per breakpoint; on a phone artboard the zone's *Arrange for this screen*
-  stacks its objects in reading order, then you adjust.
+- **Phones lay out by themselves**: below 768 px a free zone turns into a centred column and every
+  object placed only for larger screens joins it, in reading order of the desktop layout (top, then
+  left); the zone takes the height of its content. Objects you placed yourself for a tablet or phone
+  keep that position; dragging a stacked object on a phone artboard starts from where it is and
+  gives it its own phone position. The zone setting *On phones* switches between auto and manual.
+  Compiled with the page styles (phoneStack in styles.ts), so the live site does the same.
 
 Not done, on purpose (see BACKLOG): CSS class names (they would reach outside the validated style
 layer), arbitrary attributes beyond the allowlist, all pages of a site on one board.

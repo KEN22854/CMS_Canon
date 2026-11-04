@@ -61,4 +61,4 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - ⬜ All pages of a site on one board (today: one page per board, page switcher in the header).
 - 🟡 Rulers done (iteration 18b). Next: draggable guides, distances while dragging (today: Alt + hover).
 - ⬜ Virtualise artboards far outside the viewport for pages over ~3 000 blocks on 3+ artboards.
-- ⬜ Free zones on phones: derive a stacked layout automatically for objects placed only on desktop (today: Arrange for this screen, per zone).
+- ✅ Free zones on phones stack objects placed only for desktop automatically (iteration 18d).

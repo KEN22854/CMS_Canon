@@ -45,9 +45,15 @@ function boxIn(frame: DOMRect, el: Element, scale: number): Box {
 const set = (id: string, breakpoint: StyleBreakpoint, property: 'left' | 'top' | 'width' | 'height' | 'rotate', value: string): EditorOperation => ({ op: 'STYLE_SET', id, breakpoint, property, value });
 
 /** Current left/top of an element as its stylesheet places it (not including a drag preview). */
-function position(el: HTMLElement) {
+export function position(el: HTMLElement) {
   const cs = getComputedStyle(el);
-  return { left: parseFloat(cs.left) || 0, top: parseFloat(cs.top) || 0 };
+  if (cs.position === 'absolute') return { left: parseFloat(cs.left) || 0, top: parseFloat(cs.top) || 0, flow: false, width: 0 };
+  // Stacked automatically (a free zone on a phone): measure where it is now, so a move starts there.
+  const frame = el.closest<HTMLElement>('[data-free-frame]');
+  const zoom = parseFloat(el.closest<HTMLElement>('[style*="zoom"]')?.style.zoom ?? '1') || 1;
+  const fr = frame?.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  return { left: fr ? (r.left - fr.left) / zoom : 0, top: fr ? (r.top - fr.top) / zoom : 0, flow: true, width: r.width / zoom };
 }
 
 /** The free-form children selected together (same parent block), primary last. */
@@ -156,7 +162,7 @@ export function FreeSelection({ canvas, ids, hostRef, scale, breakpoint, store, 
       if (!moved) return store.getState().select(id);
       // A guide snap is exact; otherwise positions land on the 8 px grid (Alt: free).
       const grid = !ev.altKey && store.getState().snap && !last.gx.length && !last.gy.length;
-      const ops = starts.flatMap((s) => [set(s.el.dataset.blockId!, breakpoint, 'left', `${gridSnap(s.pos.left + last.dx, grid)}px`), set(s.el.dataset.blockId!, breakpoint, 'top', `${gridSnap(Math.max(-2000, s.pos.top + last.dy), grid)}px`)]);
+      const ops = starts.flatMap((s) => [set(s.el.dataset.blockId!, breakpoint, 'left', `${gridSnap(s.pos.left + last.dx, grid)}px`), set(s.el.dataset.blockId!, breakpoint, 'top', `${gridSnap(Math.max(-2000, s.pos.top + last.dy), grid)}px`), ...(s.pos.flow ? [set(s.el.dataset.blockId!, breakpoint, 'width', `${Math.round(s.pos.width)}px`)] : [])]);
       store.getState().applyMany(ops);
       onDone();
     };

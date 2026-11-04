@@ -5,7 +5,7 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), shop strings (2), themes (3), HTML import (3), entry links (1), stagger (1), AI plans (4), SEO audit and JSON-LD (5), tree (16), custom CSS, canvas elements, interaction states, HTML attributes (6) | 74 / 74 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), shop strings (2), themes (3), HTML import (3), entry links (1), stagger (1), AI plans (4), SEO audit and JSON-LD (5), tree (16), custom CSS, canvas elements, interaction states, HTML attributes, free zones on phones (8) | 76 / 76 ✅ |
 | `@canon/collab` unit (incl. animation, attributes and state styles through Yjs) | 10 / 10 ✅ |
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 5 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5), board geometry: zoom, fit, reveal, devices, marquee, distances (6) | 18 / 18 ✅ |
@@ -15,7 +15,7 @@ renderer :3001).
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **427** (421 after iteration 18).
+Total automated tests: **429** (427 after iteration 18c).
 
 ## Iteration 18 — Infinite canvas
 
