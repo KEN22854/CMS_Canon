@@ -1,4 +1,4 @@
-import { bindEntry, collectComponentIds, collectListSpecs, collectProductIds, hasCart, collectMediaIds, collectPageFactKeys, expandComponents, type BlockNode, type ListItem, type PageContent } from '@canon/blocks';
+import { bindEntry, expandStagger, collectComponentIds, collectListSpecs, collectProductIds, hasCart, collectMediaIds, collectPageFactKeys, expandComponents, type BlockNode, type ListItem, type PageContent } from '@canon/blocks';
 import { applyBlockPatch, decodeVariantKey, mergePatches, type BlockPatch, type RuntimeConfig } from '@canon/edge';
 import type { Page, Site } from '@canon/db';
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
@@ -207,7 +207,8 @@ export class DeliveryService implements OnModuleInit {
 
   private async assemble(site: Site, page: Page, raw: PageContent, seo: Record<string, unknown>, draft: boolean) {
     // Global components are expanded first, so their media, facts and forms load like the page's own.
-    const content = await this.withComponents(site.id, raw, draft);
+    // Components first, then staggered entrances spelled out per child (renderers stay simple).
+    const content = { root: expandStagger((await this.withComponents(site.id, raw, draft)).root) };
     // Collection lists: cards from published entries; their images load with the page's media.
     const [lists, products, shop, templates] = await Promise.all([
       this.entryPages.lists(site.id, collectListSpecs(content.root), page.locale) as Promise<Record<string, ListItem[]>>,

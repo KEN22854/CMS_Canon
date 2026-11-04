@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANIMATION_CSS, compileStyles, normalizeAnimation, validatePageContent } from '../src';
+import { ANIMATION_CSS, animationSchema, compileStyles, expandStagger, normalizeAnimation, validatePageContent } from '../src';
 
 const page = (animation: unknown) => ({ root: { id: 'root', type: 'section', props: {}, children: [{ id: 'h', type: 'heading', props: { text: 'Hi' }, children: [], animation }] } });
 
@@ -20,5 +20,23 @@ describe('block animations', () => {
     expect(ANIMATION_CSS).toContain('@keyframes canon-zoom-in');
     expect(ANIMATION_CSS).toContain('prefers-reduced-motion:reduce');
     expect(ANIMATION_CSS).toContain('.canon-anim [data-anim-trigger="scroll"]:not([data-anim-in])');
+  });
+});
+
+describe('staggered entrances', () => {
+  const n = (id: string, animation?: object, children: { id: string; animation?: object; children: never[] }[] = []) => ({ id, animation, children }) as never;
+  it('spells out one entrance per child, growing delays; own entrances and hover kept', () => {
+    const grid = n('g', { type: 'slide-up', delay: 100, stagger: 150, hover: 'lift', duration: 500 }, [n('a'), n('b', { hover: 'grow' }), n('c', { type: 'fade' }), n('d')]);
+    const out = expandStagger(grid) as unknown as { animation?: object; children: { animation?: object }[] };
+    expect(out.animation).toEqual({ hover: 'lift' }); // the container itself doesn't move
+    expect(out.children.map((c) => c.animation)).toEqual([
+      { type: 'slide-up', duration: 500, delay: 100 },
+      { type: 'slide-up', duration: 500, delay: 250, hover: 'grow' },
+      { type: 'fade' },
+      { type: 'slide-up', duration: 500, delay: 550 },
+    ]);
+    expect(animationSchema.safeParse({ type: 'fade', stagger: 10 }).success).toBe(false); // 50 ms at least
+    const plain = n('p', undefined, [n('x')]);
+    expect(expandStagger(plain)).toBe(plain); // untouched trees keep their identity
   });
 });

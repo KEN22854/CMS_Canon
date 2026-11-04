@@ -1,10 +1,16 @@
 import { z } from 'zod';
 import { emptyDoc, richTextSchema } from './rich-text';
 
+/** Links people can follow: http(s), mailto, tel, a path on the site or an anchor — never "//host" or a script. */
+export const SAFE_LINK_RE = /^(https?:|mailto:|tel:|\/(?!\/)|#)/i;
 const safeUrl = z
   .string()
   .max(2048)
-  .refine((h) => h === '' || /^(https?:|mailto:|tel:|\/|#)/i.test(h), { message: 'Only http(s), mailto, tel, relative and anchor URLs are allowed' });
+  // An entry template may name a field ("{{entry.link}}"); the filled-in link is checked again (bindEntry).
+  .refine((h) => h === '' || SAFE_LINK_RE.test(h) || /^\{\{\s*entry\.[a-zA-Z][a-zA-Z0-9_]{0,39}\s*\}\}$/.test(h), { message: 'Only http(s), mailto, tel, relative and anchor URLs are allowed' });
+
+/** Link props re-checked after entry tokens are filled in. */
+export const LINK_PROPS: ReadonlySet<string> = new Set(['href', 'ctaHref', 'buttonHref']);
 
 /**
  * Stock media shown by link (templates, quick starts). Only these hosts, only https: a page can't

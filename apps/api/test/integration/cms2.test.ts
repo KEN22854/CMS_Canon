@@ -121,6 +121,20 @@ describe('entry pages (collection routes)', () => {
   });
 });
 
+describe('staggered entrances', () => {
+  it('are spelled out per child on the live page', async () => {
+    const { owner, site } = await setup();
+    const grid = node('grid', 'group', { layout: 'grid', columns: 3 }, [node('c1', 'heading', { text: 'One', level: 3 }), node('c2', 'heading', { text: 'Two', level: 3 }), node('c3', 'heading', { text: 'Three', level: 3 })]);
+    (grid as { animation?: object }).animation = { type: 'slide-up', stagger: 120 };
+    await page(owner, site.id, 'cards', 'Cards', { root: node('root', 'section', {}, [grid]) });
+    await drainOutbox(t, owner.tenantId);
+    const res = await t.http.get(`/v1/delivery/sites/${site.id}/page`).query({ path: '/cards' }).set(DELIVERY).expect(200);
+    const g = res.body.page.content.root.children[0] as { animation?: object; children: { animation?: { delay?: number } }[] };
+    expect(g.animation).toBeUndefined();
+    expect(g.children.map((c) => c.animation)).toEqual([{ type: 'slide-up' }, { type: 'slide-up', delay: 120 }, { type: 'slide-up', delay: 240 }]);
+  });
+});
+
 describe('collection list blocks', () => {
   it('fills cards from published entries (tag, order, limit) with links to entry pages, in delivery and the builder preview', async () => {
     const { owner, h, site, base, posts } = await setup();

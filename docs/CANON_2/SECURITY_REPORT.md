@@ -159,6 +159,19 @@ The inline script in `apps/admin/src/app/layout.tsx` is a static string that onl
 - Outbound calls go only to `TELEGRAM_API_URL` (fixed in config, not user-provided), 10 s timeout.
 - Messages contain order and form data the owner chose to receive; sent as plain text.
 
+## Pass over iterations 7–16 (iteration 17)
+
+| Area | Finding | Status |
+|---|---|---|
+| Entry pages | Links built from entry data could become `//host` (protocol-relative) or carry a script scheme via a whole-token link | Fixed: links re-checked after filling; `//` refused on save; tests |
+| Checkout | Per-IP limit trusts the renderer's X-Forwarded-For | Mitigated: site-wide cap (300 / 10 min); proxy allowlist in BACKLOG |
+| Funnels | Unbounded date range scans raw events | Fixed: 400 days per request |
+| Migration | Regex-based reader on a 20 MB upload | Checked: lazy item matching, no DOCTYPE/ENTITY, item cap; OK |
+| Telegram | Token handling | Checked: encrypted, never returned or logged, fixed API base; OK |
+| Bulk / views / filters | Injection, permissions | Checked: bind parameters, field allowlist, per-entry CASL; OK |
+| Orders / CRM | Personal data exposure | Checked: owner/admin/editor only, API-key scopes separate, IP truncation; OK |
+| Releases | Destructive action | Checked: update Site, confirmation, automatic backup release; OK |
+
 ## Clipboard
 
 Copied blocks are stored in the browser's `localStorage` (same origin as the admin) and are

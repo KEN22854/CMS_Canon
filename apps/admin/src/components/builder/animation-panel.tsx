@@ -1,6 +1,6 @@
 'use client';
 
-import { ANIMATION_DEFAULTS, ANIMATION_EASINGS, ANIMATION_TYPES, HOVER_EFFECTS, normalizeAnimation, type BlockAnimation, type BlockNode } from '@canon/blocks';
+import { ANIMATION_DEFAULTS, ANIMATION_EASINGS, ANIMATION_TYPES, getBlock, HOVER_EFFECTS, normalizeAnimation, type BlockAnimation, type BlockNode } from '@canon/blocks';
 import { Play, Sparkles } from 'lucide-react';
 import { useT, type MessageKey } from '@/lib/i18n';
 import { useBuilder } from './store';
@@ -17,13 +17,26 @@ export function AnimationPanel({ node, readOnly }: { node: BlockNode; readOnly: 
   const a: BlockAnimation = node.animation ?? {};
   const set = (patch: Partial<BlockAnimation>) => updateNode(node.id, { animation: normalizeAnimation({ ...a, ...patch }) }, `${node.id}.animation.${Object.keys(patch).join(',')}`);
 
+  const container = Boolean(getBlock(node.type)?.isContainer) && node.children.length > 1;
+  const play = (el: HTMLElement, delay: number) => {
+    el.removeAttribute('data-anim');
+    void el.offsetWidth; // restart the animation
+    el.style.setProperty('--anim-delay', `${delay}ms`);
+    el.setAttribute('data-anim', a.type!);
+    window.setTimeout(() => (el.removeAttribute('data-anim'), el.style.removeProperty('--anim-delay')), (a.duration ?? ANIMATION_DEFAULTS.duration) + delay + 150);
+  };
   const preview = () => {
     const el = document.querySelector<HTMLElement>(`[role="application"] [data-block-id="${CSS.escape(node.id)}"]`);
     if (!el || !a.type) return;
-    el.removeAttribute('data-anim');
-    void el.offsetWidth; // restart the animation
-    el.setAttribute('data-anim', a.type);
-    window.setTimeout(() => el.removeAttribute('data-anim'), (a.duration ?? ANIMATION_DEFAULTS.duration) + (a.delay ?? 0) + 150);
+    // One by one: the children play with growing delays, as on the site.
+    if (a.stagger && container) {
+      node.children.forEach((c, i) => {
+        const child = el.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(c.id)}"]`);
+        if (child && !c.animation?.type) play(child, (a.delay ?? 0) + i * a.stagger!);
+      });
+      return;
+    }
+    play(el, a.delay ?? 0);
   };
 
   return (
@@ -60,6 +73,19 @@ export function AnimationPanel({ node, readOnly }: { node: BlockNode; readOnly: 
               {t('anim.delay')}
               <input type="number" min={0} max={10000} step={50} className={field} disabled={readOnly} value={a.delay ?? 0} onChange={(e) => set({ delay: Math.min(10000, Math.max(0, Number(e.target.value) || 0)) })} />
             </label>
+            {container && (
+              <label className="col-span-2 space-y-1 text-[11px] text-muted-foreground">
+                {t('anim.stagger')}
+                <select className={field} disabled={readOnly} value={a.stagger ?? 0} onChange={(e) => set({ stagger: Number(e.target.value) || undefined })}>
+                  <option value={0}>{t('anim.staggerOff')}</option>
+                  {[80, 120, 200, 300, 500].map((ms) => (
+                    <option key={ms} value={ms}>
+                      {t('anim.staggerStep', { ms })}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="col-span-2 space-y-1 text-[11px] text-muted-foreground">
               {t('anim.easing')}
               <select className={field} disabled={readOnly} value={a.easing ?? ANIMATION_DEFAULTS.easing} onChange={(e) => set({ easing: e.target.value as BlockAnimation['easing'] })}>

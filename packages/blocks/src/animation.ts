@@ -21,6 +21,8 @@ export interface BlockAnimation {
   delay?: number;
   easing?: (typeof ANIMATION_EASINGS)[number];
   hover?: (typeof HOVER_EFFECTS)[number];
+  /** Containers: children enter one after another, this many ms apart. */
+  stagger?: number;
 }
 
 export const animationSchema = z
@@ -31,6 +33,8 @@ export const animationSchema = z
     delay: z.number().int().min(0).max(10000).optional(),
     easing: z.enum(ANIMATION_EASINGS).optional(),
     hover: z.enum(HOVER_EFFECTS).optional(),
+    /** Containers: the children enter one after another, this many ms apart (the container itself doesn't move). */
+    stagger: z.number().int().min(50).max(2000).optional(),
   })
   .strict();
 
@@ -46,6 +50,7 @@ export function normalizeAnimation(a: BlockAnimation | undefined): BlockAnimatio
     if (a.duration !== undefined && a.duration !== ANIMATION_DEFAULTS.duration) out.duration = a.duration;
     if (a.delay) out.delay = a.delay;
     if (a.easing && a.easing !== ANIMATION_DEFAULTS.easing) out.easing = a.easing;
+    if (a.stagger) out.stagger = a.stagger;
   }
   if (a.hover && a.hover !== 'none') out.hover = a.hover;
   return Object.keys(out).length ? out : undefined;
@@ -92,3 +97,24 @@ export const ANIMATION_CSS = [
   '[data-hover="tilt"]:hover{transform:perspective(800px) rotateX(4deg) rotateY(-4deg)}',
   '@media (prefers-reduced-motion:reduce){[data-anim]{animation:none!important;opacity:1!important}[data-hover]{transition:none!important}[data-hover]:hover{transform:none!important}}',
 ].join('\n');
+
+/** Most children that get a staggered entrance (a long list shouldn't take a minute to appear). */
+const MAX_STAGGERED = 24;
+
+/**
+ * Turns "children one by one" into explicit entrances: each child without an entrance of its own
+ * gets the container's (type, trigger, duration, easing) with a growing delay; the container keeps
+ * only its hover effect. Run on the delivered tree, so renderers stay unaware of staggering.
+ */
+export function expandStagger<T extends { animation?: BlockAnimation; children: T[] }>(node: T): T {
+  const children = node.children.map(expandStagger);
+  const a = node.animation;
+  if (!a?.type || !a.stagger) return children.every((c, i) => c === node.children[i]) ? node : { ...node, children };
+  const step = a.stagger;
+  const staggered = children.map((c, i) => {
+    if (c.animation?.type || i >= MAX_STAGGERED) return c;
+    const own = normalizeAnimation({ type: a.type, trigger: a.trigger, duration: a.duration, easing: a.easing, delay: (a.delay ?? 0) + i * step, hover: c.animation?.hover });
+    return { ...c, animation: own };
+  });
+  return { ...node, animation: a.hover && a.hover !== 'none' ? { hover: a.hover } : undefined, children: staggered };
+}

@@ -52,6 +52,8 @@ describe('funnels', () => {
     expect(month!.result.steps.map((s) => s.visitors)).toEqual([4, 3]); // v5 counts within 30 days
     expect(visit!.result.steps.map((s) => s.visitors)).toEqual([4, 2]); // …but not in one visit
 
+    await t.http.get(`/v1/sites/${site.id}/analytics/funnels`).query({ from: '2020-01-01', to: '2026-10-31' }).set(h).expect(400);
+
     // Viewers read, only site admins define funnels.
     const viewer = await invited(t, owner, 'VIEWER');
     await t.http.get(`/v1/sites/${site.id}/analytics/funnels`).set(bearer(viewer.accessToken)).expect(200);

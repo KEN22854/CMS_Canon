@@ -84,4 +84,7 @@ export const simpleRu: Record<SimpleMessageKey, string> = {
 
   'board.content': 'Содержимое элемента',
   'board.design': 'Дизайн и анимация элемента',
+  'anim.stagger': 'Вложенные блоки',
+  'anim.staggerOff': 'Появляются вместе с блоком',
+  'anim.staggerStep': 'По очереди, каждые {ms} мс',
 };

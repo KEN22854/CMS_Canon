@@ -82,6 +82,9 @@ export const simpleEn = {
 
   'board.content': 'Element content',
   'board.design': 'Element design and animation',
+  'anim.stagger': 'Inner blocks',
+  'anim.staggerOff': 'Enter together with the block',
+  'anim.staggerStep': 'One by one, every {ms} ms',
 } as const;
 
 export type SimpleMessageKey = keyof typeof simpleEn;

@@ -18,6 +18,8 @@ import { SitesService } from '../sites/sites.service';
 import { ORDER_TRANSITIONS, type CheckoutBody, type ListOrdersQuery, type OrderItem, type OrderStatusName, type UpdateOrderBody } from './shop.dto';
 
 const RATE_PER_IP = 10;
+/** Whatever IPs claim (X-Forwarded-For can be forged without a trusted proxy), one site takes at most this many orders per window. */
+const RATE_PER_SITE = 300;
 const RATE_WINDOW_SEC = 600;
 /**
  * Faster than anyone can fill a checkout form, even with autofill: a bot. Kept low on purpose —
@@ -64,6 +66,10 @@ export class ShopService {
     // Orders are accepted only from the shop's own hosts.
     const hosts = [site.internalDomain, site.domainStatus === 'VERIFIED' ? site.domain : null].filter(Boolean);
     if (meta.host && !hosts.includes(meta.host.toLowerCase())) throw notFound('Site');
+    const siteKey = `shop-rate-site:${siteId}`;
+    const total = await this.redis.incr(siteKey);
+    if (total === 1) await this.redis.expire(siteKey, RATE_WINDOW_SEC);
+    if (total > RATE_PER_SITE) throw new ApiError('RATE_LIMITED', 'The shop is receiving too many orders — try again later', HttpStatus.TOO_MANY_REQUESTS);
     if (meta.ip) {
       const key = `shop-rate:${siteId}:${meta.ip}`;
       const n = await this.redis.incr(key);

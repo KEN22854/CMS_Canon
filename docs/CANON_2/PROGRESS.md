@@ -2,7 +2,24 @@
 
 Last update: 2026-11-04.
 
-## Iteration 16 (this one) — Stage 16, developer platform: shop and CRM for integrations
+## Iteration 17 (this one) — Stage 11 (staggered entrances) and Stage 14 (security pass)
+
+- **Animation studio: "Inner blocks — one by one"**: on a container (group, grid, columns,
+  section…) the children enter one after another (80–500 ms apart) with the container's entrance;
+  children with their own entrance keep it; "Play the animation" previews the cascade on the canvas.
+  Delivery spells it out per child (`expandStagger`), so the renderer and the live site need nothing
+  new; at most 24 children are staggered.
+- **Security pass over iterations 7–16** (details in SECURITY_REPORT):
+  - links built from entry data are re-checked after the tokens are filled (`/{{entry.x}}` can't
+    become `//elsewhere`, `{{entry.url}}` can't become `javascript:`); `//host` links are refused
+    on save; a whole `{{entry.link}}` is now allowed in links (checked after filling);
+  - a **site-wide order cap** (300 per 10 minutes) on top of the per-IP limit, because the visitor's
+    IP comes from X-Forwarded-For and can be forged where no trusted proxy rewrites it;
+  - funnels are bounded to 400 days per request (they scan raw events).
+- Tests: +2 blocks unit (stagger, entry links), +1 API integration (stagger on a live page), the
+  funnel test checks the range bound.
+
+## Iteration 16 — Stage 16, developer platform: shop and CRM for integrations
 
 - **API key scopes** for the new data: `orders:read`, `orders:write` (move orders along from an
   ERP, warehouse or accounting system) and `crm:read`, `crm:write` (sync contacts with a CRM).
@@ -354,5 +371,5 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.
 5. Remaining admin screens in Russian (collections, settings, analytics…).
 
-Stages 11 and 14 ( CRM, SEO, themes, animation, analytics, hosting, security,
+Stage 14 is continuous; open items are in BACKLOG ( CRM, SEO, themes, animation, analytics, hosting, security,
 multilingual, developer platform, migration, local integrations) have not started. See ROADMAP.md.

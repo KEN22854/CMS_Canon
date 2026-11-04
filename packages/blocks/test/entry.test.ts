@@ -34,6 +34,14 @@ describe('entry pages', () => {
     expect(out[3]!.props.src).toBe('');
   });
 
+  it('re-checks links built from entry data (no //host, no scripts)', () => {
+    const page: PageContent = { root: n('root', 'section', {}, [n('a', 'button', { label: 'Go', href: '/{{entry.path}}', variant: 'primary', align: 'left' }), n('b', 'button', { label: 'Shop', href: '{{entry.shop}}', variant: 'primary', align: 'left' }), n('c', 'button', { label: 'Ok', href: '{{entry.ok}}', variant: 'primary', align: 'left' })]) };
+    expect(validatePageContent(page).ok).toBe(true);
+    const out = bindEntry(page, { ...entry, data: { path: '/evil.example/x', shop: 'javascript:alert(1)', ok: 'https://partner.example/buy' } }).root.children;
+    expect(out.map((c) => c.props.href)).toEqual(['', '', 'https://partner.example/buy']);
+    expect(validatePageContent({ root: n('r', 'section', {}, [n('x', 'button', { label: 'x', href: '//evil.example', variant: 'primary', align: 'left' })]) }).ok).toBe(false);
+  });
+
   it('builds list cards: automatic image and text, allowlisted links only, entry path', () => {
     const fields = [{ name: 'cover', type: 'url' }, { name: 'intro', type: 'textarea' }];
     const a = listItemOf({ id: 'e1', ...entry, summary: null, data: { cover: 'https://images.unsplash.com/p', intro: 'x'.repeat(300) } }, fields, { imageField: '', textField: '' }, '/blog/sourdough');

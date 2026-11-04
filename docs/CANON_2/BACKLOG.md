@@ -40,7 +40,7 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - 🟡 CRM and automation (Stage 8): contacts, timeline, tags, notes, erasure; automations on form and order events (emails, tags, run history). Next: segments from contacts, delays/schedules in automations, email templates with the site theme, CSV export, deduplication across sites.
 - ⬜ Auth: a reload that interrupts a refresh-token rotation logs the user out (401 inside the grace window). Option: within the grace window return the successor session instead of 401 — a security trade-off to decide (OAuth BCP allows it).
 - 🟡 Themes (Stage 10): gallery, studio with contrast checks, workspace themes, JSON import/export. Next: a public theme marketplace (publishing, moderation, payouts), per-section theme overrides, custom fonts upload.
-- 🟡 Animation studio (Stage 11): entrance and hover animations, scroll trigger, preview. Next: timeline, parallax, per-breakpoint settings.
+- 🟡 Animation studio (Stage 11): entrance and hover animations, scroll trigger, staggered children, preview. Next: timeline, parallax, per-breakpoint settings.
 - 🟡 Analytics and growth (Stage 12): funnels. Next: click heatmaps (pointer positions per block, sampled), cohorts and retention, revenue in funnels (orders), alerts on drops.
 - 🟡 Remaining admin screens in Russian (builder done); server-side notification i18n.
 
@@ -51,3 +51,5 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - 🟡 Developer platform (Stage 16): order/CRM scopes, SDK methods, new webhook events. Next: a developer portal page with live API reference and code samples, CLI (`canon pull/push` of content), custom blocks as plugins with a sandboxed renderer.
 - 🟡 Multilingual (Stage 15): shop, checkout and order emails in en/ru/de/fr/es. Next: the admin interface in German, French and Spanish (≈1 500 strings each), renderer placeholders for empty states in all site locales.
 - 🟡 Local integrations (Stage 18): Telegram. Next (need the owner's accounts and keys): YooKassa/CloudPayments online payments, SMS (SMS.ru), amoCRM/Bitrix24 sync, Yandex Metrica and Google Analytics tags, VK pixel, delivery services (CDEK).
+
+- ⬜ Security: trust X-Forwarded-For only from a configured proxy list in the renderer (today the per-IP limits for forms and checkout rely on it; site-wide caps limit the damage).

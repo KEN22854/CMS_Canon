@@ -17,10 +17,10 @@ real screenshots and updated docs.
 | 8 | CRM and automation | 7 (orders), forms | 🟡 contacts from forms and orders, timeline, tags, notes, erasure; automations (form/order events → emails, tags) |
 | 9 | SEO platform (redirects, audit, schema) | — | 🟡 redirects, audit, JSON-LD, 404 |
 | 10 | Themes and marketplace | 1, 4 | 🟡 24-theme gallery, theme studio with WCAG checks, workspace themes, JSON sharing (no public marketplace yet) |
-| 11 | Animation studio | 2 | 🟡 entrance/hover animations per block, scroll trigger, reduced motion |
+| 11 | Animation studio | 2 | 🟡 entrance/hover animations, scroll trigger, staggered children, reduced motion |
 | 12 | Analytics and growth (heatmaps, funnels) | — | 🟡 funnels (pages and events, session/day windows); heatmaps next |
 | 13 | Hosting: site releases, rollback | — | 🟡 releases of the live site, diff, one-click rollback (undoable) |
-| 14 | Security audit | each stage | continuous |
+| 14 | Security audit | each stage | continuous — per-iteration sections in SECURITY_REPORT, a pass over 7–16 in iteration 17 |
 | 15 | Multilingual platform (DE/FR/ES) | — | 🟡 visitor-facing shop and order emails in en/ru/de/fr/es; admin UI en/ru |
 | 16 | Developer platform | — | 🟡 API key scopes for orders and CRM, SDK methods, webhook events for shop and releases (on top of OpenAPI, SDK, MCP, webhooks) |
 | 17 | Migration center | 4, 9 | 🟡 WordPress import (posts, pages, categories, 301 redirects); CSV/JSON into collections |

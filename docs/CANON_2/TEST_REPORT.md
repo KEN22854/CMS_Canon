@@ -5,17 +5,26 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), shop strings (2), themes (3), HTML import (3), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 66 / 66 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), shop strings (2), themes (3), HTML import (3), entry links (1), stagger (1), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 68 / 68 ✅ |
 | `@canon/collab` unit (incl. animation through Yjs) | 9 / 9 ✅ |
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 5 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
 | API unit | 58 / 58 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes, 1 for migration, 1 for funnels, 1 for Telegram | 163 / 163 ✅ |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes, 1 for migration, 1 for funnels, 1 for Telegram, 1 for staggered entrances | 164 / 164 ✅ |
 | Playwright E2E | 27 / 27 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **400** (399 after iteration 15).
+Total automated tests: **403** (400 after iteration 16).
+
+## Iteration 17 — Stagger and security pass
+
+- `animation.test.ts`: stagger expansion (delays, own entrances kept, hover kept on the container,
+  minimum step, identity of untouched trees).
+- `entry.test.ts`: `/{{entry.path}}` → "//evil…" dropped, `{{entry.shop}}` → "javascript:" dropped,
+  a partner https link kept; `//host` refused on save.
+- `cms2.test.ts`: a staggered grid on a live page has per-child entrances 0/120/240 ms.
+- `funnels.test.ts`: a 7-year range is refused.
 
 ## Iteration 16 — Developer platform
 

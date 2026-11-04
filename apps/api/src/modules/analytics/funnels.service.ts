@@ -8,6 +8,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { SitesService } from '../sites/sites.service';
 
 const MAX_FUNNELS = 20;
+const MAX_RANGE_DAYS = 400;
 
 export const funnelStep = z.discriminatedUnion('kind', [
   /** A page view: an exact path, or a prefix ending in "*" ("/products/*"). */
@@ -49,6 +50,8 @@ export class FunnelsService {
   ) {}
 
   async list(tenantId: string, siteId: string, from: string, to: string) {
+    // Funnels scan raw events: bound the range so one request can't walk years of data.
+    if (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) > MAX_RANGE_DAYS * 86_400_000) throw badRequest('RANGE_TOO_LONG', `Funnels cover up to ${MAX_RANGE_DAYS} days`);
     const site = await this.sites.get(tenantId, siteId);
     const funnels = read(site.settings);
     return Promise.all(funnels.map(async (f) => ({ ...f, result: await this.compute(tenantId, siteId, f, from, to) })));

@@ -1,4 +1,4 @@
-import { ENTRY_LINK_TOKEN_RE, externalImageUrl, externalVideoUrl, MEDIA_LINK_PROPS } from './definitions';
+import { ENTRY_LINK_TOKEN_RE, externalImageUrl, externalVideoUrl, LINK_PROPS, MEDIA_LINK_PROPS, SAFE_LINK_RE } from './definitions';
 import { mapRichText, richTextToPlain, type RichBlockNode, type RichTextDoc } from './rich-text';
 import type { BlockNode, PageContent } from './tree';
 
@@ -80,6 +80,9 @@ function bindValue(v: unknown, e: BoundEntry, key = ''): unknown {
     // A media link that came from an entry passes the same allowlist as one typed into the page.
     const kind = MEDIA_LINK_PROPS[key];
     if (kind && ENTRY_LINK_TOKEN_RE.test(v)) return (kind === 'image' ? externalImageUrl : externalVideoUrl).safeParse(out).success && !ENTRY_LINK_TOKEN_RE.test(out) ? out : '';
+    // A link built from entry data must still be a link people can safely follow ("/{{entry.x}}"
+    // must not turn into "//elsewhere", "{{entry.url}}" not into "javascript:…").
+    if (LINK_PROPS.has(key) && out !== v) return out === '' || SAFE_LINK_RE.test(out.trim()) ? out.trim() : '';
     return out;
   }
   if (isDoc(v)) return bindDoc(v, e);
