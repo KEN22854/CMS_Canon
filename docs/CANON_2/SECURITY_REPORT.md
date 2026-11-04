@@ -144,6 +144,14 @@ The inline script in `apps/admin/src/app/layout.tsx` is a static string that onl
   confirmation in the UI; it is audited with counts; it is undoable (automatic backup release).
 - Releases are tenant data (RLS); capture is bounded (20 000 live entries).
 
+## Migration (iteration 12)
+
+- The export is untrusted input: read as text, DOCTYPE/ENTITY refused (no XXE, no billion laughs),
+  20 MB / 2 000 items; HTML → closed rich-text node set (no scripts, styles, frames, forms, event
+  attributes, `javascript:`/`data:` links) — tested.
+- No server-side fetching of the old site's images (SSRF); they are reported.
+- Import needs a role that can create collections and publish pages; audited with counts.
+
 ## Clipboard
 
 Copied blocks are stored in the browser's `localStorage` (same origin as the admin) and are

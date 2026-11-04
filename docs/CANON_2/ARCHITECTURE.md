@@ -196,6 +196,13 @@ reduced motion) content is simply visible. Collab stores the object as a JSON st
 - **Filters** are parameterised SQL on `entries.data` (field names must exist in the schema);
   **views** live in `Collection.settings.views`; **bulk** loops the single-entry service methods.
 
+## Migration (`apps/api/src/modules/migration`, `packages/blocks/src/import-html.ts`)
+
+`parseWxr` (text, no XML library) → `htmlToRichText` per item → the normal services:
+`CollectionsService.create` (Blog), `PagesService.create/publish` (template, pages), `EntriesService
+.create/publish`, `RedirectsService.create` (loop and limit checks included). The dry run shares
+the parsing and the report, and writes nothing.
+
 ## Themes (`packages/blocks/src/themes.ts`)
 
 Presets are token sets (`THEME_PRESETS`); applying one is the existing `PATCH /sites/:id/theme`.

@@ -6,6 +6,7 @@ import { shopRu } from './shop-ru';
 import { crmRu } from './crm-ru';
 import { releasesRu } from './releases-ru';
 import { themeRu } from './theme-ru';
+import { migrationRu } from './migration-ru';
 import type { MessageKey } from './en';
 
 /** Russian UI strings. Typed as the full key set, so a missing translation fails the build. */
@@ -312,4 +313,5 @@ export const ru: Record<MessageKey, string> = {
   ...crmRu,
   ...releasesRu,
   ...themeRu,
+  ...migrationRu,
 };

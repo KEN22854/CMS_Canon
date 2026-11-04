@@ -112,6 +112,13 @@ automatically (marked "automatic") when a published page moves.
 
 ---
 
+# Iteration 12 — Migration center
+
+![report](screenshots/after/migration/migration-report-1440.png)
+
+The dry-run report lists what comes over and every old address that will redirect, before anything
+is written.
+
 # Iteration 11 — Themes
 
 ![theme studio](screenshots/after/themes/themes-gallery-1440.png)

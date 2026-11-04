@@ -2,7 +2,31 @@
 
 Last update: 2026-11-04.
 
-## Iteration 11 (this one) — Stage 10, themes
+## Iteration 12 (this one) — Stage 17, migration center (WordPress)
+
+- **Import from WordPress** (site → Import): choose the export file (Tools → Export); a dry run
+  reports posts and pages (published/drafts), categories, authors, linked images, what is skipped
+  (attachments, menus, trash) and every old address that will redirect; "Import" then:
+  - posts → a **Blog** collection (title, excerpt, body, category with the WordPress categories,
+    author, publication date, original URL; tags kept) with **entry pages at /blog/<slug>** and a
+    published template; published posts are published, drafts stay drafts;
+  - pages → Canon pages with their **hierarchy** (/about-us/team);
+  - every old address that changes → a **301 redirect** (/2024/05/rye → /blog/rye), so search
+    rankings and old links survive;
+  - importing again doesn't clash (a second collection, suffixed addresses).
+- **HTML → rich text** converter (`htmlToRichText`, `@canon/blocks`): paragraphs, headings,
+  lists, quotes, bold/italic/code/strike, safe links; WordPress classic content (blank lines);
+  entities; scripts, styles, iframes, forms, event handlers and `javascript:` links are dropped.
+- **WXR reader** without an XML library: tag-by-tag over the text; files with a DOCTYPE/ENTITY
+  are refused (no XXE, no entity expansion); 20 MB and 2 000 items per file.
+- Images in posts are reported, not downloaded (fetching arbitrary URLs from the server is an SSRF
+  surface — a guarded media importer is next).
+- Tests: +3 blocks unit (HTML structure, unsafe input dropped, classic content and entities), +1
+  API integration (dry run, invalid file, DOCTYPE refused, viewer refused, import, live entry page
+  with structure, draft stays draft, hierarchy, redirects in the runtime config, repeat import), +1
+  E2E (upload → report → import → live post and page → 301 from the old address).
+
+## Iteration 11 — Stage 10, themes
 
 - **Theme studio** (site → Settings → Theme): a live preview of the theme on a page fragment
   (heading, text, button, link, band), four colours (primary, background, text, bands), font,
@@ -276,5 +300,5 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.
 5. Remaining admin screens in Russian (collections, settings, analytics…).
 
-Stages 11–12 and 14–18 ( CRM, SEO, themes, animation, analytics, hosting, security,
+Stages 11–12, 14–16 and 18 ( CRM, SEO, themes, animation, analytics, hosting, security,
 multilingual, developer platform, migration, local integrations) have not started. See ROADMAP.md.

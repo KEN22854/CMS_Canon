@@ -5,17 +5,30 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), themes (3), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 61 / 61 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), themes (3), HTML import (3), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 64 / 64 ✅ |
 | `@canon/collab` unit (incl. animation through Yjs) | 9 / 9 ✅ |
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
 | API unit | 58 / 58 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes | 160 / 160 ✅ |
-| Playwright E2E | 25 / 25 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes, 1 for migration | 161 / 161 ✅ |
+| Playwright E2E | 26 / 26 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **389** (384 after iteration 10).
+Total automated tests: **394** (389 after iteration 11).
+
+## Iteration 12 — Migration center
+
+- `import-html.test.ts` (blocks): structure (headings, lists, quotes, marks, links, images reported);
+  scripts/styles/iframes/`javascript:` links/event handlers dropped; classic content and entities.
+- `migration.test.ts` (API): dry run writes nothing; non-WXR and DOCTYPE files refused; viewers
+  refused; import → Blog with categories, live entry page with structure and author/date line,
+  draft stays draft, page hierarchy, 301 in the runtime config; importing again uses a second
+  collection.
+- `migration.spec.ts` (E2E): upload in the admin, report, import, live post and page, 301 from the
+  old address.
+
+Bugs found: the dry run reported redirects for child pages because it ignored their parents' path.
 
 ## Iteration 11 — Themes
 

@@ -115,6 +115,12 @@ checkedAt }`. Issue codes are listed in `packages/blocks/src/seo.ts` (`SeoIssueC
 - Delivery: `page` serves entry pages (with `entry: { id, collectionId, slug, basePath }`) and
   every page carries `lists`; `pages` adds `entries: [{ path, locale, updatedAt }]` for sitemaps.
 
+## Migration
+
+- `POST /v1/sites/:siteId/migrations/wordpress?dryRun=true` (multipart `file`, WXR ≤ 20 MB) → report
+  `{ posts, pages, categories, authors, images, skipped, redirects, warnings, errors }`; without
+  `dryRun` the import runs and the report adds `created: { entries, pages, redirects, collection }`.
+
 ## Themes
 
 - `GET /v1/themes` (read Site), `POST /v1/themes { name, theme: { colors: { primary, background,

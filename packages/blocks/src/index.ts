@@ -12,3 +12,4 @@ export * from './animation';
 export * from './entry';
 export * from './shop';
 export * from './themes';
+export * from './import-html';

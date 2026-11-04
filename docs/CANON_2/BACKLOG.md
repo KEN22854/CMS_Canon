@@ -47,5 +47,5 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 ## P3
 
 - ⬜ Developer mode, CLI, API explorer (Stage 16).
-- ⬜ Migration center (Stage 17).
+- 🟡 Migration center (Stage 17): WordPress (WXR) import with redirects. Next: a guarded media importer for post images, Tilda/Webflow/Wix exports, background jobs with progress for very large sites.
 - ⬜ Local integrations: YooKassa, CloudPayments, GigaChat, YandexGPT, Metrica… (Stage 18).

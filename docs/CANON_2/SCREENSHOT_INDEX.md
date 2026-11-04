@@ -50,6 +50,7 @@ Stages 1–2 (design system, Builder 2.0 foundation).
 | after/builder/simple-library-1440.png | 4 | 1440 | Block library: categories, live previews, tones |
 | after/builder/simple-freeform-1440.png | 2 | 1440 | Free-form block: selected element with move/resize handles, size, add-element bar, height handle |
 | after/builder/simple-template-1440.png | 4 | 1440 | A whole-page template applied |
+| after/migration/migration-report-1440.png | 17 | 1440 | WordPress import: dry-run report with posts, pages, categories, redirects |
 | after/themes/themes-gallery-1440.png | 10 | 1440 | Theme studio: live preview, tokens, gallery (Nature), workspace themes |
 | after/releases/releases-review-1440.png | 13 | 1440 | Release review: the home page goes back v3 → v2, the rollback button |
 | after/releases/releases-list-1440.png | 13 | 1440 | Releases after a rollback: the automatic "before rollback" release on top |
