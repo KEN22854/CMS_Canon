@@ -5,7 +5,7 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), themes (3), HTML import (3), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 64 / 64 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), shop strings (2), themes (3), HTML import (3), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 66 / 66 ✅ |
 | `@canon/collab` unit (incl. animation through Yjs) | 9 / 9 ✅ |
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
@@ -15,7 +15,14 @@ renderer :3001).
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **397** (396 after iteration 13).
+Total automated tests: **399** (397 after iteration 14).
+
+## Iteration 15 — Multilingual shop
+
+- `shop-i18n.test.ts` (blocks): five languages × every key × the same placeholders; regional
+  locales and the English fallback.
+- `shop.test.ts` (API): an order placed from a German page gets "Bakery: Bestellung Nr. 1002
+  eingegangen" with "Zahlung: Banküberweisung".
 
 ## Iteration 14 — Telegram
 

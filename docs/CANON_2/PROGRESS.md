@@ -2,7 +2,20 @@
 
 Last update: 2026-11-04.
 
-## Iteration 14 (this one) — Stage 18, local integrations: Telegram
+## Iteration 15 (this one) — Stage 15, multilingual shop (DE, FR, ES)
+
+- What a shop's visitors read is now in **English, Russian, German, French and Spanish**, chosen by
+  the page's locale ("de-AT" → German): the cart, the checkout form, payment methods, errors
+  (out of stock, unavailable, too many orders) and the confirmation; prices follow the locale.
+- The **order email** to the buyer is written in the language of the page they ordered from
+  (subject, thanks, total, payment method, next steps).
+- One dictionary for the site's script and the API (`SHOP_STRINGS` / `shopText` in
+  `@canon/blocks`); a unit test checks every language has every key with the same placeholders.
+- Site content was already multilingual (locales, translations, hreflang); the admin interface
+  stays in English and Russian — German, French and Spanish for the admin are in BACKLOG.
+- Tests: +2 blocks unit, the shop integration test now checks a German order email.
+
+## Iteration 14 — Stage 18, local integrations: Telegram
 
 - **Telegram** (site → Settings → Telegram): connect a bot from @BotFather and a chat or channel;
   the token is checked with Telegram (getMe), stored **encrypted** (AES-256-GCM, the webhook-secret
@@ -329,5 +342,5 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.
 5. Remaining admin screens in Russian (collections, settings, analytics…).
 
-Stages 11 and 14–16 ( CRM, SEO, themes, animation, analytics, hosting, security,
+Stages 11, 14 and 16 ( CRM, SEO, themes, animation, analytics, hosting, security,
 multilingual, developer platform, migration, local integrations) have not started. See ROADMAP.md.

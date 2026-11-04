@@ -13,3 +13,4 @@ export * from './entry';
 export * from './shop';
 export * from './themes';
 export * from './import-html';
+export * from './shop-i18n';

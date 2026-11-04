@@ -60,7 +60,11 @@ describe('checkout', () => {
     // One rye left: asking for two fails and changes nothing; one succeeds.
     const out = await checkout({ items: [{ productId: rye.id, quantity: 2 }], customer, paymentMethod: 'cash' }).expect(409);
     expect(out.body.error).toMatchObject({ code: 'OUT_OF_STOCK', details: { available: 1 } });
-    expect((await checkout({ items: [{ productId: rye.id, quantity: 1 }], customer, paymentMethod: 'transfer' }).expect(201)).body.number).toBe(1002);
+    expect((await checkout({ items: [{ productId: rye.id, quantity: 1 }], customer: { ...customer, email: 'kurt@example.test' }, paymentMethod: 'transfer', locale: 'de' }).expect(201)).body.number).toBe(1002);
+    // The buyer's email speaks the page's language.
+    const de = t.mailer.lastTo('kurt@example.test')!;
+    expect(de.subject).toBe('Bakery: Bestellung Nr. 1002 eingegangen');
+    expect(de.text).toContain('Zahlung: Banküberweisung');
     // Stock shows up in the working copy too (so a later publish doesn't undo it).
     expect((await t.http.get(`${base}/${shop.id}/entries/${rye.id}`).set(h).expect(200)).body.data.stock).toBe(0);
 

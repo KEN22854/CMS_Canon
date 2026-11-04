@@ -25,7 +25,6 @@ const RATE_WINDOW_SEC = 600;
  */
 const MIN_FILL_MS = 300;
 
-const PAYMENT_LABEL: Record<string, string> = { cash: 'Cash on delivery', card_on_delivery: 'Card on delivery', transfer: 'Bank transfer' };
 
 type Tx = Prisma.TransactionClient;
 
@@ -163,7 +162,7 @@ export class ShopService {
     const total = formatMoney(order.total, order.currency, order.locale);
     const customer = order.customer as { name: string; email: string };
     const link = `${this.config.ADMIN_PUBLIC_URL}/sites/${order.siteId}/orders?order=${order.id}`;
-    const sends = [this.mailer.send(orderPlacedMail(customer.email, shop, order.number, lines, total, PAYMENT_LABEL[order.paymentMethod] ?? order.paymentMethod))];
+    const sends = [this.mailer.send(orderPlacedMail(customer.email, shop, order.number, lines, total, order.paymentMethod, order.locale))];
     if (commerce.orderEmail) sends.push(this.mailer.send(newOrderMail(commerce.orderEmail, shop, order.number, customer.name, lines, total, link)));
     for (const r of await Promise.allSettled(sends)) if (r.status === 'rejected') this.logger.warn({ err: r.reason, orderId: order.id }, 'order mail failed');
   }

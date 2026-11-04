@@ -48,4 +48,5 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 
 - ⬜ Developer mode, CLI, API explorer (Stage 16).
 - 🟡 Migration center (Stage 17): WordPress (WXR) import with redirects. Next: a guarded media importer for post images, Tilda/Webflow/Wix exports, background jobs with progress for very large sites.
+- 🟡 Multilingual (Stage 15): shop, checkout and order emails in en/ru/de/fr/es. Next: the admin interface in German, French and Spanish (≈1 500 strings each), renderer placeholders for empty states in all site locales.
 - 🟡 Local integrations (Stage 18): Telegram. Next (need the owner's accounts and keys): YooKassa/CloudPayments online payments, SMS (SMS.ru), amoCRM/Bitrix24 sync, Yandex Metrica and Google Analytics tags, VK pixel, delivery services (CDEK).

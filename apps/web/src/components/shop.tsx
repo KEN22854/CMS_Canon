@@ -1,6 +1,6 @@
 'use client';
 
-import { formatMoney } from '@canon/blocks';
+import { formatMoney, SHOP_STRINGS, shopText, type ShopStringKey } from '@canon/blocks';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -41,12 +41,9 @@ interface Placed {
 const KEY = 'canon.cart';
 const EVENT = 'canon-cart';
 
-const T = {
-  en: { added: 'Added to cart', openCart: 'Open cart', remove: 'Remove', quantity: 'Quantity of {title}', total: 'Total', name: 'Name', email: 'Email', phone: 'Phone', address: 'Delivery address', note: 'Note for the shop', payment: 'Payment', cash: 'Cash on delivery', card_on_delivery: 'Card on delivery', transfer: 'Bank transfer', order: 'Order #{number}', sending: 'Placing the order…', OUT_OF_STOCK: 'Not enough in stock: {message}', PRODUCT_UNAVAILABLE: 'Some products are no longer available — remove them and try again.', RATE_LIMITED: 'Too many orders — try again in a few minutes.', error: 'The order could not be placed. Try again.', offline: 'Payment is made offline: the shop will contact you.' },
-  ru: { added: 'Добавлено в корзину', openCart: 'Открыть корзину', remove: 'Убрать', quantity: 'Количество: {title}', total: 'Итого', name: 'Имя', email: 'Эл. почта', phone: 'Телефон', address: 'Адрес доставки', note: 'Комментарий для магазина', payment: 'Оплата', cash: 'Наличными при получении', card_on_delivery: 'Картой при получении', transfer: 'Банковский перевод', order: 'Заказ №{number}', sending: 'Оформляем заказ…', OUT_OF_STOCK: 'Не хватает на складе: {message}', PRODUCT_UNAVAILABLE: 'Некоторых товаров больше нет — уберите их и попробуйте снова.', RATE_LIMITED: 'Слишком много заказов — попробуйте через несколько минут.', error: 'Не получилось оформить заказ. Попробуйте ещё раз.', offline: 'Оплата не через сайт: магазин свяжется с вами.' },
-} as const;
-type Msg = keyof (typeof T)['en'];
-const tr = (locale: string, k: Msg, vars: Record<string, string | number> = {}) => (T[locale.startsWith('ru') ? 'ru' : 'en'][k] as string).replace(/\{(\w+)\}/g, (_, v: string) => String(vars[v] ?? ''));
+type Msg = ShopStringKey;
+const tr = (locale: string, k: Msg, vars: Record<string, string | number> = {}) => shopText(locale, k, vars);
+const isMsg = (k: string): k is Msg => k in SHOP_STRINGS.en;
 
 function read(): Line[] {
   try {
@@ -190,8 +187,8 @@ function Cart({ config }: { config: CartConfig }) {
       setLines(lines.filter((l) => l.currency !== config.currency));
       return;
     }
-    const code = out?.code as Msg | undefined;
-    setError(code && code in T.en ? L(code, { message: out?.message ?? '' }) : L('error'));
+    const code = out?.code;
+    setError(code && isMsg(code) ? L(code, { message: out?.message ?? '' }) : L('error'));
   };
 
   const input = 'w-full rounded-site border border-site-fg/20 bg-site-bg px-3 py-2';

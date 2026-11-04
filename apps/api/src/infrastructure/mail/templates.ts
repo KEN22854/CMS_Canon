@@ -1,3 +1,4 @@
+import { shopText } from '@canon/blocks';
 import type { MailMessage } from './mailer';
 
 /**
@@ -81,14 +82,17 @@ function orderLines(lines: { title: string; quantity: number; line: string }[]):
   };
 }
 
-export function orderPlacedMail(to: string, shop: string, number: number, lines: { title: string; quantity: number; line: string }[], total: string, payment: string): MailMessage {
+/** To the buyer, in the language of the page they ordered from. `payment` is the method key. */
+export function orderPlacedMail(to: string, shop: string, number: number, lines: { title: string; quantity: number; line: string }[], total: string, payment: string, locale = 'en'): MailMessage {
   const l = orderLines(lines);
+  const tx = (k: Parameters<typeof shopText>[1]) => shopText(locale, k, { shop, number });
+  const paid = shopText(locale, payment as Parameters<typeof shopText>[1]);
   return {
     to,
     template: 'order-placed',
-    subject: `${shop}: order #${number} received`,
-    text: `Thank you! ${shop} has your order #${number}.\n\n${l.text}\n\nTotal: ${total}\nPayment: ${payment}\n\nThe shop will contact you about delivery.`,
-    html: layout(`Order #${number} received`, `${p(`Thank you! ${shop} has your order.`)}${l.html}${p(`Total: ${total} · Payment: ${payment}`)}${p('The shop will contact you about delivery.')}`),
+    subject: tx('mailSubject'),
+    text: `${tx('mailThanks')} ${tx('order')}\n\n${l.text}\n\n${tx('total')}: ${total}\n${tx('payment')}: ${paid}\n\n${tx('mailNext')}`,
+    html: layout(tx('mailTitle'), `${p(tx('mailThanks'))}${l.html}${p(`${tx('total')}: ${total} · ${tx('payment')}: ${paid}`)}${p(tx('mailNext'))}`),
   };
 }
 
