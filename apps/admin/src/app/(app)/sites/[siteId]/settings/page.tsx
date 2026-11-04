@@ -2,6 +2,7 @@
 
 import type { SiteThemeTokens } from '@canon/blocks';
 import { ThemeStudio } from '@/components/site/theme-studio';
+import { TelegramCard } from '@/components/site/telegram-card';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Copy, Loader2, TriangleAlert } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -36,6 +37,7 @@ export default function SiteSettings() {
       <General site={site.data} />
       {site.data.domain && <DomainCard site={site.data} />}
       <ThemeStudio siteId={site.data.id} theme={site.data.theme as Partial<SiteThemeTokens>} />
+      <TelegramCard siteId={site.data.id} />
       <AiSettings site={site.data} />
       <Danger site={site.data} />
     </div>

@@ -43,6 +43,8 @@ export const automationAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('email_contact'), subject: template(200), body: template(5_000) }).strict(),
   z.object({ type: z.literal('email_team'), to: z.string().trim().toLowerCase().email().max(254), subject: template(200), body: template(5_000) }).strict(),
   z.object({ type: z.literal('add_tag'), tag }).strict(),
+  /** A message to the site's Telegram chat (Integrations → Telegram). */
+  z.object({ type: z.literal('telegram'), text: template(3_000) }).strict(),
 ]);
 export type AutomationAction = z.infer<typeof automationAction>;
 

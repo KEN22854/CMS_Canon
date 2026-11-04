@@ -49,6 +49,8 @@ export const envSchema = z.object({
   /** Public renderer (apps/web): preview links and on-demand ISR revalidation. */
   WEB_PUBLIC_PORT: z.coerce.number().int().positive().default(3001),
   WEB_REVALIDATE_URL: z.url().optional().or(z.literal('').transform(() => undefined)),
+  /** Telegram Bot API base (overridable for tests and self-hosted Bot API servers). */
+  TELEGRAM_API_URL: z.url().default('https://api.telegram.org'),
   REVALIDATE_SECRET: z.string().min(16).default('dev-revalidate-secret-change-me'),
   /** Shared secret the renderer presents to the delivery API (published content is public, but the API is not a CDN). */
   DELIVERY_TOKEN: z.string().min(16).default('dev-delivery-token-change-me'),

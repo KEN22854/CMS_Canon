@@ -10,12 +10,20 @@ renderer :3001).
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
 | API unit | 58 / 58 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes, 1 for migration, 1 for funnels | 162 / 162 ✅ |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes, 1 for migration, 1 for funnels, 1 for Telegram | 163 / 163 ✅ |
 | Playwright E2E | 27 / 27 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **396** (394 after iteration 12).
+Total automated tests: **397** (396 after iteration 13).
+
+## Iteration 14 — Telegram
+
+- `telegram.test.ts` (API, a fake Bot API server): token format and rejection, encrypted storage
+  (the token appears nowhere in the site row or API responses), test message, an order and a form
+  request posted once each after two outbox drains, an automation message with variables, plain
+  text (no parse mode, `<b>` stays text), editors refused, keeping the token when changing the chat,
+  disconnect.
 
 ## Iteration 13 — Funnels
 

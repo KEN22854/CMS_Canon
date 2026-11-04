@@ -50,6 +50,7 @@ Stages 1–2 (design system, Builder 2.0 foundation).
 | after/builder/simple-library-1440.png | 4 | 1440 | Block library: categories, live previews, tones |
 | after/builder/simple-freeform-1440.png | 2 | 1440 | Free-form block: selected element with move/resize handles, size, add-element bar, height handle |
 | after/builder/simple-template-1440.png | 4 | 1440 | A whole-page template applied |
+| after/integrations/telegram-card-1440.png | 18 | 1440 | Site settings: Telegram card (token, chat, what to post) |
 | after/analytics/funnels-1440.png | 12 | 1440 | Analytics with a funnel from real visits: / → cta_click, 50% |
 | after/migration/migration-report-1440.png | 17 | 1440 | WordPress import: dry-run report with posts, pages, categories, redirects |
 | after/themes/themes-gallery-1440.png | 10 | 1440 | Theme studio: live preview, tokens, gallery (Nature), workspace themes |

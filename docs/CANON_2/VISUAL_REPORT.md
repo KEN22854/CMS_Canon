@@ -112,6 +112,10 @@ automatically (marked "automatic") when a published page moves.
 
 ---
 
+# Iteration 14 — Telegram
+
+![telegram](screenshots/after/integrations/telegram-card-1440.png)
+
 # Iteration 13 — Funnels
 
 ![funnels](screenshots/after/analytics/funnels-1440.png)

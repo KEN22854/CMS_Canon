@@ -54,4 +54,11 @@ test('themes: pick a preset from the gallery, save it to the site and the worksp
   await page.getByRole('button', { name: 'Save to workspace' }).click();
   await expect(page.getByText('Saved as “Bakery green”')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Try “Bakery green”' })).toBeVisible();
+
+  // The Telegram integration sits below (not connected: no calls to Telegram are made here).
+  const tg = page.getByRole('form', { name: 'Telegram' });
+  await tg.scrollIntoViewIfNeeded();
+  await expect(tg.getByRole('button', { name: 'Connect' })).toBeDisabled();
+  await tg.getByLabel('Chat id or @channel').fill('@bakery_orders');
+  await shot(page, 'integrations/telegram-card-1440.png');
 });

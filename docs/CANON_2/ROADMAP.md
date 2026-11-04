@@ -24,7 +24,7 @@ real screenshots and updated docs.
 | 15 | Multilingual platform (DE/FR/ES) | — | ⬜ |
 | 16 | Developer platform | — | ⬜ |
 | 17 | Migration center | 4, 9 | 🟡 WordPress import (posts, pages, categories, 301 redirects); CSV/JSON into collections |
-| 18 | Local integrations | 7, 8 | ⬜ |
+| 18 | Local integrations | 7, 8 | 🟡 Telegram: orders, form requests, automation messages |
 
 The previous roadmap (Phases 10–11 in [../roadmap.md](../roadmap.md)) folds into stages 5, 9, 12,
 17 and 18.

@@ -2,7 +2,22 @@
 
 Last update: 2026-11-04.
 
-## Iteration 13 (this one) — Stage 12, funnels
+## Iteration 14 (this one) — Stage 18, local integrations: Telegram
+
+- **Telegram** (site → Settings → Telegram): connect a bot from @BotFather and a chat or channel;
+  the token is checked with Telegram (getMe), stored **encrypted** (AES-256-GCM, the webhook-secret
+  key) and only its last characters are ever shown; "Send a test message"; choose what is posted:
+  **new orders** (lines, total, customer, link to the order) and **form requests** (the fields).
+- **Automations** can send a **Telegram message** with the usual variables
+  (`{{contact.name}} spent {{order.total}}`).
+- Messages are plain text (no parse mode): customer input can't become markup or fake links.
+  Telegram outages are retried by the outbox; a refused message (bot removed from the chat) is
+  logged, not retried forever. `TELEGRAM_API_URL` points at a fake server in tests.
+- Tests: +1 API integration (fake Bot API: bad token, encrypted storage, never returned, test
+  message, order and form messages once each, automation message, plain text, editor refused,
+  token kept on update, disconnect); the settings E2E checks the card.
+
+## Iteration 13 — Stage 12, funnels
 
 - **Funnels** (site → Analytics → Funnels): 2–6 steps, each "visits a page" (exact path or a
   section prefix like /blog/*) or "does an event" (cta_click, form_submit, purchase, any custom
@@ -314,5 +329,5 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.
 5. Remaining admin screens in Russian (collections, settings, analytics…).
 
-Stages 11, 14–16 and 18 ( CRM, SEO, themes, animation, analytics, hosting, security,
+Stages 11 and 14–16 ( CRM, SEO, themes, animation, analytics, hosting, security,
 multilingual, developer platform, migration, local integrations) have not started. See ROADMAP.md.

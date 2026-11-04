@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/auth/decorators';
 import { TenantScope, type TenantPrincipal } from '../../common/auth/principal';
 import { ZodBody } from '../../common/http/zod-body.pipe';
+import { TelegramModule } from '../integrations/telegram.module';
 import { SitesModule } from '../sites/sites.module';
 import { automationBody, listContactsQuery, noteBody, updateAutomationBody, updateContactBody, type AutomationBody, type UpdateAutomationBody, type UpdateContactBody } from './crm.dto';
 import { CrmService } from './crm.service';
@@ -81,7 +82,7 @@ export class CrmController {
 }
 
 @Module({
-  imports: [SitesModule],
+  imports: [SitesModule, TelegramModule],
   controllers: [CrmController],
   providers: [CrmService],
 })

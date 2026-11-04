@@ -115,6 +115,13 @@ checkedAt }`. Issue codes are listed in `packages/blocks/src/seo.ts` (`SeoIssueC
 - Delivery: `page` serves entry pages (with `entry: { id, collectionId, slug, basePath }`) and
   every page carries `lists`; `pages` adds `entries: [{ path, locale, updatedAt }]` for sitemaps.
 
+## Telegram
+
+- `GET /v1/sites/:siteId/integrations/telegram` → `{ connected, chatId, events, tokenHint, botName }`.
+- `PUT …/integrations/telegram { botToken?, chatId, events: ["order.placed","form.submitted"] }`,
+  `POST …/integrations/telegram/test`, `DELETE …/integrations/telegram` (update Site).
+- Automation action `{ type: "telegram", text }`.
+
 ## Funnels
 
 - `GET /v1/sites/:siteId/analytics/funnels?from&to` (read Analytics) → funnels with `result: { steps:

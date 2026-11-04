@@ -152,6 +152,13 @@ The inline script in `apps/admin/src/app/layout.tsx` is a static string that onl
 - No server-side fetching of the old site's images (SSRF); they are reported.
 - Import needs a role that can create collections and publish pages; audited with counts.
 
+## Telegram (iteration 14)
+
+- Bot tokens: validated with Telegram before saving, encrypted at rest, never returned (a hint
+  of the last 4 characters), not logged; managing the integration needs `update Site`.
+- Outbound calls go only to `TELEGRAM_API_URL` (fixed in config, not user-provided), 10 s timeout.
+- Messages contain order and form data the owner chose to receive; sent as plain text.
+
 ## Clipboard
 
 Copied blocks are stored in the browser's `localStorage` (same origin as the admin) and are

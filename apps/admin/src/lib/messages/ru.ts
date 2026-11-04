@@ -8,6 +8,7 @@ import { releasesRu } from './releases-ru';
 import { themeRu } from './theme-ru';
 import { migrationRu } from './migration-ru';
 import { funnelRu } from './funnel-ru';
+import { integrationsRu } from './integrations-ru';
 import type { MessageKey } from './en';
 
 /** Russian UI strings. Typed as the full key set, so a missing translation fails the build. */
@@ -316,4 +317,5 @@ export const ru: Record<MessageKey, string> = {
   ...themeRu,
   ...migrationRu,
   ...funnelRu,
+  ...integrationsRu,
 };

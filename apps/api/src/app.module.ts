@@ -40,6 +40,7 @@ import { CrmModule } from './modules/crm/crm.module';
 import { ReleasesModule } from './modules/releases/releases.module';
 import { ThemesModule } from './modules/themes/themes.module';
 import { MigrationModule } from './modules/migration/migration.module';
+import { TelegramModule } from './modules/integrations/telegram.module';
 import { FormsModule } from './modules/forms/forms.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { ScimModule } from './modules/scim/scim.module';
@@ -103,6 +104,7 @@ const REQUEST_ID_HEADER = 'x-request-id';
     ReleasesModule,
     ThemesModule,
     MigrationModule,
+    TelegramModule,
     MediaModule,
     ContentAiModule,
     FactsModule,

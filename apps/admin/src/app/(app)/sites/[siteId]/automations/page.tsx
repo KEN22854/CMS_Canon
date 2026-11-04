@@ -14,7 +14,7 @@ import { useTenantId } from '@/lib/queries';
 import { cn, relativeTime } from '@/lib/utils';
 
 type Event = 'form.submitted' | 'order.placed' | 'order.status';
-type Action = { type: 'email_contact'; subject: string; body: string } | { type: 'email_team'; to: string; subject: string; body: string } | { type: 'add_tag'; tag: string };
+type Action = { type: 'email_contact'; subject: string; body: string } | { type: 'email_team'; to: string; subject: string; body: string } | { type: 'add_tag'; tag: string } | { type: 'telegram'; text: string };
 interface Automation {
   id: string;
   name: string;
@@ -29,7 +29,7 @@ type Draft = Omit<Automation, 'id' | 'runCount' | 'lastRunAt'> & { id?: string }
 const EVENTS: Event[] = ['form.submitted', 'order.placed', 'order.status'];
 const STATUSES = ['CONFIRMED', 'PAID', 'SHIPPED', 'COMPLETED', 'CANCELLED'];
 const VARS = ['{{contact.name}}', '{{contact.email}}', '{{site.name}}', '{{form.name}}', '{{order.number}}', '{{order.total}}', '{{order.status}}'];
-const blankAction = (type: Action['type']): Action => (type === 'add_tag' ? { type, tag: '' } : type === 'email_team' ? { type, to: '', subject: '', body: '' } : { type, subject: '', body: '' });
+const blankAction = (type: Action['type']): Action => (type === 'add_tag' ? { type, tag: '' } : type === 'telegram' ? { type, text: '' } : type === 'email_team' ? { type, to: '', subject: '', body: '' } : { type, subject: '', body: '' });
 
 export default function AutomationsPage() {
   const t = useT();
@@ -144,7 +144,7 @@ function Editor({ siteId, draft, setDraft, saving, onSave }: { siteId: string; d
   const tr = draft.trigger;
   const setTrigger = (patch: Partial<Draft['trigger']>) => setDraft({ ...draft, trigger: { ...tr, ...patch } });
   const setAction = (i: number, next: Action) => setDraft({ ...draft, actions: draft.actions.map((a, j) => (j === i ? next : a)) });
-  const valid = draft.name.trim() && draft.actions.length > 0 && draft.actions.every((a) => (a.type === 'add_tag' ? a.tag.trim() : a.subject.trim() && a.body.trim() && (a.type !== 'email_team' || /.+@.+\..+/.test(a.to))));
+  const valid = draft.name.trim() && draft.actions.length > 0 && draft.actions.every((a) => (a.type === 'add_tag' ? a.tag.trim() : a.type === 'telegram' ? a.text.trim() : a.subject.trim() && a.body.trim() && (a.type !== 'email_team' || /.+@.+\..+/.test(a.to))));
 
   return (
     <form
@@ -199,7 +199,7 @@ function Editor({ siteId, draft, setDraft, saving, onSave }: { siteId: string; d
           <div key={i} className="space-y-2 rounded-md border p-3">
             <div className="flex items-center gap-2">
               <Select aria-label={`${t('auto.then')} ${i + 1}`} value={a.type} onChange={(e) => setAction(i, blankAction(e.target.value as Action['type']))}>
-                {(['email_contact', 'email_team', 'add_tag'] as const).map((x) => (
+                {(['email_contact', 'email_team', 'add_tag', 'telegram'] as const).map((x) => (
                   <option key={x} value={x}>
                     {t(`auto.action.${x}` as MessageKey)}
                   </option>
@@ -213,7 +213,13 @@ function Editor({ siteId, draft, setDraft, saving, onSave }: { siteId: string; d
             </div>
             {a.type === 'add_tag' && <Input aria-label={t('auto.tag')} placeholder={t('auto.tag')} value={a.tag} maxLength={40} onChange={(e) => setAction(i, { ...a, tag: e.target.value })} />}
             {a.type === 'email_team' && <Input type="email" aria-label={t('auto.to')} placeholder={t('auto.to')} value={a.to} onChange={(e) => setAction(i, { ...a, to: e.target.value })} />}
-            {a.type !== 'add_tag' && (
+            {a.type === 'telegram' && (
+              <>
+                <textarea aria-label={t('auto.tgText')} placeholder={t('auto.tgText')} rows={3} value={a.text} maxLength={3000} onChange={(e) => setAction(i, { ...a, text: e.target.value })} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm" />
+                <p className="text-[11px] text-muted-foreground">{t('auto.vars', { vars: VARS.join(' ') })}</p>
+              </>
+            )}
+            {a.type !== 'add_tag' && a.type !== 'telegram' && (
               <>
                 <Input aria-label={t('auto.subject')} placeholder={t('auto.subject')} value={a.subject} maxLength={200} onChange={(e) => setAction(i, { ...a, subject: e.target.value })} />
                 <textarea aria-label={t('auto.body')} placeholder={t('auto.body')} rows={4} value={a.body} maxLength={5000} onChange={(e) => setAction(i, { ...a, body: e.target.value })} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm" />

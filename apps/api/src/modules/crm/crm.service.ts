@@ -9,6 +9,7 @@ import { AuditService } from '../../infrastructure/audit/audit.service';
 import { EventBus, type StoredEvent } from '../../infrastructure/events/outbox';
 import { Mailer } from '../../infrastructure/mail/mailer';
 import { PrismaService, SystemPrismaService } from '../../infrastructure/prisma/prisma.service';
+import { TelegramService } from '../integrations/telegram.module';
 import { SitesService } from '../sites/sites.service';
 import { automationAction, automationTrigger, renderTemplate, type AutomationAction, type AutomationBody, type AutomationEvent, type AutomationTrigger, type ListContactsQuery, type UpdateAutomationBody, type UpdateContactBody } from './crm.dto';
 
@@ -43,6 +44,7 @@ export class CrmService implements OnApplicationBootstrap {
     private readonly bus: EventBus,
     private readonly mailer: Mailer,
     private readonly audit: AuditService,
+    private readonly telegram: TelegramService,
     private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(CrmService.name);
@@ -172,6 +174,10 @@ export class CrmService implements OnApplicationBootstrap {
       case 'add_tag': {
         const c = await this.system.contact.findUniqueOrThrow({ where: { id: h.contact.id } });
         if (!c.tags.includes(action.tag)) await this.system.contact.update({ where: { id: c.id }, data: { tags: [...c.tags, action.tag].slice(0, 30) } });
+        return;
+      }
+      case 'telegram': {
+        if (!(await this.telegram.notify(h.siteId, renderTemplate(action.text, vars)))) throw new Error('Telegram is not connected for this site');
         return;
       }
       case 'email_contact':
