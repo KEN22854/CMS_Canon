@@ -9,13 +9,28 @@ renderer :3001).
 | `@canon/collab` unit (incl. animation through Yjs) | 9 / 9 ✅ |
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 4 ✅ |
 | admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
-| API unit | 57 / 57 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop | 155 / 155 ✅ |
-| Playwright E2E | 22 / 22 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
+| API unit | 58 / 58 ✅ |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM | 158 / 158 ✅ |
+| Playwright E2E | 23 / 23 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **377** (370 after iteration 7).
+Total automated tests: **382** (377 after iteration 8).
+
+## Iteration 9 — CRM and automation
+
+- `crm.test.ts` (API, real Postgres): contacts from a form (email in capitals → one contact) and
+  an order, events drained twice without doubling, revenue per currency, search, customers only,
+  timeline, notes, tags normalised and de-duplicated, cancel takes the order off the totals,
+  erasure; editor can't erase, viewer can't read, other workspace 404; automations: invalid form,
+  no actions, unknown action types refused; form auto-reply with variables and escaped HTML, a
+  team email only above the minimum, tags added, a run recorded once, disabled automation silent,
+  editors read-only.
+- `crm.spec.ts` (E2E): create an automation in the editor, buy on the live site, the contact shows
+  up with the tag, the order and the team email; a note; the run history.
+
+Bugs found: the contact's name was overwritten by a later order's name (now only gaps are
+filled); an E2E reload loop logged the user out mid token rotation (recorded as an open item).
 
 ## Iteration 8 — Shop
 

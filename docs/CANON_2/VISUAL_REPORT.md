@@ -112,6 +112,14 @@ automatically (marked "automatic") when a published page moves.
 
 ---
 
+# Iteration 9 — CRM and automation
+
+| Contact with timeline (order, team email, note) | Automation editor |
+|---|---|
+| ![contacts](screenshots/after/crm/crm-contacts-1440.png) | ![editor](screenshots/after/crm/crm-automation-editor-1440.png) |
+
+![automations](screenshots/after/crm/crm-automations-1440.png)
+
 # Iteration 8 — Shop
 
 | Product page (Buy, stock, toast) | Cart and checkout |

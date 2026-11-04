@@ -2,7 +2,32 @@
 
 Last update: 2026-11-04.
 
-## Iteration 8 (this one) — Stage 7, e-commerce: products, cart, checkout, orders
+## Iteration 9 (this one) — Stage 8, CRM and automation
+
+- **Contacts** (site → Contacts): one per site and email, built automatically from form
+  submissions (the form's email/name/phone fields) and orders; a timeline (form, order, order
+  status, notes, automation emails), tags, orders and money spent per currency (a cancelled order
+  stops counting), search by name/email/phone, tag filter, customers only, notes, and erasure
+  (right to be forgotten: the contact and its timeline; orders and submissions keep their own
+  records). New details fill gaps — they never overwrite a name the team corrected.
+- **Automations** (site → Automations): "When a form is sent (any or one form) / an order is placed
+  / an order changes status (to a status), optionally from an amount → email the contact, email
+  the team, add a tag", up to five actions, with `{{contact.name}}`, `{{order.total}}`… in texts.
+  Each automation runs once per event (retries never email twice); on/off switch, run history.
+  Texts are plain: HTML in them is escaped.
+- Built on the outbox: `FormSubmitted`, `OrderPlaced`, the new `OrderStatusChanged` (also a
+  webhook event `order.status`); handlers on the system role, idempotent by unique keys.
+- Permissions: contacts are personal data — owners, admins and editors (editors can't erase);
+  automations — owners and admins; editors see them.
+- Found on the way: a page reload that interrupts a refresh-token rotation can log the user out
+  (the rotated token arrives again inside the grace window and gets a 401). Changing rotation is
+  a security decision; it is in BACKLOG, not changed silently.
+- Tests: +1 API unit (CRM roles), +3 API integration (contacts from forms and orders,
+  idempotency, cancel, notes, tags, erase; permissions; automations with conditions, once per
+  event, escaped texts, disabled ones, editor read-only), +1 E2E (automation → purchase on the
+  site → contact with tag, order and team email in the timeline → note → run history).
+
+## Iteration 8 — Stage 7, e-commerce: products, cart, checkout, orders
 
 - **Products are a collection with a shop** (Collections → Shop): the price field (a number, in
   the currency's major unit), optional stock and SKU fields, currency, offline payment methods
@@ -214,5 +239,5 @@ Stage 0 audit; Stage 1 design system (tokens, dark/light, toggle); Builder 2.0 f
 4. Lighthouse CI with mobile throttling; Yjs diff that skips unchanged subtrees; virtualised Layers.
 5. Remaining admin screens in Russian (collections, settings, analytics…).
 
-Stages 8–18 ( CRM, SEO, themes, animation, analytics, hosting, security,
+Stages 10–18 ( CRM, SEO, themes, animation, analytics, hosting, security,
 multilingual, developer platform, migration, local integrations) have not started. See ROADMAP.md.

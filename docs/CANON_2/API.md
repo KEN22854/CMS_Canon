@@ -115,6 +115,17 @@ checkedAt }`. Issue codes are listed in `packages/blocks/src/seo.ts` (`SeoIssueC
 - Delivery: `page` serves entry pages (with `entry: { id, collectionId, slug, basePath }`) and
   every page carries `lists`; `pages` adds `entries: [{ path, locale, updatedAt }]` for sitemaps.
 
+## CRM
+
+- `GET /v1/sites/:siteId/contacts?q&tag&customers&limit&offset` → `{ items, total, tags }`;
+  `GET|PATCH|DELETE /v1/sites/:siteId/contacts/:id` (PATCH: name, phone, tags);
+  `POST /v1/sites/:siteId/contacts/:id/notes { text }`. Permission `Contact`.
+- `GET|POST /v1/sites/:siteId/automations`, `PATCH|DELETE /v1/sites/:siteId/automations/:id`,
+  `GET /v1/sites/:siteId/automations/:id/runs`. Body `{ name, enabled, trigger: { event:
+  form.submitted | order.placed | order.status, formId?, status?, minTotal? }, actions: [{ type:
+  email_contact, subject, body } | { type: email_team, to, subject, body } | { type: add_tag, tag }] }`.
+  Permission `Automation`. Webhook event `order.status`.
+
 ## Shop
 
 - Collection settings `commerce: { priceField, stockField?, skuField?, currency, paymentMethods:

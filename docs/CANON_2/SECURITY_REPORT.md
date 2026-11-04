@@ -127,6 +127,17 @@ The inline script in `apps/admin/src/app/layout.tsx` is a static string that onl
 - **No card data**: payment is offline; online payments are not enabled without the owner's
   provider and keys.
 
+## CRM (iteration 9)
+
+- Contacts and their timelines are personal data: RLS, CASL (owners, admins, editors; only
+  owners/admins erase), audit on erasure. Erasure removes the contact and timeline; orders and
+  submissions are kept (they are business records) — documented for site owners.
+- Automations can't call URLs (no SSRF surface; webhooks keep their own private-address checks);
+  they email the contact or a fixed team address only. Template variables are a closed set; texts
+  are escaped into the HTML part. One run per automation and event (no mail storms on retries).
+- **Open item**: refresh-token rotation + a reload mid-refresh can log a user out (fail-closed).
+  Relaxing it is a deliberate trade-off — see BACKLOG.
+
 ## Clipboard
 
 Copied blocks are stored in the browser's `localStorage` (same origin as the admin) and are

@@ -196,6 +196,16 @@ reduced motion) content is simply visible. Collab stores the object as a JSON st
 - **Filters** are parameterised SQL on `entries.data` (field names must exist in the schema);
   **views** live in `Collection.settings.views`; **bulk** loops the single-entry service methods.
 
+## CRM (`apps/api/src/modules/crm`)
+
+- `CrmService` subscribes to `FormSubmitted`, `OrderPlaced`, `OrderStatusChanged` on the event
+  bus (outbox relay, system role). Contact = unique (site, lowercase email); activity = unique
+  (contact, kind, source id) — the insert is the idempotency key, so order counts and revenue move
+  once per order even when the relay retries.
+- Automations: `trigger` and `actions` are JSON validated by zod on write and on run; a run row
+  unique (automation, event id) is created before acting, so a retried event skips. Email texts
+  are rendered with a fixed variable set and escaped into HTML.
+
 ## Shop (`packages/blocks/src/shop.ts`, `apps/api/src/modules/shop`)
 
 - `Collection.settings.commerce` makes a collection a shop. Delivery resolves Buy blocks

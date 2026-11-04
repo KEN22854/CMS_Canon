@@ -85,6 +85,18 @@ describe('RBAC matrix', () => {
     expect(a.can('invoke', 'Ai')).toBe(true);
   });
 
+  it('CRM: editors keep contacts up to date but cannot erase them or change automations', () => {
+    const contact = subject('Contact', { tenantId: T });
+    const automation = subject('Automation', { tenantId: T });
+    expect(user('EDITOR').can('update', contact)).toBe(true);
+    expect(user('EDITOR').can('delete', contact)).toBe(false);
+    expect(user('EDITOR').can('read', automation)).toBe(true);
+    expect(user('EDITOR').can('update', automation)).toBe(false);
+    expect(user('ADMIN').can('delete', contact)).toBe(true);
+    expect(user('VIEWER').can('read', contact)).toBe(false);
+    expect(user('AUTHOR').can('read', automation)).toBe(false);
+  });
+
   it('orders hold customer data: only owners, admins and editors see them', () => {
     const order = subject('Order', { tenantId: T });
     expect(user('EDITOR').can('update', order)).toBe(true);

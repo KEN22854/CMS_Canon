@@ -513,6 +513,8 @@ model Site {
   components  SiteComponent[]
   redirects   Redirect[]
   orders      Order[]
+  contacts    Contact[]
+  automations Automation[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -1995,4 +1997,94 @@ model Order {
   @@unique([siteId, number])
   @@index([tenantId, siteId, status, createdAt])
   @@map("orders")
+}
+
+/// A person the site knows (CRM): one per site and email, built from form submissions and orders.
+model Contact {
+  id          String    @id @default(cuid())
+  tenantId    String
+  siteId      String
+  email       String
+  name        String?
+  phone       String?
+  tags        String[]  @default([])
+  /// Orders placed and money spent ({"EUR": 900}, minor units per currency).
+  orderCount  Int       @default(0)
+  revenue     Json      @default("{}")
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  site       Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  activities ContactActivity[]
+
+  @@unique([siteId, email])
+  @@index([tenantId, siteId, lastSeenAt])
+  @@index([tags], type: Gin, map: "contacts_tags_gin")
+  @@map("contacts")
+}
+
+/// The contact's timeline: form submissions, orders, status changes, notes, automation emails.
+model ContactActivity {
+  id          String   @id @default(cuid())
+  tenantId    String
+  contactId   String
+  /// form | order | order_status | note | email | tag
+  kind        String
+  title       String
+  data        Json     @default("{}")
+  /// The source record (submission, order, run) — an event handled twice adds nothing.
+  refId       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, kind, refId])
+  @@index([contactId, createdAt])
+  @@map("contact_activities")
+}
+
+/// "When <trigger> then <actions>": runs on outbox events for one site.
+model Automation {
+  id        String    @id @default(cuid())
+  tenantId  String
+  siteId    String
+  name      String
+  enabled   Boolean   @default(true)
+  /// {event: form.submitted | order.placed | order.status, formId?, status?, minTotal?}
+  trigger   Json
+  /// [{type: email_contact | email_team | add_tag, ...}]
+  actions   Json
+  runCount  Int       @default(0)
+  lastRunAt DateTime?
+  createdById String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  site Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  runs AutomationRun[]
+
+  @@index([tenantId, siteId])
+  @@map("automations")
+}
+
+model AutomationRun {
+  id           String   @id @default(cuid())
+  tenantId     String
+  automationId String
+  /// The outbox event that triggered it — one run per automation and event.
+  eventId      String
+  contactId    String?
+  /// ok | skipped | failed
+  status       String
+  detail       Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, eventId])
+  @@index([automationId, createdAt])
+  @@map("automation_runs")
 }

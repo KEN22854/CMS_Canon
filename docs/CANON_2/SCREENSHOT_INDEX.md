@@ -50,6 +50,9 @@ Stages 1–2 (design system, Builder 2.0 foundation).
 | after/builder/simple-library-1440.png | 4 | 1440 | Block library: categories, live previews, tones |
 | after/builder/simple-freeform-1440.png | 2 | 1440 | Free-form block: selected element with move/resize handles, size, add-element bar, height handle |
 | after/builder/simple-template-1440.png | 4 | 1440 | A whole-page template applied |
+| after/crm/crm-contacts-1440.png | 8 | 1440 | Contacts: tag filter, contact panel with timeline and note |
+| after/crm/crm-automation-editor-1440.png | 8 | 1440 | Automation editor: when an order is placed → add tag, email the team |
+| after/crm/crm-automations-1440.png | 8 | 1440 | Automations list with on/off, run count and recent runs |
 | after/shop/shop-collection-1440.png | 7 | 1440 | Products collection: shop card (EUR, price/stock fields), entry pages, published product |
 | after/shop/shop-product-1440.png | 7 | 1440 | Live product page: price, stock, Add to cart, toast with "Open cart" |
 | after/shop/shop-cart-1440.png | 7 | 1440 | Live cart: line, quantity, total, contact fields, payment method |

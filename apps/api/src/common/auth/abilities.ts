@@ -28,6 +28,8 @@ export const SUBJECTS = [
   'Webhook',
   'Plugin',
   'Order',
+  'Contact',
+  'Automation',
   'all',
 ] as const;
 export type SubjectName = (typeof SUBJECTS)[number];
@@ -111,6 +113,9 @@ export function defineAbilityFor(p: RequestPrincipal): AppAbility {
       can('read', ['Tenant', 'Member', 'AiUsage', 'Analytics', 'AiAgent', 'AiPrompt'], own);
       // Orders hold customers' personal data: editors run the shop, authors and viewers don't see it.
       can(['read', 'update'], 'Order', own);
+      // The CRM is the same personal data; editors keep it up to date, admins set up automations.
+      can(['read', 'create', 'update'], 'Contact', own);
+      can('read', 'Automation', own);
       break;
     case 'AUTHOR':
       can('read', CONTENT, own);

@@ -23,6 +23,7 @@ export const WEBHOOK_EVENTS = {
   'form.submitted': 'FormSubmitted',
   'order.placed': 'OrderPlaced',
   'order.cancelled': 'OrderCancelled',
+  'order.status': 'OrderStatusChanged',
 } as const;
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;
 export const WEBHOOK_EVENT_NAMES = Object.keys(WEBHOOK_EVENTS) as WebhookEvent[];

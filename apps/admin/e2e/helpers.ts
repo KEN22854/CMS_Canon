@@ -54,3 +54,47 @@ export async function createSite(page: Page, name: string): Promise<{ siteId: st
   const host = (await page.locator('a', { hasText: '.canon.localhost' }).first().textContent())!.trim();
   return { siteId, host };
 }
+
+/** A Products shop in EUR with a cart page, product pages and one published product (2 in stock). */
+export async function createShop(page: Page, siteId: string, product = { name: 'Rye loaf', price: '4.5', stock: '2' }): Promise<void> {
+  await page.goto(`/sites/${siteId}/collections`);
+  await page.getByRole('button', { name: 'New collection' }).click();
+  await page.getByRole('button', { name: /^Products/ }).click();
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Products', level: 2 })).toBeVisible();
+  const listUrl = page.url();
+  await page.getByRole('button', { name: 'Sell these entries' }).click();
+  await page.getByLabel('Currency').selectOption('EUR');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText(/A shop in EUR/)).toBeVisible();
+  await page.getByRole('button', { name: 'Create the cart page' }).click();
+  await expect(page.getByText('The cart page is live at /cart')).toBeVisible();
+  await page.getByRole('button', { name: 'Entry pages' }).click();
+  await page.getByRole('button', { name: 'Create and publish a template' }).click();
+  await expect(page.getByLabel('Template page')).not.toHaveValue('');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText(/Every published entry is a page at/)).toBeVisible();
+  await page.getByRole('button', { name: 'New entry' }).click();
+  await page.locator('#fld-name').fill(product.name);
+  await page.locator('#fld-price').fill(product.price);
+  await page.locator('#fld-stock').fill(product.stock);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText(/Saved · v\d/)).toBeVisible();
+  await page.goto(listUrl);
+  await page.getByLabel('Select all entries on this page').check();
+  await page.getByRole('toolbar').getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Done: 1')).toBeVisible();
+}
+
+/** A visitor buys `quantity` of a product on the live site and sees the order number. */
+export async function buyOnSite(page: Page, siteUrl: string, slug: string, quantity: number, customer = { name: 'Ada Buyer', email: 'ada@e2e.test' }): Promise<void> {
+  await page.goto(`${siteUrl}/products/${slug}`);
+  await page.getByRole('button', { name: 'Add to cart' }).click();
+  await page.getByRole('link', { name: 'Open cart' }).click();
+  await page.getByLabel(/^Quantity of/).fill(String(quantity));
+  await page.getByLabel('Name').fill(customer.name);
+  await page.getByLabel('Email').fill(customer.email);
+  await page.waitForTimeout(400); // checkout refuses forms filled faster than a person could
+  await page.getByRole('button', { name: /^Place order/ }).click();
+  await expect(page.getByText(/^Order #\d+$/)).toBeVisible();
+}

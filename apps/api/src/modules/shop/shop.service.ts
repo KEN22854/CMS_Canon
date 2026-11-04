@@ -206,6 +206,7 @@ export class ShopService {
       // Compare-and-swap on the status: two people clicking at once can't both cancel.
       const res = await tx.order.updateMany({ where: { id, status: o.status }, data: { status: body.status, history: history as Prisma.InputJsonValue } });
       if (res.count === 0) throw conflict('The order was changed by someone else — reload it');
+      await this.outbox.enqueue(tx, { tenantId: actor.tenantId, aggregateType: 'Order', aggregateId: id, type: 'OrderStatusChanged', payload: { siteId, orderId: id, number: o.number, from, status: body.status } });
       if (body.status === 'CANCELLED') {
         await this.returnStock(tx, o);
         await this.outbox.enqueue(tx, { tenantId: actor.tenantId, aggregateType: 'Order', aggregateId: id, type: 'OrderCancelled', payload: { siteId, orderId: id } });
