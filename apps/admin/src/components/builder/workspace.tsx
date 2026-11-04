@@ -7,7 +7,10 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { translate, currentLocale, type MessageKey } from '@/lib/i18n';
 import { cn, relativeTime } from '@/lib/utils';
-import { findNode, findParent, newBlock } from '../editor/tree-ops';
+import { cloneWithIds, findNode, findParent, newBlock } from '../editor/tree-ops';
+import { Board } from './board/board';
+import { BoardActions } from './board/board-actions';
+import { BoardLibrary } from './board/library';
 import { BlockLibrary } from './block-library';
 import { Canvas } from './canvas';
 import { useBlockLabels } from './labels';
@@ -32,6 +35,10 @@ export function Workspace({ siteId, pageId, locale, theme, media, facts, readOnl
   const L = useBlockLabels();
   const t = L.t;
   const simple = useBuilder((s) => s.mode === 'simple');
+  const board = useBuilder((s) => s.mode === 'board');
+  const [boardTab, setBoardTab] = useState<'add' | 'layers' | 'history'>('add');
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
   const inspectorOpen = useBuilder((s) => s.inspector.open);
   const closeInspector = useBuilder((s) => s.closeInspector);
   const [active, setActive] = useState<DragItem | null>(null);
@@ -67,12 +74,49 @@ export function Workspace({ siteId, pageId, locale, theme, media, facts, readOnl
     setDrop(null);
     if (!item || !target) return;
     const s = store.getState();
-    if (item.kind === 'new') s.insert(newBlock(item.type), { parentId: target.parentId, index: target.index });
+    if (item.kind === 'new') s.insert(item.node ? cloneWithIds(item.node) : newBlock(item.type), { parentId: target.parentId, index: target.index });
     else {
       s.move(item.id, target.parentId, target.index);
       s.select(item.id);
     }
   };
+
+  if (board) {
+    // The infinite canvas: library/layers | edit bar + board | inspector, panels collapsible.
+    return (
+      <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActive((e.active.data.current as DragItem) ?? null)} onDragMove={onMove} onDragEnd={onEnd} onDragCancel={() => (setActive(null), setDrop(null))}>
+        <div className="flex min-h-0 flex-1">
+          {!readOnly && leftOpen && (
+            <aside className="flex w-72 shrink-0 flex-col border-r bg-background" aria-label={t('builder.sidebar')}>
+              <div className="flex border-b text-xs" role="tablist">
+                {(['add', 'layers', 'history'] as const).map((id) => (
+                  <button key={id} type="button" role="tab" aria-selected={boardTab === id} onClick={() => setBoardTab(id)} className={cn('flex-1 px-2 py-2', boardTab === id ? 'border-b-2 border-primary font-medium' : 'text-muted-foreground hover:text-foreground')}>
+                    {t(`board.tab.${id}`)}
+                  </button>
+                ))}
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto" data-board-scroll>
+                {boardTab === 'add' ? <BoardLibrary siteId={siteId} pageId={pageId} locale={locale} /> : boardTab === 'layers' ? <Layers hostRef={layersRef} drop={drop?.zone === 'layers' ? drop.target : null} readOnly={readOnly} /> : <OperationHistory />}
+              </div>
+            </aside>
+          )}
+          <main className="flex min-w-0 flex-1 flex-col">
+            <BoardActions hostRef={canvasRef} leftOpen={leftOpen && !readOnly} rightOpen={rightOpen} onToggleLeft={() => setLeftOpen(!leftOpen)} onToggleRight={() => setRightOpen(!rightOpen)} readOnly={readOnly} />
+            <div className="min-h-0 flex-1">
+              <Board media={media} facts={facts} theme={theme} hostRef={canvasRef} drop={drop?.zone === 'canvas' ? drop.target : null} dragging={Boolean(active)} siteId={siteId} pageId={pageId} locale={locale} readOnly={readOnly} />
+            </div>
+          </main>
+          {rightOpen && (
+            <aside className="w-80 shrink-0 overflow-y-auto border-l bg-background xl:w-96" aria-label={t('builder.inspector')} data-board-scroll>
+              {inspector}
+            </aside>
+          )}
+        </div>
+        <BlockLibrary siteId={siteId} locale={locale} theme={theme} />
+        <DragOverlay dropAnimation={null} className="pointer-events-none">{active && <div className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium shadow-lg">{active.kind === 'new' && active.node?.name ? active.node.name : L.name(active.type)}</div>}</DragOverlay>
+      </DndContext>
+    );
+  }
 
   return (
     <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActive((e.active.data.current as DragItem) ?? null)} onDragMove={onMove} onDragEnd={onEnd} onDragCancel={() => (setActive(null), setDrop(null))}>
@@ -143,8 +187,8 @@ function useShortcuts(readOnly: boolean) {
       }
       if (editable(e.target)) return;
       const s = store.getState();
-      // Canvas zoom: Ctrl/Cmd + = / - / 0 (the browser zoom stays on the browser menu).
-      if (mod && (k === '=' || k === '+' || k === '-' || k === '0')) {
+      // Canvas zoom: Ctrl/Cmd + = / - / 0 (the browser zoom stays on the browser menu); the board zooms itself.
+      if (mod && (k === '=' || k === '+' || k === '-' || k === '0') && s.mode !== 'board') {
         e.preventDefault();
         s.setZoom(k === '0' ? 1 : s.zoom + (k === '-' ? -0.1 : 0.1));
         return;

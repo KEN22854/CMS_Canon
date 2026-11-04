@@ -1,7 +1,8 @@
 'use client';
 
-import { type FONT_FAMILIES, STYLE_BREAKPOINTS, STYLE_PROPS, THEME_COLORS, isValidStyleValue, resolveStyles, setStyle, styleSource, type BlockNode, type StyleGroup, type StyleProperty } from '@canon/blocks';
-import { ChevronDown, Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { type FONT_FAMILIES, STYLE_BREAKPOINTS, STYLE_PROPS, THEME_COLORS, isValidStyleValue, parseCssDeclarations, resolveStyles, setStyle, styleSource, stylesToCssText, type BlockNode, type CssParseResult, type StyleGroup, type StyleProperty } from '@canon/blocks';
+import { ChevronDown, Code2, Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { toast } from 'sonner';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useT, type MessageKey } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,14 @@ const GROUPS: { id: StyleGroup; fields: Field[] }[] = [
       { prop: 'gridTemplateColumns', kind: 'text', placeholder: 'repeat(auto-fit, minmax(240px, 1fr))', wide: true },
       { prop: 'gridColumn', kind: 'text', placeholder: 'span 2' },
       { prop: 'flexGrow', kind: 'text', placeholder: '1' },
+      { prop: 'flexShrink', kind: 'text', placeholder: '1' },
+      { prop: 'flexBasis', placeholder: 'auto' },
+      { prop: 'alignSelf', kind: 'select' },
+      { prop: 'justifySelf', kind: 'select' },
+      { prop: 'alignContent', kind: 'select' },
+      { prop: 'order', kind: 'text', placeholder: '0' },
+      { prop: 'gridTemplateRows', kind: 'text', placeholder: 'auto 1fr', wide: true },
+      { prop: 'gridRow', kind: 'text', placeholder: 'span 2' },
     ],
   },
   {
@@ -48,6 +57,7 @@ const GROUPS: { id: StyleGroup; fields: Field[] }[] = [
       { prop: 'maxWidth' },
       { prop: 'minHeight' },
       { prop: 'maxHeight' },
+      { prop: 'aspectRatio', kind: 'text', placeholder: '16/9' },
     ],
   },
   {
@@ -61,6 +71,8 @@ const GROUPS: { id: StyleGroup; fields: Field[] }[] = [
       { prop: 'textAlign', kind: 'select' },
       { prop: 'textTransform', kind: 'select' },
       { prop: 'textDecoration', kind: 'select' },
+      { prop: 'fontStyle', kind: 'select' },
+      { prop: 'whiteSpace', kind: 'select' },
       { prop: 'color', kind: 'color', wide: true },
     ],
   },
@@ -69,6 +81,9 @@ const GROUPS: { id: StyleGroup; fields: Field[] }[] = [
     fields: [
       { prop: 'backgroundColor', kind: 'color', wide: true },
       { prop: 'backgroundImage', kind: 'text', placeholder: 'linear-gradient(135deg, #8B7CFF, #42C8E8)', wide: true },
+      { prop: 'backgroundSize', kind: 'text', placeholder: 'cover' },
+      { prop: 'backgroundPosition', kind: 'select' },
+      { prop: 'backgroundRepeat', kind: 'select' },
     ],
   },
   {
@@ -88,6 +103,8 @@ const GROUPS: { id: StyleGroup; fields: Field[] }[] = [
       { prop: 'mixBlendMode', kind: 'select' },
       { prop: 'boxShadow', kind: 'text', placeholder: '0 8px 24px -4px rgba(0,0,0,0.25)', wide: true },
       { prop: 'filter', kind: 'text', placeholder: 'blur(4px)', wide: true },
+      { prop: 'backdropFilter', kind: 'text', placeholder: 'blur(12px)', wide: true },
+      { prop: 'cursor', kind: 'select' },
     ],
   },
   {
@@ -155,6 +172,7 @@ export function StylePanel({ node, readOnly }: { node: BlockNode; readOnly: bool
         </span>
         <span className="text-xs text-muted-foreground">{hiddenHere ? t('style.show') : t('style.hide')}</span>
       </button>
+      <VisibilityRow node={node} readOnly={readOnly} />
 
       {GROUPS.map((g) => {
         const isOpen = open.has(g.id);
@@ -192,7 +210,120 @@ export function StylePanel({ node, readOnly }: { node: BlockNode; readOnly: bool
           </section>
         );
       })}
+      <CustomCss node={node} readOnly={readOnly} />
     </div>
+  );
+}
+
+/** Where the block shows: one chip per breakpoint; a click hides or shows it from that width down. */
+function VisibilityRow({ node, readOnly }: { node: BlockNode; readOnly: boolean }) {
+  const t = useT();
+  const { bp: bpName } = useBlockLabels();
+  const updateNode = useBuilder((s) => s.updateNode);
+  return (
+    <div className="space-y-1 rounded-md border px-3 py-2">
+      <p className="text-xs font-medium">{t('style.visibility')}</p>
+      <div className="flex flex-wrap gap-1" role="group" aria-label={t('style.visibility')}>
+        {STYLE_BREAKPOINTS.map((b) => {
+          const hidden = resolveStyles(node.styles, b.id).display === 'none';
+          return (
+            <button
+              key={b.id}
+              type="button"
+              disabled={readOnly}
+              aria-pressed={!hidden}
+              title={bpName(b.id)}
+              onClick={() => {
+                const own = node.styles?.[b.id]?.display;
+                // Showing again where it was hidden only by a larger breakpoint needs an explicit display here.
+                const next = hidden ? (own === 'none' ? undefined : 'block') : 'none';
+                let styles = setStyle(node.styles, b.id, 'display', next);
+                if (hidden && next === undefined && resolveStyles(styles, b.id).display === 'none') styles = setStyle(styles, b.id, 'display', 'block');
+                updateNode(node.id, { styles });
+              }}
+              className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]', hidden ? 'border-dashed text-muted-foreground line-through' : 'border-primary/40 bg-primary/10 text-primary')}
+            >
+              {hidden ? <EyeOff className="h-3 w-3" aria-hidden /> : <Eye className="h-3 w-3" aria-hidden />}
+              {bpName(b.id)}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-muted-foreground">{t('style.visibility.hint')}</p>
+    </div>
+  );
+}
+
+/**
+ * Custom CSS for this breakpoint, typed as declarations. It is parsed into the same validated style
+ * layer as every control above (unknown properties and unsafe values are listed and dropped), so
+ * it can't escape the block or reach other pages; the site only gets the compiled rules.
+ */
+function CustomCss({ node, readOnly }: { node: BlockNode; readOnly: boolean }) {
+  const t = useT();
+  const { bp: bpName } = useBlockLabels();
+  const bp = useBuilder((s) => s.breakpoint);
+  const updateNode = useBuilder((s) => s.updateNode);
+  const own = node.styles?.[bp] ?? {};
+  const current = stylesToCssText(own);
+  const [text, setText] = useState(current);
+  const [errors, setErrors] = useState<CssParseResult['errors']>([]);
+  const [open, setOpen] = useState(false);
+  // Follow edits made elsewhere (controls, undo, collaborators) while the box isn't being typed in.
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (!dirty) setText(current);
+  }, [current, dirty]);
+  const apply = () => {
+    const res = parseCssDeclarations(text);
+    setErrors(res.errors);
+    // Replace this breakpoint's overrides with what the box says (removing a line removes it).
+    let styles = node.styles;
+    for (const p of Object.keys(own) as StyleProperty[]) if (!(p in res.props)) styles = setStyle(styles, bp, p, undefined);
+    for (const [p, v] of Object.entries(res.props) as [StyleProperty, string][]) styles = setStyle(styles, bp, p, v);
+    updateNode(node.id, { styles });
+    setDirty(false);
+    toast.success(t('style.css.applied', { count: Object.keys(res.props).length, bp: bpName(bp) }), { id: 'css' });
+  };
+  return (
+    <section className="rounded-md border">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium hover:bg-muted/60">
+        <span className="flex items-center gap-1.5">
+          <Code2 className="h-3.5 w-3.5" aria-hidden /> {t('style.g.advanced')}
+        </span>
+        <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', !open && '-rotate-90')} />
+      </button>
+      {open && (
+        <div className="space-y-2 border-t px-3 py-3">
+          <p className="text-[11px] text-muted-foreground">{t('style.css.hint')}</p>
+          <textarea
+            aria-label={t('style.g.advanced')}
+            value={text}
+            disabled={readOnly}
+            spellCheck={false}
+            rows={Math.min(14, Math.max(4, text.split('\n').length + 1))}
+            onChange={(e) => (setText(e.target.value), setDirty(true))}
+            onKeyDown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && (e.preventDefault(), apply())}
+            placeholder={'border-radius: 24px;\nbox-shadow: 0 12px 40px -12px rgba(0,0,0,0.4);\nbackdrop-filter: blur(12px);'}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-[11px] leading-relaxed"
+          />
+          {errors.length > 0 && (
+            <ul className="space-y-0.5 text-[11px] text-destructive" aria-live="polite">
+              {errors.map((e, i) => (
+                <li key={i}>
+                  <code className="font-mono">{e.text}</code> — {t(`style.css.${e.reason}`)}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex justify-end">
+            <button type="button" disabled={readOnly || !dirty} onClick={apply} className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground disabled:opacity-40">
+              {t('style.css.apply')}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

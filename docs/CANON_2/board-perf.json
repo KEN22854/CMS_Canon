@@ -1,0 +1,35 @@
+{
+  "blocks": 1500,
+  "artboards": 2,
+  "paste": {
+    "ms": 672,
+    "longTasks": 1,
+    "longestMs": 501
+  },
+  "pan": {
+    "ms": 2497,
+    "longTasks": 0,
+    "longestMs": 0
+  },
+  "zoom": {
+    "ms": 1051,
+    "longTasks": 3,
+    "longestMs": 234
+  },
+  "select": {
+    "ms": 453,
+    "longTasks": 4,
+    "longestMs": 85
+  },
+  "zoomToSelection": {
+    "ms": 705,
+    "longTasks": 5,
+    "longestMs": 182
+  },
+  "layers": {
+    "ms": 798,
+    "longTasks": 18,
+    "longestMs": 242
+  },
+  "heapMB": 87.5
+}

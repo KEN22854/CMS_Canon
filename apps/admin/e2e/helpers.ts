@@ -21,7 +21,7 @@ async function lastMailTo(to: string, timeoutMs = 20_000): Promise<string> {
 }
 
 /** Registers through the UI, confirms via the e-mailed link, and lands signed in on the dashboard. */
-export async function signUp(page: Page, opts: { workspace?: string; editor?: 'simple' | 'pro' } = {}): Promise<{ email: string }> {
+export async function signUp(page: Page, opts: { workspace?: string; editor?: 'simple' | 'pro' | 'board' } = {}): Promise<{ email: string }> {
   // Specs written for the full (pro) builder keep it; simple-editor specs ask for 'simple'.
   const editor = opts.editor ?? 'pro';
   await page.addInitScript((m) => window.localStorage.setItem('canon.builder.mode', m), editor);

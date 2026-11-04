@@ -19,3 +19,9 @@ Templates link (they do not copy) photos and videos from these services, under t
 - **Mixkit** videos — https://mixkit.co/license/#videoFree
 
 Site owners should replace stock media with their own before launch where a licence requires it.
+
+## Icons on published sites
+
+The Icon block draws icons from **Lucide** (`lucide-react`) as inline SVG in the site's HTML —
+https://lucide.dev — ISC licence, © Lucide Contributors (icons derived from Feather, MIT,
+© Cole Bemis). The admin interface uses the same set.

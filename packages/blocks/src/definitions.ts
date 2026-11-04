@@ -175,6 +175,9 @@ export const textBlock = define({
   },
 });
 
+export const IMAGE_RATIOS = ['auto', '1/1', '4/3', '3/2', '16/9', '21/9', '3/4', '2/3', '9/16'] as const;
+export const IMAGE_FOCUS = ['center', 'top', 'bottom', 'left', 'right'] as const;
+
 export const imageBlock = define({
   type: 'image',
   description: 'A single responsive image with optional caption.',
@@ -189,14 +192,23 @@ export const imageBlock = define({
     alt: z.string().max(300).default(''),
     caption: z.string().max(300).default(''),
     rounded: z.boolean().default(true),
+    /** Crop: a fixed aspect ratio (the image fills it) and which part of the picture stays in view. */
+    ratio: z.enum(IMAGE_RATIOS).default('auto'),
+    fit: z.enum(['cover', 'contain']).default('cover'),
+    focus: z.enum(IMAGE_FOCUS).default('center'),
+    overlay: z.enum(['none', 'light', 'dark', 'brand']).default('none'),
   }),
-  defaults: () => ({ mediaId: '', src: '', alt: '', caption: '', rounded: true }),
+  defaults: () => ({ mediaId: '', src: '', alt: '', caption: '', rounded: true, ratio: 'auto' as const, fit: 'cover' as const, focus: 'center' as const, overlay: 'none' as const }),
   fields: {
     mediaId: { kind: 'media', label: 'Image' },
     src: { kind: 'url', label: 'Image link (stock)' },
     alt: { kind: 'text', label: 'Alt text (override)', ai: true },
     caption: { kind: 'text', label: 'Caption', ai: true },
     rounded: { kind: 'toggle', label: 'Rounded corners' },
+    ratio: { kind: 'select', label: 'Crop', options: IMAGE_RATIOS },
+    fit: { kind: 'select', label: 'Fit', options: ['cover', 'contain'] },
+    focus: { kind: 'select', label: 'Focus', options: IMAGE_FOCUS },
+    overlay: { kind: 'select', label: 'Overlay', options: ['none', 'light', 'dark', 'brand'] },
   },
 });
 
@@ -600,6 +612,62 @@ export const cartBlock = define({
   },
 });
 
+// ── Canvas builder elements (infinite canvas, iteration 18) ─────────────────
+
+/** Icons the site renderer can draw (inline SVG, no icon font or network request). */
+export const ICON_NAMES = ['star', 'heart', 'check', 'check-circle', 'arrow-right', 'arrow-up-right', 'zap', 'shield', 'sparkles', 'rocket', 'globe', 'mail', 'phone', 'map-pin', 'clock', 'calendar', 'user', 'users', 'camera', 'image', 'play', 'music', 'shopping-cart', 'gift', 'truck', 'credit-card', 'lock', 'leaf', 'sun', 'moon', 'coffee', 'message', 'thumbs-up', 'award', 'target', 'chart'] as const;
+export type IconName = (typeof ICON_NAMES)[number];
+
+const tone = z.enum(['primary', 'foreground', 'muted']);
+
+export const iconBlock = define({
+  type: 'icon',
+  name: 'Icon',
+  description: 'A single icon (star, check, mail…), optionally in a tinted circle.',
+  category: 'content',
+  isContainer: false,
+  props: z.object({ name: z.enum(ICON_NAMES).default('star'), size: z.enum(['sm', 'md', 'lg', 'xl']).default('md'), tone: tone.default('primary'), circle: z.boolean().default(false), align: align.default('left'), label: z.string().max(100).default('') }),
+  defaults: () => ({ name: 'star' as const, size: 'md' as const, tone: 'primary' as const, circle: false, align: 'left' as const, label: '' }),
+  fields: {
+    name: { kind: 'select', label: 'Icon', options: ICON_NAMES },
+    size: { kind: 'select', label: 'Size', options: ['sm', 'md', 'lg', 'xl'] },
+    tone: { kind: 'select', label: 'Colour', options: ['primary', 'foreground', 'muted'] },
+    circle: { kind: 'toggle', label: 'In a circle' },
+    align: { kind: 'select', label: 'Alignment', options: ['left', 'center', 'right'] },
+    label: { kind: 'text', label: 'Accessible label (empty = decorative)', ai: true },
+  },
+});
+
+export const badgeBlock = define({
+  type: 'badge',
+  name: 'Badge',
+  description: 'A small pill label ("New", "Bestseller", "−20 %").',
+  category: 'content',
+  isContainer: false,
+  props: z.object({ text: z.string().min(1).max(40), tone: z.enum(['primary', 'muted', 'outline', 'dark']).default('primary'), align: align.default('left') }),
+  defaults: () => ({ text: 'New', tone: 'primary' as const, align: 'left' as const }),
+  fields: {
+    text: { kind: 'text', label: 'Text', ai: true },
+    tone: { kind: 'select', label: 'Style', options: ['primary', 'muted', 'outline', 'dark'] },
+    align: { kind: 'select', label: 'Alignment', options: ['left', 'center', 'right'] },
+  },
+});
+
+export const listBlock = define({
+  type: 'list',
+  name: 'List',
+  description: 'A list of short points with bullets, numbers or check marks.',
+  category: 'content',
+  isContainer: false,
+  props: z.object({ items: z.array(z.object({ text: z.string().min(1).max(300) })).min(1).max(30), marker: z.enum(['bullet', 'number', 'check']).default('check'), align: align.default('left') }),
+  defaults: () => ({ items: [{ text: 'Fast to set up' }, { text: 'Works on every screen' }, { text: 'Friendly support' }], marker: 'check' as const, align: 'left' as const }),
+  fields: {
+    items: { kind: 'list', label: 'Points', maxItems: 30, itemFields: { text: { kind: 'text', label: 'Text', ai: true } } },
+    marker: { kind: 'select', label: 'Marker', options: ['bullet', 'number', 'check'] },
+    align: { kind: 'select', label: 'Alignment', options: ['left', 'center', 'right'] },
+  },
+});
+
 export const BLOCKS = [
   sectionBlock,
   rowBlock,
@@ -626,6 +694,9 @@ export const BLOCKS = [
   collectionListBlock,
   buyBlock,
   cartBlock,
+  iconBlock,
+  badgeBlock,
+  listBlock,
 ] as const;
 export type KnownBlockType = (typeof BLOCKS)[number]['type'];
 

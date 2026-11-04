@@ -25,6 +25,8 @@ interface Diff {
 }
 
 const EXAMPLES: MessageKey[] = ['plan.example1', 'plan.example2', 'plan.example3'];
+/** Design-assistant requests about the selection (the plan stays reviewable before it applies). */
+const QUICK = ['minimal', 'palette', 'type', 'animate', 'mobile', 'layout'] as const;
 
 /**
  * Canon AI edits the page (Stage 5): the request goes to the planner with the current draft and
@@ -106,6 +108,19 @@ export function AiPlanPanel({ siteId, pageId, locale }: { siteId: string; pageId
               {t(k)}
             </button>
           ))}
+        </div>
+      )}
+      {!plan && selectedIds.length > 0 && (
+        // Design assistant: one click writes a precise request about the selection (improve, adapt for phones…).
+        <div className="space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t('ai.quick.label')}</p>
+          <div className="flex flex-wrap gap-1">
+            {QUICK.map((k) => (
+              <button key={k} type="button" data-ai-quick={k} onClick={() => setInstruction(t(`ai.quick.${k}.prompt`))} className="rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-[11px] text-primary hover:border-primary">
+                {t(`ai.quick.${k}`)}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <div className="flex items-center justify-between gap-2">

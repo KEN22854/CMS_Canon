@@ -2,7 +2,42 @@
 
 Last update: 2026-11-04.
 
-## Iteration 17 (this one) — Stage 11 (staggered entrances) and Stage 14 (security pass)
+## Iteration 18 (this one) — Infinite Canvas Website Builder
+
+Full write-up: [INFINITE_CANVAS.md](INFINITE_CANVAS.md) (audit, architecture decision, components,
+performance, stage status).
+
+- **The board** (new default editor mode; Pro and Simple stay): an infinite pannable/zoomable
+  workspace with the page on **device artboards** side by side (Desktop 1440, Laptop 1200, Tablet
+  768, Mobile 390, custom 320–2560). The artboard you click edits its breakpoint; the others update
+  live. Pan (wheel, Hand tool, Space, middle button), zoom around the pointer (Ctrl/⌘+wheel, pinch,
+  Ctrl ±/0, presets, fit ⇧1, selection ⇧2), minimap, rectangle selection, right-click menus,
+  Alt-distances, layout grid and snap switches, artboards you can move/resize/add/remove.
+- **Own DOM + CSS board, no canvas library**: artboards render the real site renderers, so the board
+  shows exactly what the site publishes (tldraw/Konva/React Flow evaluated and rejected — see the doc).
+  Panning moves one transformed layer without React renders; zoom previews with `scale()` and lays
+  out once the wheel stops.
+- **Library** by kind with search: Layout (Section, Container, Grid, Flexbox, Columns, Rows, Stack,
+  Spacer, Free-form) · Elements · Components (Navbar … Product cards, Blog cards, saved components) ·
+  Templates (whole pages and all section presets) · Media (the site library, upload). Drag drops a
+  whole tree where the indicator shows.
+- **New elements**: Icon (36 Lucide icons, inline SVG on the site), Badge, List (bullets, numbers,
+  checks); images get crop (aspect ratio), fit, focal point and overlay.
+- **Inspector**: 16 more style properties (align-self, justify-self, align-content, order, flex
+  shrink/basis, grid rows/row, aspect-ratio, italic, wrapping, background size/position/repeat,
+  backdrop blur, cursor), visibility chips per breakpoint, a **Custom CSS** box parsed into the
+  validated style layer.
+- **Edit bar** (copy, paste, duplicate, delete, group, ungroup, forward/backward, align, distribute)
+  and a context menu with the same commands; shortcuts Ctrl+]/[ for order, V/H for tools.
+- **Collaboration**: live cursors per artboard (Yjs awareness, throttled), selections outlined.
+- **AI**: "Generate a block" on the board, and design-assistant requests on the selection (minimal,
+  palette, typography, animations, adapt for mobile, composition) through the reviewed AI plans.
+- **Header**: page switcher (another page of the site, one click).
+- Fixes found while testing: opening a page made it look unsaved and autosaved an identical version
+  (the collaboration room's copy wasn't recognised as the saved page); the Layers tree of a big page
+  took 1.5 s to open (sections now fold on large pages: 0.24 s); "Size" label clash in the style panel.
+
+## Iteration 17 — Stage 11 (staggered entrances) and Stage 14 (security pass)
 
 - **Animation studio: "Inner blocks — one by one"**: on a container (group, grid, columns,
   section…) the children enter one after another (80–500 ms apart) with the container's entrance;

@@ -44,7 +44,7 @@ import { Alert, Badge, Button, Input, Label, Select } from '@/components/ui';
 import { useAbility } from '@/lib/ability';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
-import { STATUS_STYLE, useMedia, usePage, useSite, type PageDetail, type Site } from '@/lib/content';
+import { STATUS_STYLE, useMedia, usePage, usePages, useSite, type PageDetail, type Site } from '@/lib/content';
 import { useTenantId } from '@/lib/queries';
 import { translate, currentLocale, useT } from '@/lib/i18n';
 import { cn, formatUsd, relativeTime } from '@/lib/utils';
@@ -308,7 +308,7 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
         <div className="min-w-0 flex-1">
           <input aria-label={t('builder.pageTitle')} value={draft.title} disabled={!canEdit} onChange={(e) => setDraftMeta({ title: e.target.value }, 'title')} className="w-full truncate bg-transparent text-base font-semibold outline-none" />
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{meta.locale}</span>·<span>{meta.fullPath}</span>
+            <span>{site.name}</span>·<span>{meta.locale}</span>·<PageSwitcher siteId={siteId} pageId={initial.id} fullPath={meta.fullPath} />
             <Badge className={STATUS_STYLE[meta.status]}>{t(`status.${meta.status}`)}</Badge>
             {meta.hasUnpublishedChanges && <Badge className="border-warning/40 text-warning">{t('builder.unpublishedChanges')}</Badge>}
             {meta.schedule && (
@@ -332,7 +332,7 @@ function Editor({ initial, site }: { initial: PageDetail; site: Site }) {
           </div>
         )}
         <div className="flex items-center rounded-md border p-0.5 text-xs" role="radiogroup" aria-label={t('simple.mode')} title={t('simple.modeHint')}>
-          {(['simple', 'pro'] as const).map((m) => (
+          {(['board', 'pro', 'simple'] as const).map((m) => (
             <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)} className={cn('rounded px-2 py-1', mode === m ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground')}>
               {t(`simple.mode.${m}`)}
             </button>
@@ -731,4 +731,33 @@ function ToolBtn({
 
 function toDraft(p: PageDetail): Draft {
   return { title: p.title, slug: p.slug, description: p.description ?? '', seo: p.seo ?? {}, content: p.content };
+}
+
+/** The site's pages: switch the board to another page (unsaved edits are saved first). */
+function PageSwitcher({ siteId, pageId, fullPath }: { siteId: string; pageId: string; fullPath: string }) {
+  const t = useT();
+  const router = useRouter();
+  const pages = usePages(siteId);
+  const store = useBuilderStore();
+  const list = pages.data ?? [];
+  if (list.length < 2) return <span>{fullPath}</span>;
+  return (
+    <select
+      aria-label={t('builder.switchPage')}
+      value={pageId}
+      onChange={(e) => {
+        const s = store.getState();
+        // The editor asks before leaving with unsaved edits (beforeunload); inside the app, warn the same way.
+        if (s.draft !== s.saved && !window.confirm(t('builder.leaveUnsaved'))) return;
+        router.push(`/sites/${siteId}/pages/${e.target.value}`);
+      }}
+      className="max-w-56 truncate rounded border-0 bg-transparent py-0 pl-0 pr-5 text-xs text-muted-foreground hover:text-foreground focus:ring-1 focus:ring-ring"
+    >
+      {list.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.fullPath} — {p.title}
+        </option>
+      ))}
+    </select>
+  );
 }

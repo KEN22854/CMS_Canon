@@ -4,6 +4,16 @@ Scope of this iteration: everything Canon 2.0 added (style layer, node meta, the
 builder changes). The baseline (tenancy, RLS, RBAC, sessions, webhooks, SSRF guards, SCIM) is
 unchanged and covered by the existing integration suites.
 
+## Infinite canvas (iteration 18)
+
+| Area | Finding | Status |
+|---|---|---|
+| Custom CSS box | Free text typed by editors | Parsed into the style layer only (`parseCssDeclarations`): known properties, grammar-checked values; `url()`, `@import`, braces, quotes, unknown properties reported and dropped; tests in blocks and API |
+| New block props | Icon names, image crop/fit/focus/overlay | Enums validated by the API; icons are a fixed inline-SVG map, no external request |
+| Board layout in localStorage | Tampered or old data | `sanitizeDevices` drops anything out of range; worst case the default layout |
+| Awareness cursors | Spoofed positions | Numbers and a breakpoint id only; names from the authenticated room membership |
+| CSS classes / HTML attributes | Requested by the prompt | Not added: they would let a page target CSS outside the validated layer — in BACKLOG as a decision |
+
 ## Style layer — CSS injection
 
 Threat: a user (or an AI agent, or a plugin preset) stores a style value that breaks out of its

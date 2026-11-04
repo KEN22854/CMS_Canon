@@ -1,3 +1,4 @@
+import { boardRu } from './board-ru';
 import { builderRu } from './builder-ru';
 import { seoRu } from './seo-ru';
 import { simpleRu } from './simple-ru';
@@ -318,4 +319,5 @@ export const ru: Record<MessageKey, string> = {
   ...migrationRu,
   ...funnelRu,
   ...integrationsRu,
+  ...boardRu,
 };

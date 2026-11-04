@@ -49,6 +49,14 @@ export interface BuilderState {
   collabHistory: CollabHistory | null;
   /** Blocks collaborators have selected (drawn as coloured outlines on the canvas). */
   remoteSelections: RemoteSelection[];
+  /** Board: where your pointer is on an artboard (shared with collaborators), and theirs. */
+  localCursor: BoardCursor | null;
+  remoteCursors: RemoteCursor[];
+  /** Board: snap moves/resizes to the 8 px grid and to other elements; show the layout grid. */
+  snap: boolean;
+  grid: boolean;
+  /** Board: bring a block into view (a layer was clicked, a search hit…); the counter re-triggers. */
+  focus: { id: string; n: number } | null;
 
   /** Applies one typed operation; every other edit method goes through here. False = no change. */
   apply: (op: EditorOperation, coalesceKey?: string | null) => boolean;
@@ -84,10 +92,17 @@ export interface BuilderState {
   applyRemote: (draft: Draft) => void;
   setCollabHistory: (h: CollabHistory | null) => void;
   setRemoteSelections: (r: RemoteSelection[]) => void;
+  setLocalCursor: (c: BoardCursor | null) => void;
+  setRemoteCursors: (c: RemoteCursor[]) => void;
+  setSnap: (on: boolean) => void;
+  setGrid: (on: boolean) => void;
+  requestFocus: (id: string) => void;
   select: (id: string | null) => void;
   /** Adds or removes a block from the selection (Ctrl/Shift+click). */
   toggleSelect: (id: string) => void;
   selectAll: () => void;
+  /** Replaces the selection (marquee); the last id is the primary one. */
+  selectMany: (ids: string[]) => void;
   hover: (id: string | null) => void;
   setBreakpoint: (b: Breakpoint) => void;
   setZoom: (z: number) => void;
@@ -98,14 +113,32 @@ export interface BuilderState {
   closeLibrary: () => void;
 }
 
-export type EditorMode = 'simple' | 'pro';
+/**
+ * "board": the infinite canvas — device artboards side by side on a board you pan and zoom, with
+ * the library, layers and inspector around it. Same page, same blocks; only the workspace differs.
+ */
+export type EditorMode = 'simple' | 'pro' | 'board';
+
+/** A pointer on an artboard: the breakpoint it edits and CSS px inside the page at that width. */
+export interface BoardCursor {
+  bp: StyleBreakpoint;
+  x: number;
+  y: number;
+}
+export interface RemoteCursor extends BoardCursor {
+  clientId: number;
+  name: string;
+  color: string;
+}
 export type InspectorPanel = 'block' | 'style' | 'ai';
 const MODE_KEY = 'canon.builder.mode';
 function initialMode(): EditorMode {
   try {
-    return window.localStorage.getItem(MODE_KEY) === 'pro' ? 'pro' : 'simple';
+    const m = window.localStorage.getItem(MODE_KEY);
+    // New editors start on the board; a mode chosen before is kept.
+    return m === 'pro' || m === 'simple' ? m : 'board';
   } catch {
-    return 'simple';
+    return 'board';
   }
 }
 
@@ -214,7 +247,12 @@ export function createBuilderStore(initial: Draft) {
           hoverId: null,
           breakpoint: 'base',
           zoom: 1,
-          mode: typeof window === 'undefined' ? 'simple' : initialMode(),
+          mode: typeof window === 'undefined' ? 'board' : initialMode(),
+          localCursor: null,
+          remoteCursors: [],
+          snap: true,
+          grid: false,
+          focus: null,
           inspector: { open: false, panel: 'block', n: 0 },
           library: null,
           collabHistory: null,
@@ -325,11 +363,17 @@ export function createBuilderStore(initial: Draft) {
           },
           setCollabHistory: (collabHistory) => set({ collabHistory }),
           setRemoteSelections: (remoteSelections) => set({ remoteSelections }),
+          setLocalCursor: (localCursor) => set({ localCursor }),
+          setRemoteCursors: (remoteCursors) => set({ remoteCursors }),
+          setSnap: (snap) => set({ snap }),
+          setGrid: (grid) => set({ grid }),
+          requestFocus: (id) => set({ focus: { id, n: (get().focus?.n ?? 0) + 1 } }),
           select: (id) => setSelection(id ? [id] : []),
           toggleSelect: (id) => {
             const cur = get().selectedIds;
             setSelection(cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
           },
+          selectMany: (ids) => setSelection(ids.filter((id) => findNode(get().draft.content.root, id))),
           selectAll: () => setSelection(get().draft.content.root.children.map((c) => c.id)),
           hover: (id) => (get().hoverId === id ? undefined : set({ hoverId: id })),
           setBreakpoint: (breakpoint) => set({ breakpoint }),

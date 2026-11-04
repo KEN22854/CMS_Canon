@@ -51,6 +51,13 @@ type ResponsiveStyles = Partial<Record<Breakpoint, StyleProps>>;
   resized `div`, not a separate window.
 - **Visibility per breakpoint** is the `display: none` override (`hide on mobile`).
 
+## Infinite canvas (board) — `apps/admin/src/components/builder/board`
+
+The default workspace since iteration 18; see [INFINITE_CANVAS.md](INFINITE_CANVAS.md). Device
+artboards are `CanvasFrame`s (canvas.tsx) of the same page at different widths on a transformed
+world layer; the active one is interactive and sets `store.breakpoint`. View maths in
+`geometry.ts` (unit-tested); board layout per viewer in localStorage; cursors through Yjs awareness.
+
 ## Builder workspace
 
 - Full-bleed editor (the app sidebar is not rendered on the editor route).

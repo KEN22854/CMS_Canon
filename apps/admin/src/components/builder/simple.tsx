@@ -21,7 +21,7 @@ interface Rect {
 const GRID = 8;
 const snap = (v: number, on: boolean) => (on ? Math.round(v / GRID) * GRID : Math.round(v));
 
-function rectOf(host: HTMLElement, id: string): Rect | null {
+export function rectOf(host: HTMLElement, id: string): Rect | null {
   const el = host.querySelector(`[data-block-id="${CSS.escape(id)}"]`);
   if (!el) return null;
   const hr = host.getBoundingClientRect();
@@ -30,7 +30,7 @@ function rectOf(host: HTMLElement, id: string): Rect | null {
 }
 
 /** The top-level block (page section) that contains `id`. */
-function topLevelOf(root: BlockNode, id: string | null): BlockNode | null {
+export function topLevelOf(root: BlockNode, id: string | null): BlockNode | null {
   if (!id || id === root.id) return null;
   let cur = id;
   for (;;) {
@@ -194,7 +194,7 @@ const FREE_ELEMENTS = [
 ] as const;
 
 /** The free-form block: add elements, set the height for this breakpoint, auto-arrange. */
-function FreeFormBar({ node, rect, breakpoint, hostRef, scale, onChange }: { node: BlockNode; rect: Rect; breakpoint: StyleBreakpoint; hostRef: React.RefObject<HTMLDivElement | null>; scale: number; onChange: () => void }) {
+export function FreeFormBar({ node, rect, breakpoint, hostRef, scale, onChange }: { node: BlockNode; rect: Rect; breakpoint: StyleBreakpoint; hostRef: React.RefObject<HTMLDivElement | null>; scale: number; onChange: () => void }) {
   const store = useBuilderStore();
   const L = useBlockLabels();
   const t = L.t;

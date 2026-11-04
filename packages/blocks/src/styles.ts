@@ -89,6 +89,14 @@ export const STYLE_PROPS = {
   gridTemplateColumns: { group: 'layout', css: 'grid-template-columns', valid: isGridTemplate },
   gridColumn: { group: 'layout', css: 'grid-column', valid: (v: string) => /^(?:span \d{1,2}|\d{1,2}(?: \/ (?:-?\d{1,2}|span \d{1,2}))?|auto)$/.test(v) },
   flexGrow: { group: 'layout', css: 'flex-grow', valid: isNumber(0, 10) },
+  flexShrink: { group: 'layout', css: 'flex-shrink', valid: isNumber(0, 10) },
+  flexBasis: len('layout', 'flex-basis'),
+  alignSelf: opt('layout', 'align-self', ['auto', ...ALIGN]),
+  justifySelf: opt('layout', 'justify-self', ['auto', 'start', 'center', 'end', 'stretch']),
+  alignContent: opt('layout', 'align-content', [...JUSTIFY, 'stretch']),
+  gridTemplateRows: { group: 'layout', css: 'grid-template-rows', valid: isGridTemplate },
+  gridRow: { group: 'layout', css: 'grid-row', valid: (v: string) => /^(?:span \d{1,2}|\d{1,2}(?: \/ (?:-?\d{1,2}|span \d{1,2}))?|auto)$/.test(v) },
+  order: { group: 'layout', css: 'order', valid: (v: string) => /^-?\d{1,3}$/.test(v) },
 
   position: opt('position', 'position', ['static', 'relative', 'absolute', 'fixed', 'sticky']),
   top: len('position', 'top'),
@@ -103,6 +111,7 @@ export const STYLE_PROPS = {
   maxWidth: { group: 'size', css: 'max-width', valid: (v: string) => v === 'none' || isLength(v) },
   minHeight: len('size', 'min-height'),
   maxHeight: { group: 'size', css: 'max-height', valid: (v: string) => v === 'none' || isLength(v) },
+  aspectRatio: { group: 'size', css: 'aspect-ratio', valid: (v: string) => v === 'auto' || /^\d{1,3}(?:\.\d{1,3})?(?: ?\/ ?\d{1,3}(?:\.\d{1,3})?)?$/.test(v) },
 
   marginTop: len('spacing', 'margin-top'),
   marginRight: len('spacing', 'margin-right'),
@@ -122,9 +131,14 @@ export const STYLE_PROPS = {
   textAlign: opt('typography', 'text-align', ['left', 'center', 'right', 'justify']),
   textDecoration: opt('typography', 'text-decoration', ['none', 'underline', 'line-through']),
   color: { group: 'typography', css: 'color', valid: isColor },
+  fontStyle: opt('typography', 'font-style', ['normal', 'italic']),
+  whiteSpace: opt('typography', 'white-space', ['normal', 'nowrap', 'pre-line', 'balance']),
 
   backgroundColor: { group: 'background', css: 'background-color', valid: isColor },
   backgroundImage: { group: 'background', css: 'background-image', valid: isGradient },
+  backgroundSize: { group: 'background', css: 'background-size', valid: (v: string) => v === 'cover' || v === 'contain' || isLengthList(2)(v) },
+  backgroundPosition: opt('background', 'background-position', ['center', 'top', 'bottom', 'left', 'right', 'top left', 'top right', 'bottom left', 'bottom right']),
+  backgroundRepeat: opt('background', 'background-repeat', ['no-repeat', 'repeat', 'repeat-x', 'repeat-y']),
 
   borderWidth: { group: 'border', css: 'border-width', valid: isLengthList(4) },
   borderStyle: opt('border', 'border-style', ['none', 'solid', 'dashed', 'dotted']),
@@ -134,6 +148,8 @@ export const STYLE_PROPS = {
   boxShadow: { group: 'effects', css: 'box-shadow', valid: isShadow },
   opacity: { group: 'effects', css: 'opacity', valid: isNumber(0, 1) },
   filter: { group: 'effects', css: 'filter', valid: isFilter },
+  backdropFilter: { group: 'effects', css: 'backdrop-filter', valid: isFilter },
+  cursor: opt('effects', 'cursor', ['auto', 'default', 'pointer', 'text', 'grab']),
   mixBlendMode: opt('effects', 'mix-blend-mode', ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'difference']),
   overflow: opt('effects', 'overflow', ['visible', 'hidden', 'auto', 'clip']),
 
@@ -323,4 +339,52 @@ function compiledNode(id: string, styles: ResponsiveStyles, isRoot: boolean): Co
   if (!byKey) compiled.set(styles, (byKey = new Map()));
   byKey.set(key, out);
   return out;
+}
+
+// ── Custom CSS text ──────────────────────────────────────────────────────────
+
+const kebab = (p: string) => p.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+/** CSS name → style property ("background-color" → backgroundColor; transform parts by their own names). */
+const BY_CSS = new Map<string, StyleProperty>(Object.keys(STYLE_PROPS).map((p) => [SPECS[p]!.css ?? kebab(p), p as StyleProperty]));
+
+export interface CssParseResult {
+  props: StyleProps;
+  errors: { line: number; text: string; reason: 'syntax' | 'unknown' | 'invalid' }[];
+}
+
+/**
+ * Parses "property: value;" declarations typed by a person into validated style props. Unknown
+ * properties and values outside the grammars are reported, never passed through: the site only
+ * ever gets CSS compiled from the style layer, so this cannot inject selectors, url() or scripts.
+ */
+export function parseCssDeclarations(text: string): CssParseResult {
+  const props: StyleProps = {};
+  const errors: CssParseResult['errors'] = [];
+  text
+    .slice(0, 8000)
+    .split('\n')
+    .forEach((row, i) => {
+      for (const raw of row.split(';')) {
+        const decl = raw.trim();
+        if (!decl) continue;
+        const m = /^([a-zA-Z-]{1,40})\s*:\s*(.+)$/.exec(decl);
+        if (!m) {
+          errors.push({ line: i + 1, text: decl, reason: 'syntax' });
+          continue;
+        }
+        const prop = BY_CSS.get(m[1]!.toLowerCase()) ?? (m[1]! in STYLE_PROPS ? (m[1] as StyleProperty) : undefined);
+        const value = m[2]!.replace(/\s*!important\s*$/i, '').trim();
+        if (!prop) errors.push({ line: i + 1, text: decl, reason: 'unknown' });
+        else if (!isValidStyleValue(prop, value)) errors.push({ line: i + 1, text: decl, reason: 'invalid' });
+        else props[prop] = value;
+      }
+    });
+  return { props, errors };
+}
+
+/** Style props as editable CSS text, one declaration per line. */
+export function stylesToCssText(props: StyleProps): string {
+  return Object.entries(props)
+    .map(([p, v]) => `${SPECS[p]?.css ?? kebab(p)}: ${v};`)
+    .join('\n');
 }

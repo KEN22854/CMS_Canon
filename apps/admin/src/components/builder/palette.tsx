@@ -116,7 +116,7 @@ function PaletteItem({ type, name, description, onAdd }: { type: string; name: s
   );
 }
 
-function GenerateBlock({ siteId, pageId, locale }: { siteId: string; pageId: string; locale: string }) {
+export function GenerateBlock({ siteId, pageId, locale }: { siteId: string; pageId: string; locale: string }) {
   const store = useBuilderStore();
   const L = useBlockLabels();
   const t = L.t;

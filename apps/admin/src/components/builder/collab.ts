@@ -4,7 +4,7 @@ import { LOCAL, Y, applyDraftDiff, draftHash, draftToYDoc, isInitialized, yDocTo
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import { useAuth } from '@/lib/auth-store';
-import type { BuilderStore, Draft } from './store';
+import type { BoardCursor, BuilderStore, Draft, RemoteCursor } from './store';
 
 export interface Peer {
   clientId: number;
@@ -122,6 +122,10 @@ export function useCollab({ store, pageId, canEdit, onVersion }: { store: Builde
         if (s.draft !== s.saved) applyDraftDiff(doc, asCollab(s.saved), asCollab(s.draft));
       }
       pull();
+      // The room's copy of an untouched page is a new object with the same content: still saved
+      // (otherwise every open looked unsaved and autosaved an identical version).
+      const after = store.getState();
+      if (after.draft !== after.saved && draftHash(asCollab(after.draft)) === draftHash(asCollab(after.saved))) after.markSaved(after.draft);
       undo.clear();
       publishHistory();
     });
@@ -145,6 +149,15 @@ export function useCollab({ store, pageId, canEdit, onVersion }: { store: Builde
       applyDraftDiff(doc, asCollab(before), asCollab(s.draft));
     });
     const unsubSel = store.subscribe((s, prev) => s.selectedId !== prev.selectedId && provider.awareness.setLocalStateField('selectedId', s.selectedId));
+    // Board cursors: at most ~16 updates a second; the last position always goes out.
+    let cursorTimer: ReturnType<typeof setTimeout> | null = null;
+    const unsubCursor = store.subscribe((s, prev) => {
+      if (s.localCursor === prev.localCursor || cursorTimer) return;
+      cursorTimer = setTimeout(() => {
+        cursorTimer = null;
+        provider.awareness.setLocalStateField('cursor', store.getState().localCursor);
+      }, 60);
+    });
 
     provider.awareness.setLocalState({ user: { id: user.id, name: user.name || user.email, color: colorFor(user.id), canEdit }, selectedId: store.getState().selectedId });
     const onAwareness = () => {
@@ -154,6 +167,13 @@ export function useCollab({ store, pageId, canEdit, onVersion }: { store: Builde
         if (u) list.push({ clientId, userId: u.id, name: u.name, color: u.color, canEdit: u.canEdit, selectedId: (st.selectedId as string | null) ?? null });
       });
       setPeers(list.sort((a, b) => a.clientId - b.clientId));
+      const cursors: RemoteCursor[] = [];
+      provider.awareness.getStates().forEach((st, clientId) => {
+        const u = st.user as { name: string; color: string } | undefined;
+        const c = st.cursor as BoardCursor | null | undefined;
+        if (u && c && clientId !== doc.clientID && typeof c.x === 'number' && typeof c.y === 'number' && typeof c.bp === 'string') cursors.push({ clientId, name: u.name, color: u.color, bp: c.bp, x: c.x, y: c.y });
+      });
+      store.getState().setRemoteCursors(cursors);
       store.getState().setRemoteSelections(list.filter((p) => p.clientId !== doc.clientID && p.selectedId).map((p) => ({ blockId: p.selectedId!, name: p.name, color: p.color })));
     };
     provider.awareness.on('change', onAwareness);
@@ -163,6 +183,9 @@ export function useCollab({ store, pageId, canEdit, onVersion }: { store: Builde
       unsubAuth();
       unsubStore();
       unsubSel();
+      unsubCursor();
+      if (cursorTimer) clearTimeout(cursorTimer);
+      store.getState().setRemoteCursors([]);
       store.getState().setCollabHistory(null);
       store.getState().setRemoteSelections([]);
       undo.destroy();

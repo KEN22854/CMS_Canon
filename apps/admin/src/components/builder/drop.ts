@@ -10,7 +10,8 @@ export interface DropTarget {
   box?: boolean;
 }
 
-export type DragItem = { kind: 'new'; type: string } | { kind: 'move'; id: string; type: string };
+/** A new block (a type, or a whole tree from the board library) or a block being moved. */
+export type DragItem = { kind: 'new'; type: string; node?: BlockNode } | { kind: 'move'; id: string; type: string };
 
 /** Pointer this close to a container's edge means "next to the container", not "inside it". */
 const EDGE_PX = 10;

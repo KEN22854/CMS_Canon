@@ -15,7 +15,7 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - ✅ Layers: rename, hide, lock, duplicate, delete.
 - ✅ Workspace: full-bleed editor, zoom, five breakpoints, real-width preview with fit.
 - ✅ Memoised style compilation and canvas rendering; browser measurements at 1–3k blocks.
-- ⬜ Custom viewport width; rulers and grid guides.
+- 🟡 Custom viewport width and layout grid: done on the board (iteration 18). Next: rulers and draggable guides.
 - ✅ Multi-select, group/ungroup (Group block), copy/cut/paste across pages.
 - ✅ Typed editor operations (NODE_INSERT/…) shared by builder, API and AI; operation log (History tab).
 - ⬜ Operation-based undo (undo is still snapshot-based with structural sharing).
@@ -53,3 +53,11 @@ Status: ✅ done · 🟡 in progress · ⬜ not started.
 - 🟡 Local integrations (Stage 18): Telegram. Next (need the owner's accounts and keys): YooKassa/CloudPayments online payments, SMS (SMS.ru), amoCRM/Bitrix24 sync, Yandex Metrica and Google Analytics tags, VK pixel, delivery services (CDEK).
 
 - ⬜ Security: trust X-Forwarded-For only from a configured proxy list in the renderer (today the per-IP limits for forms and checkout rely on it; site-wide caps limit the damage).
+
+## Infinite canvas (iteration 18) — next
+- ⬜ CSS class names and HTML attributes per block: needs a decision (classes would reach outside the validated style layer; attributes need an allowlist such as id/aria-*/data-*).
+- ⬜ State styles: an editor for :hover / :active / :focus styles per block (today: hover animations only).
+- ⬜ Drop at a position inside a free-form area from the library (today it lands in the area, then you move it).
+- ⬜ All pages of a site on one board (today: one page per board, page switcher in the header).
+- ⬜ Rulers and draggable guides; measuring distances while dragging (today: Alt + hover).
+- ⬜ Virtualise artboards far outside the viewport for pages over ~3 000 blocks on 3+ artboards.

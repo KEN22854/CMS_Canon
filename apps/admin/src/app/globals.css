@@ -31,6 +31,9 @@
     --destructive-foreground: 223 24% 6%;
     --overlay: 223 24% 3%;
     --shadow-color: 223 40% 2%;
+    /* Infinite canvas: the board around the artboards and its dot grid. */
+    --board-bg: 223 22% 8%;
+    --board-dot: 220 16% 22%;
     color-scheme: dark;
   }
 
@@ -56,6 +59,8 @@
     --destructive-foreground: 0 0% 100%;
     --overlay: 226 36% 9%;
     --shadow-color: 223 30% 30%;
+    --board-bg: 225 20% 94%;
+    --board-dot: 222 14% 80%;
     color-scheme: light;
   }
 

@@ -1,4 +1,5 @@
-import { ANIMATION_CSS, compileStyles, expandInstance, formatMoney, videoEmbedUrl, type BlockNode, type ListItem, type RichTextDoc, type ShopConfig, type ShopProduct } from '@canon/blocks';
+import { ICONS } from './icons';
+import { ANIMATION_CSS, compileStyles, expandInstance, formatMoney, videoEmbedUrl, type BlockNode, type IconName, type ListItem, type RichTextDoc, type ShopConfig, type ShopProduct } from '@canon/blocks';
 import type { ComponentType, CSSProperties, ReactNode } from 'react';
 import { FormView, type RenderForm } from './form';
 import { RichText } from './rich-text';
@@ -105,6 +106,12 @@ const SPACER: Record<string, string> = { xs: 'h-4', sm: 'h-8', md: 'h-16', lg: '
 const STATS_COLS: Record<number, string> = { 1: '', 2: '@xl:grid-cols-2', 3: '@xl:grid-cols-3', 4: '@xl:grid-cols-2 @3xl:grid-cols-4', 5: '@xl:grid-cols-3 @4xl:grid-cols-5', 6: '@xl:grid-cols-3 @4xl:grid-cols-6' };
 const FEATURE_COLS: Record<number, string> = { 2: '@2xl:grid-cols-2', 3: '@2xl:grid-cols-2 @4xl:grid-cols-3', 4: '@2xl:grid-cols-2 @5xl:grid-cols-4' };
 const TONE: Record<string, string> = { primary: 'bg-site-primary text-site-on-primary', muted: 'bg-site-muted text-site-fg', dark: 'bg-site-fg text-site-bg' };
+
+const ICON_SIZE: Record<string, { icon: string; circle: string }> = { sm: { icon: 'h-4 w-4', circle: 'h-8 w-8' }, md: { icon: 'h-6 w-6', circle: 'h-12 w-12' }, lg: { icon: 'h-9 w-9', circle: 'h-16 w-16' }, xl: { icon: 'h-12 w-12', circle: 'h-24 w-24' } };
+const ICON_TONE: Record<string, string> = { primary: 'text-site-primary', foreground: 'text-site-fg', muted: 'text-site-fg/60' };
+const BADGE_TONE: Record<string, string> = { primary: 'bg-site-primary text-site-on-primary', muted: 'bg-site-muted text-site-fg', outline: 'border border-current text-site-primary', dark: 'bg-site-fg text-site-bg' };
+const IMAGE_FOCUS_CLASS: Record<string, string> = { center: 'object-center', top: 'object-top', bottom: 'object-bottom', left: 'object-left', right: 'object-right' };
+const IMAGE_OVERLAY: Record<string, string | undefined> = { none: undefined, light: 'bg-white/40', dark: 'bg-black/45', brand: 'bg-gradient-to-t from-site-primary/60 to-transparent' };
 
 const CONTAINERS = new Set(['section', 'row', 'column', 'group', 'canvas']);
 const GROUP_LAYOUT: Record<string, string> = { stack: 'flex flex-col', row: 'flex flex-row flex-wrap', grid: 'grid' };
@@ -259,18 +266,27 @@ export function BlockRenderer({
 
     case 'image': {
       const m = ctx.media[str(p.mediaId)];
-      if (!m && str(p.src)) {
-        return (
-          <figure {...a} className="mx-auto max-w-5xl px-6">
-            <ExternalImage src={str(p.src)} alt={str(p.alt)} className={`h-full w-full object-cover ${p.rounded === false ? '' : 'rounded-site'}`} />
-            {str(p.caption) && <figcaption {...F('caption')} className="mt-2 text-center text-sm opacity-70">{str(p.caption)}</figcaption>}
-          </figure>
-        );
-      }
-      if (!m) return ctx.draft || ctx.editing ? <Placeholder a={a} label={label(ctx, 'chooseImage')} tall /> : null;
+      if (!m && !str(p.src)) return ctx.draft || ctx.editing ? <Placeholder a={a} label={label(ctx, 'chooseImage')} tall /> : null;
+      const ratio = str(p.ratio, 'auto');
+      const cropped = ratio !== 'auto';
+      const fit = `${str(p.fit) === 'contain' ? 'object-contain' : 'object-cover'} ${IMAGE_FOCUS_CLASS[str(p.focus, 'center')] ?? ''}`;
+      const round = p.rounded === false ? '' : 'rounded-site';
+      const overlay = IMAGE_OVERLAY[str(p.overlay, 'none')];
+      const img = m ? (
+        <Picture media={m} alt={str(p.alt) || m.alt || ''} className={cropped ? `absolute inset-0 h-full w-full ${fit}` : round} sizes="(min-width: 1024px) 960px, 100vw" />
+      ) : (
+        <ExternalImage src={str(p.src)} alt={str(p.alt)} className={`h-full w-full ${fit} ${cropped ? 'absolute inset-0' : round}`} />
+      );
       return (
         <figure {...a} className="mx-auto max-w-5xl px-6">
-          <Picture media={m} alt={str(p.alt) || m.alt || ''} className={p.rounded === false ? '' : 'rounded-site'} sizes="(min-width: 1024px) 960px, 100vw" />
+          {cropped || overlay ? (
+            <div className={`relative overflow-hidden ${round}`} style={cropped ? { aspectRatio: ratio.replace('/', ' / ') } : undefined}>
+              {img}
+              {overlay && <div aria-hidden className={`pointer-events-none absolute inset-0 ${overlay}`} />}
+            </div>
+          ) : (
+            img
+          )}
           {str(p.caption) && <figcaption {...F('caption')} className="mt-2 text-center text-sm opacity-70">{str(p.caption)}</figcaption>}
         </figure>
       );
@@ -418,6 +434,47 @@ export function BlockRenderer({
 
     case 'spacer':
       return <div {...a} aria-hidden className={SPACER[str(p.size, 'md')] ?? SPACER.md} />;
+
+    case 'icon': {
+      const Icon = ICONS[str(p.name, 'star') as IconName] ?? ICONS.star;
+      const size = ICON_SIZE[str(p.size, 'md')] ?? ICON_SIZE.md!;
+      const color = ICON_TONE[str(p.tone, 'primary')] ?? ICON_TONE.primary;
+      const lbl = str(p.label);
+      return (
+        <div {...a} className={`mx-auto flex max-w-3xl px-6 ${FLEX_ALIGN[str(p.align, 'left')]}`}>
+          <span className={`inline-grid place-items-center ${color} ${p.circle ? `${size.circle} rounded-full [background-color:color-mix(in_srgb,currentColor_12%,transparent)]` : ''}`} {...(lbl ? { role: 'img', 'aria-label': lbl } : { 'aria-hidden': true })}>
+            <Icon className={size.icon} strokeWidth={1.75} aria-hidden />
+          </span>
+        </div>
+      );
+    }
+
+    case 'badge':
+      return (
+        <div {...a} className={`mx-auto flex max-w-3xl px-6 ${FLEX_ALIGN[str(p.align, 'left')]}`}>
+          <span {...F('text')} className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide ${BADGE_TONE[str(p.tone, 'primary')] ?? BADGE_TONE.primary}`}>
+            {str(p.text)}
+          </span>
+        </div>
+      );
+
+    case 'list': {
+      const items = Array.isArray(p.items) ? (p.items as { text?: string }[]) : [];
+      const marker = str(p.marker, 'check');
+      const L = marker === 'number' ? 'ol' : 'ul';
+      return (
+        <div {...a} className={`mx-auto max-w-3xl px-6 ${ALIGN[str(p.align, 'left')]}`}>
+          <L className={`space-y-2 text-lg leading-relaxed ${marker === 'bullet' ? 'list-disc pl-6' : marker === 'number' ? 'list-decimal pl-6' : ''} ${str(p.align) === 'center' ? 'inline-block text-left' : ''}`}>
+            {items.map((it, i) => (
+              <li key={i} className={marker === 'check' ? 'flex items-start gap-2' : ''}>
+                {marker === 'check' && <ICONS.check className="mt-1.5 h-4 w-4 shrink-0 text-site-primary" strokeWidth={2.5} aria-hidden />}
+                <span {...F(`items.${i}.text`)}>{it.text ?? ''}</span>
+              </li>
+            ))}
+          </L>
+        </div>
+      );
+    }
 
     case 'divider':
       return (

@@ -8,7 +8,11 @@ import { cn } from '@/lib/utils';
 import type { DropTarget } from './drop';
 import { useBlockLabels } from './labels';
 import { blockSummary } from './palette';
-import { useBuilder } from './store';
+import { topLevelOf } from './simple';
+import { useBuilder, useBuilderStore } from './store';
+
+const LARGE_TREE = 400;
+const countNodes = (n: BlockNode): number => n.children.reduce((a, c) => a + countNodes(c), 1);
 
 /**
  * Tree view of the page; rows are drag sources and (via data-layer-id) drop targets. Double-click a
@@ -16,7 +20,15 @@ import { useBuilder } from './store';
  */
 export function Layers({ hostRef, drop, readOnly = false }: { hostRef: React.RefObject<HTMLDivElement | null>; drop: DropTarget | null; readOnly?: boolean }) {
   const root = useBuilder((s) => s.draft.content.root);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const store = useBuilderStore();
+  // Big pages open with their sections folded (except the one being edited): a tree of thousands
+  // of rows costs seconds to draw and nobody reads it all at once.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    const s = store.getState();
+    if (countNodes(root) <= LARGE_TREE) return new Set();
+    const keep = s.selectedId ? topLevelOf(root, s.selectedId)?.id : undefined;
+    return new Set(root.children.filter((c) => c.children.length && c.id !== keep).map((c) => c.id));
+  });
   const { t } = useBlockLabels();
   const toggle = (id: string) => setCollapsed((c) => (c.has(id) ? (c.delete(id), new Set(c)) : new Set(c.add(id))));
   return (
@@ -36,7 +48,10 @@ function Row({ node, depth, collapsed, toggle, readOnly, parentHidden }: { node:
   const selected = useBuilder((s) => s.selectedIds.includes(node.id));
   const toggleSelect = useBuilder((s) => s.toggleSelect);
   const hovered = useBuilder((s) => s.hoverId === node.id);
-  const select = useBuilder((s) => s.select);
+  const selectOnly = useBuilder((s) => s.select);
+  const requestFocus = useBuilder((s) => s.requestFocus);
+  // Picking a layer also brings its block into view on the board.
+  const select = (id: string) => (selectOnly(id), requestFocus(id));
   const hover = useBuilder((s) => s.hover);
   const updateNode = useBuilder((s) => s.updateNode);
   const duplicate = useBuilder((s) => s.duplicate);

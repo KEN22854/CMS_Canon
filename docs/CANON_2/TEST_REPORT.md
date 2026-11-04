@@ -5,17 +5,26 @@ renderer :3001).
 
 | Suite | Result |
 |---|---|
-| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), shop strings (2), themes (3), HTML import (3), entry links (1), stagger (1), AI plans (4), SEO audit and JSON-LD (5), tree (16) | 68 / 68 ✅ |
+| `@canon/blocks` unit — style layer (8), typed operations, no-op edits and global components (10), section library and page templates (6), converted templates (2), animation (2), entry pages and lists (3), shop (2), shop strings (2), themes (3), HTML import (3), entry links (1), stagger (1), AI plans (4), SEO audit and JSON-LD (5), tree (16), custom CSS and canvas elements (3) | 71 / 71 ✅ |
 | `@canon/collab` unit (incl. animation through Yjs) | 9 / 9 ✅ |
 | fields · ai-gateway · edge (incl. 3 redirect tests) · sdk | 19 · 30 · 11 · 5 ✅ |
-| admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5) | 12 / 12 ✅ |
+| admin unit — tree ops and history (7), Builder 2.0 store: multi-select, group, clipboard, operation log, block cap, plan batch (5), board geometry: zoom, fit, reveal, devices, marquee, distances (6) | 18 / 18 ✅ |
 | API unit | 58 / 58 ✅ |
-| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes, 1 for migration, 1 for funnels, 1 for Telegram, 1 for staggered entrances | 164 / 164 ✅ |
-| Playwright E2E | 27 / 27 ✅ (+7 opt-in: 5 screenshot specs, 2 performance specs) |
+| API integration (real Postgres/Redis/S3) incl. 2 for global components, 2 for AI plans, 4 for SEO, 5 for CMS 2.0, 3 for the shop, 3 for the CRM, 1 for releases, 1 for themes, 1 for migration, 1 for funnels, 1 for Telegram, 1 for staggered entrances, 1 for canvas elements and layout styles | 165 / 165 ✅ |
+| Playwright E2E | 35 / 35 ✅ (+3 opt-in performance/screenshot specs; board: 2 specs, collab cursors: 1) |
 | TypeScript (api, admin, web, blocks, ui-blocks, collab) | no errors ✅ |
 | ESLint (`--max-warnings=0`) | clean ✅ (package scripts may log; the trail tool's own folder is ignored) |
 
-Total automated tests: **403** (400 after iteration 16).
+Total automated tests: **421** (403 after iteration 17).
+
+## Iteration 18 — Infinite canvas
+
+- `board.test.ts` (admin): zoom around the pointer, fit / fit-width / minimal reveal, width → breakpoint, artboard layout and corrupt storage, marquee selection, distances.
+- `canvas-builder.test.ts` (blocks): custom CSS parsed into validated props (url(), selectors, unknown properties dropped), round trip and per-breakpoint compile; Icon/Badge/List/image crop validation.
+- `canvas-builder.test.ts` (API): the new elements and per-breakpoint layout styles through PATCH, unsafe styles and unknown icons refused (400), delivered after publish.
+- `board.spec.ts` (E2E): opens on the board as saved v1; Ctrl+wheel zoom and fit; drag Heading from the library onto the Desktop artboard (shown on Mobile too); inline text edit; click-add Badge and Icon; marquee selection; context-menu duplicate + undo; add Tablet artboard; mobile-only font size (Desktop unchanged); layers sync; save, reload (layout restored), publish — live HTML has the text, the mobile CSS, the inline SVG icon and no editor attributes. Second spec: hand tool, Space pan, wheel pan, minimap, board context menu, select all.
+- `collab.spec.ts`: a second editor's cursor appears on the right artboard, the selection is outlined with their name, the cursor disappears when they leave.
+- `board-perf.spec.ts` (opt-in): see INFINITE_CANVAS.md §7 / `board-perf.json`.
 
 ## Iteration 17 — Stagger and security pass
 

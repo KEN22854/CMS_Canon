@@ -1,3 +1,4 @@
+import { boardEn } from './board-en';
 import { builderEn } from './builder-en';
 import { seoEn } from './seo-en';
 import { simpleEn } from './simple-en';
@@ -328,6 +329,7 @@ export const en = {
   ...migrationEn,
   ...funnelEn,
   ...integrationsEn,
+  ...boardEn,
 } as const;
 
 export type MessageKey = keyof typeof en;

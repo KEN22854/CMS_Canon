@@ -12,6 +12,11 @@ Stages 1–2 (design system, Builder 2.0 foundation).
 
 | File | Stage | Viewport | What it shows |
 |---|---|---|---|
+| board/01-board.png | iteration 18 | 1600 | The board: Desktop and Mobile artboards, library, edit bar, tools, zoom, minimap |
+| board/02-context-menu.png | iteration 18 | 1600 | Right-click menu on a block |
+| board/03-three-devices.png | iteration 18 | 1600 | Desktop, Mobile and Tablet artboards after adding a device |
+| board/04-responsive.png | iteration 18 | 1600 | Mobile-only font size: the Mobile artboard changes, Desktop doesn't |
+| board/05-layers.png | iteration 18 | 1600 | Layers in sync with the board |
 | before/dashboard/dashboard-desktop-1440.png | baseline | 1440 | Workspace dashboard, old light theme |
 | before/dashboard/project-pages-desktop-1440.png | baseline | 1440 | Site pages list |
 | before/dashboard/sites-desktop-1440.png | baseline | 1440 | Sites list |

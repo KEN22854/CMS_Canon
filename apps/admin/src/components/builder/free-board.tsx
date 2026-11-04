@@ -131,7 +131,7 @@ export function FreeSelection({ canvas, ids, hostRef, scale, breakpoint, store, 
       if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
       const gx: number[] = [];
       const gy: number[] = [];
-      if (!ev.altKey) {
+      if (!ev.altKey && store.getState().snap) {
         const sx = snapAxis(sel.x, sel.w, dx, xs);
         const sy = snapAxis(sel.y, sel.h, dy, ys);
         if (sx) {
@@ -155,7 +155,7 @@ export function FreeSelection({ canvas, ids, hostRef, scale, breakpoint, store, 
       // A click without dragging selects just that element, as in any editor.
       if (!moved) return store.getState().select(id);
       // A guide snap is exact; otherwise positions land on the 8 px grid (Alt: free).
-      const grid = !ev.altKey && !last.gx.length && !last.gy.length;
+      const grid = !ev.altKey && store.getState().snap && !last.gx.length && !last.gy.length;
       const ops = starts.flatMap((s) => [set(s.el.dataset.blockId!, breakpoint, 'left', `${gridSnap(s.pos.left + last.dx, grid)}px`), set(s.el.dataset.blockId!, breakpoint, 'top', `${gridSnap(Math.max(-2000, s.pos.top + last.dy), grid)}px`)]);
       store.getState().applyMany(ops);
       onDone();
@@ -183,7 +183,7 @@ export function FreeSelection({ canvas, ids, hostRef, scale, breakpoint, store, 
       el.style.width = '';
       el.style.height = '';
       if (!moved) return;
-      const g = !ev.altKey;
+      const g = !ev.altKey && store.getState().snap;
       const ops = [set(primary, breakpoint, 'width', `${gridSnap(Math.max(16, start.w + (ev.clientX - e.clientX) / scale), g)}px`)];
       if (mode === 'se') ops.push(set(primary, breakpoint, 'height', `${gridSnap(Math.max(8, start.h + (ev.clientY - e.clientY) / scale), g)}px`));
       store.getState().applyMany(ops);
@@ -218,39 +218,12 @@ export function FreeSelection({ canvas, ids, hostRef, scale, breakpoint, store, 
     window.addEventListener('pointerup', up);
   };
 
-  // Align/distribute: against the selection's box, or the frame when one element is selected.
-  const align = (how: 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom') => {
-    const host = hostRef.current!;
-    const fr = frameOf(host, canvas.id)!.getBoundingClientRect();
-    const items = ids.map((id) => ({ id, el: q(host, id)! })).map((x) => ({ ...x, box: boxIn(fr, x.el, scale), pos: position(x.el) }));
-    const ref = items.length > 1 ? union(items.map((i) => i.box)) : { x: 0, y: 0, w: fr.width / scale, h: fr.height / scale };
-    const ops = items.map((i): EditorOperation => {
-      const target = how === 'left' ? ref.x : how === 'hcenter' ? ref.x + (ref.w - i.box.w) / 2 : how === 'right' ? ref.x + ref.w - i.box.w : how === 'top' ? ref.y : how === 'vcenter' ? ref.y + (ref.h - i.box.h) / 2 : ref.y + ref.h - i.box.h;
-      const horizontal = how === 'left' || how === 'hcenter' || how === 'right';
-      const delta = target - (horizontal ? i.box.x : i.box.y);
-      return set(i.id, breakpoint, horizontal ? 'left' : 'top', `${Math.round((horizontal ? i.pos.left : i.pos.top) + delta)}px`);
-    });
-    store.getState().applyMany(ops);
+  const align = (how: AlignHow) => {
+    store.getState().applyMany(alignFree(hostRef.current!, canvas.id, ids, scale, breakpoint, how));
     onDone();
   };
   const distribute = (axis: 'x' | 'y') => {
-    const host = hostRef.current!;
-    const fr = frameOf(host, canvas.id)!.getBoundingClientRect();
-    const items = ids.map((id) => ({ id, el: q(host, id)! })).map((x) => ({ ...x, box: boxIn(fr, x.el, scale), pos: position(x.el) }));
-    items.sort((a, b) => (axis === 'x' ? a.box.x - b.box.x : a.box.y - b.box.y));
-    const first = items[0]!.box;
-    const lastBox = items.at(-1)!.box;
-    const total = items.reduce((s, i) => s + (axis === 'x' ? i.box.w : i.box.h), 0);
-    const span = axis === 'x' ? lastBox.x + lastBox.w - first.x : lastBox.y + lastBox.h - first.y;
-    const gap = (span - total) / (items.length - 1);
-    let cursor = axis === 'x' ? first.x : first.y;
-    const ops: EditorOperation[] = [];
-    for (const i of items) {
-      const delta = cursor - (axis === 'x' ? i.box.x : i.box.y);
-      ops.push(set(i.id, breakpoint, axis === 'x' ? 'left' : 'top', `${Math.round((axis === 'x' ? i.pos.left : i.pos.top) + delta)}px`));
-      cursor += (axis === 'x' ? i.box.w : i.box.h) + gap;
-    }
-    store.getState().applyMany(ops);
+    store.getState().applyMany(distributeFree(hostRef.current!, canvas.id, ids, scale, breakpoint, axis));
     onDone();
   };
   // Stacking order is document order inside the block: last child is on top.
@@ -365,4 +338,45 @@ export function useFreeKeyboard(store: BuilderStore, hostRef: React.RefObject<HT
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [store, hostRef, readOnly]);
+}
+
+export type AlignHow = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
+
+/** Align free-form elements: against the selection's box, or the frame when one element is selected. */
+export function alignFree(host: HTMLElement, canvasId: string, ids: string[], scale: number, breakpoint: StyleBreakpoint, how: AlignHow): EditorOperation[] {
+  const frame = frameOf(host, canvasId);
+  if (!frame) return [];
+  const fr = frame.getBoundingClientRect();
+  const items = ids.flatMap((id) => (q(host, id) ? [{ id, el: q(host, id)! }] : [])).map((x) => ({ ...x, box: boxIn(fr, x.el, scale), pos: position(x.el) }));
+  if (!items.length) return [];
+  const all = items.map((i) => i.box);
+  const ref: Box = items.length > 1 ? { x: Math.min(...all.map((b) => b.x)), y: Math.min(...all.map((b) => b.y)), w: Math.max(...all.map((b) => b.x + b.w)) - Math.min(...all.map((b) => b.x)), h: Math.max(...all.map((b) => b.y + b.h)) - Math.min(...all.map((b) => b.y)) } : { x: 0, y: 0, w: fr.width / scale, h: fr.height / scale };
+  return items.map((i): EditorOperation => {
+    const target = how === 'left' ? ref.x : how === 'hcenter' ? ref.x + (ref.w - i.box.w) / 2 : how === 'right' ? ref.x + ref.w - i.box.w : how === 'top' ? ref.y : how === 'vcenter' ? ref.y + (ref.h - i.box.h) / 2 : ref.y + ref.h - i.box.h;
+    const horizontal = how === 'left' || how === 'hcenter' || how === 'right';
+    const delta = target - (horizontal ? i.box.x : i.box.y);
+    return set(i.id, breakpoint, horizontal ? 'left' : 'top', `${Math.round((horizontal ? i.pos.left : i.pos.top) + delta)}px`);
+  });
+}
+
+/** Equal gaps between three or more free-form elements, keeping the outer two in place. */
+export function distributeFree(host: HTMLElement, canvasId: string, ids: string[], scale: number, breakpoint: StyleBreakpoint, axis: 'x' | 'y'): EditorOperation[] {
+  const frame = frameOf(host, canvasId);
+  if (!frame || ids.length < 3) return [];
+  const fr = frame.getBoundingClientRect();
+  const items = ids.flatMap((id) => (q(host, id) ? [{ id, el: q(host, id)! }] : [])).map((x) => ({ ...x, box: boxIn(fr, x.el, scale), pos: position(x.el) }));
+  items.sort((a, b) => (axis === 'x' ? a.box.x - b.box.x : a.box.y - b.box.y));
+  const first = items[0]!.box;
+  const lastBox = items.at(-1)!.box;
+  const total = items.reduce((s, i) => s + (axis === 'x' ? i.box.w : i.box.h), 0);
+  const span = axis === 'x' ? lastBox.x + lastBox.w - first.x : lastBox.y + lastBox.h - first.y;
+  const gap = (span - total) / (items.length - 1);
+  let cursor = axis === 'x' ? first.x : first.y;
+  const ops: EditorOperation[] = [];
+  for (const i of items) {
+    const delta = cursor - (axis === 'x' ? i.box.x : i.box.y);
+    ops.push(set(i.id, breakpoint, axis === 'x' ? 'left' : 'top', `${Math.round((axis === 'x' ? i.pos.left : i.pos.top) + delta)}px`));
+    cursor += (axis === 'x' ? i.box.w : i.box.h) + gap;
+  }
+  return ops;
 }
